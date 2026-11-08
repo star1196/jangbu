@@ -4,7 +4,7 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정' };
 
 function screenBody(L) {
   switch (S.screen) {
@@ -28,6 +28,7 @@ function screenBody(L) {
     case '반복 입력': return viewRepeats();
     case '적금·예금': return viewSavings();
     case '고정 계획표': return viewPlan(L);
+    case '분류 사전': return viewDict();
     case '검색': return viewSearch(L);
     case '여행': return viewTrips(L);
     case '여행 상세': return viewTripDetail(L);
@@ -49,7 +50,7 @@ function txRow(x, opt) {
   if (!sub) {
     if (x.kind === 'tr') sub = '이체' + (x.memo ? ' · ' + x.memo : '');
     else if (x.kind === 'adj') sub = bankName(x.bankId) + (x.memo ? ' · ' + x.memo : '');
-    else sub = [isUnc(x) ? '미확인' : acc ? acc.name : '미확인', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : ''].filter(Boolean).join(' · ');
+    else sub = [x.archived ? '보관 (시작점 이전)' : isUnc(x) ? '미확인' : acc ? acc.name : '미확인', x.splitId && x.memo ? x.memo : '', x.splitId ? `나눔 ${x.splitIdx || ''}/${x.splitN || ''}` : '', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : ''].filter(Boolean).join(' · ');
   }
   const chk = S.selMode && opt.selectable ? `<span class="chk ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>` : '';
   const dot = isUnc(x) ? '<span class="undot"></span>' : '';
@@ -86,7 +87,7 @@ function viewHome(L) {
   const sm = sumTx(list);
   const periods = DATA.PERIODS.map((p) => `<button class="chip ${p === S.period ? 'on' : ''}" data-act="period" data-p="${p}">${p}</button>`).join('');
   const tiles = [['수입', sm.inc], ['쓴 돈', -sm.out], ['통장에서 나간 돈', -sm.bank]].map(([l, v]) => `<div class="tile"><span class="l">${l}</span><span class="a">${money(v)}</span></div>`).join('');
-  const unc = liveTx().filter(isUnc).length;
+  const unc = uncList().length; // 시작점 이후만
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
@@ -158,14 +159,21 @@ function bankTable(L, id) {
     return { id: x.id, d: dTxt(x.date), icon, m, out: r.d < 0 ? won(r.d) : '', inn: r.d > 0 ? won(r.d) : '', bal: r.bal, a: r.d };
   };
   const ls = rows.map(line);
-  const balTxt = (n) => `<span style="color:${n < 0 ? 'var(--out)' : 'var(--ink)'}">${n < 0 ? '−' : ''}${won(n)}</span>`;
+  // 시작점 이전 '보관' 내역 (엑셀에서 옮긴 옛 기록): 잔액 계산엔 안 들어가고, 엑셀에 적힌 잔액을 그대로 보여 줌
+  const arch = Store.all('tx').filter((x) => !x.deleted && x.archived && touches(x, id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0)));
+  const al = S.archOpen === id ? arch.slice(0, S.archShown || 200).map((x) => { const a = bankDelta(x, id); return { id: x.id, d: dTxt(x.date), icon: ic('clock', 16, 'var(--sub)'), m: x.kind === 'tr' ? (x.fromId === id ? '→ ' : '← ') + bankName(x.fromId === id ? x.toId : x.fromId) + (x.memo ? ' · ' + x.memo : '') : txTitle(x), out: a < 0 ? won(a) : '', inn: a > 0 ? won(a) : '', bal: x.xlBal, a, arch: true }; }) : [];
+  const archHead = arch.length ? `<button class="archbar" data-act="archToggle" data-id="${id}">${ic(S.archOpen === id ? 'chevron-down' : 'chevron-right', 16)}시작점 이전 보관 내역 ${arch.length}건 <span class="sub small">잔액 계산에 안 들어가요 · 잔액은 엑셀에 적힌 값</span></button>` : '';
+  const archMore = S.archOpen === id && arch.length > (S.archShown || 200) ? `<button class="morerows" data-act="archMore">보관 내역 더 보기</button>` : '';
+  const balTxt = (n) => (n == null ? '' : `<span style="color:${n < 0 ? 'var(--out)' : 'var(--ink)'}">${n < 0 ? '−' : ''}${won(n)}</span>`);
   if (L === 'phone') {
-    return ls.map((r) => `<div class="bk2" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}>
+    const one = (r) => `<div class="bk2 ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}>
       <div class="bk2a"><span class="bd">${r.d}</span>${r.icon}<span class="bm ${r.open ? 'sub' : ''}">${esc(r.m)}</span>${r.open ? '' : `<span class="amt ${clsOf(r.a)}">${moneyTxt(r.a)}</span>`}</div>
-      <span class="bk2b">잔액 ${balTxt(r.bal)}원</span></div>`).join('');
+      ${r.bal == null ? '' : `<span class="bk2b">잔액 ${balTxt(r.bal)}원</span>`}</div>`;
+    return ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
   }
+  const one = (r) => `<div class="bkrow ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span></div>`;
   return `<div class="bkrow head"><span>날짜</span><span>내용</span><span class="r">지출</span><span class="r">수입</span><span class="r">잔액</span></div>`
-    + ls.map((r) => `<div class="bkrow" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span></div>`).join('');
+    + ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
 }
 
 function bankHeadCard(b) {
@@ -449,7 +457,7 @@ function viewSettings() {
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
-      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
+      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -618,6 +626,8 @@ function viewDialog() {
     const a = accOf(S.editAccId);
     body = `<div class="dlg"><h2 class="dlg-title">'${esc(a.name)}' 계정을 지울까요?</h2><span class="sub small">이 계정을 쓴 내역이 없어서 지울 수 있어요. 지우면 되살릴 수 없어요.</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="delAccYes">지우기</button></div></div>`;
+  } else if (D.type === 'split') {
+    body = viewSplitDlg(D);
   } else if (MORE_DLG.includes(D.type)) {
     body = viewMoreDlg(D);
   } else if (PLAN_DLG.includes(D.type)) {

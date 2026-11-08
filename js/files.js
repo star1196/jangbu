@@ -11,21 +11,36 @@ function loadXLSX() {
   return xlsxReady;
 }
 
-/* ── 자동 분류: 규칙(정확 → 포함) → 예전 같은 가맹점 → 못 찾으면 미확인 ── */
+/* ── 분류 사전 · 온라인몰 (장부마다, 처음엔 기본 목록) ── */
+const dictOf = () => ((Store.get('meta', 'settings') || {}).dict || DATA.DICT);
+const mallsOf = () => ((Store.get('meta', 'settings') || {}).malls || DATA.MALLS);
+// 온라인몰: 한 결제에 여러 물건 → 자동 분류하지 않고 늘 미확인 ([나누기]로 나눠 적기)
+const isMall = (merchant) => { const m = norm(merchant); return !!m && mallsOf().some((w) => norm(w) && m.includes(norm(w))); };
+function dictHit(merchant, kind) {
+  const m = norm(merchant); if (!m) return null;
+  const hits = dictOf().filter(([w]) => norm(w) && m.includes(norm(w))).sort((a, b) => norm(b[0]).length - norm(a[0]).length); // 긴 낱말 먼저 (KTX > KT)
+  for (const [w, acc] of hits) { const a = Store.all('accounts').find((x) => x.name === acc && x.kind === kind); if (a) return { accountId: a.id, word: w }; }
+  return null;
+}
+
+/* ── 자동 분류: 온라인몰은 늘 미확인 → 규칙(정확 → 포함) → 예전 같은 가맹점 → 분류 사전 → 못 찾으면 미확인 ── */
 function classify(merchant, kind) {
   const m = norm(merchant); if (!m) return null;
+  if (isMall(merchant)) return null;
   const ok = (id) => { const a = accOf(id); return a && a.kind === kind ? id : null; };
   const rules = Store.all('rules');
   const ex = rules.find((r) => r.matchType === 'exact' && norm(r.pattern) === m && ok(r.accountId));
   if (ex) return { accountId: ex.accountId, ruleId: ex.id };
   const ct = rules.filter((r) => r.matchType === 'contains' && norm(r.pattern) && m.includes(norm(r.pattern)) && ok(r.accountId)).sort((a, b) => norm(b.pattern).length - norm(a.pattern).length)[0];
   if (ct) return { accountId: ct.accountId, ruleId: ct.id };
-  const past = liveTx().filter((x) => x.kind === kind && !isUnc(x) && norm(x.merchant) === m).sort(sortTx)[0];
+  const past = liveTx().filter((x) => x.kind === kind && !isUnc(x) && !x.archived && !x.splitId && norm(x.merchant) === m).sort(sortTx)[0];
   if (past && ok(past.accountId)) return { accountId: past.accountId };
+  const d = dictHit(merchant, kind);
+  if (d) return { accountId: d.accountId, dict: d.word };
   return null;
 }
 async function saveRule(merchant, accountId) {
-  const p = (merchant || '').trim(); if (!p) return;
+  const p = (merchant || '').trim(); if (!p || isMall(p)) return; // 온라인몰은 규칙을 만들지 않음
   const old = Store.all('rules').find((r) => r.matchType === 'exact' && norm(r.pattern) === norm(p));
   await Store.put('rules', { ...(old || {}), pattern: p, matchType: 'exact', accountId, hits: (old ? old.hits || 0 : 0), lastUsed: Date.now() });
 }
@@ -214,7 +229,8 @@ function buildItems() {
   });
   // 중복 제외: 날짜+금액+가맹점이 같은 내역이 이미 있으면 건너뜀. 파일 안에 실제로 2건이면 둘 다(순번으로 비교)
   const keyOf = (x) => `${x.date}|${x.kind}|${x.amount}|${norm(x.merchant)}`;
-  const have = {}; liveTx().forEach((x) => { if (isMoney(x)) { const k = keyOf(x); have[k] = (have[k] || 0) + 1; } });
+  // 나눈 결제([나누기])는 원래 금액 한 건으로 셈 → 같은 명세서를 또 올려도 중복 안 생김
+  const have = {}; liveTx().forEach((x) => { if (!isMoney(x) || (x.splitId && x.splitIdx !== 1)) return; const k = keyOf(x.splitId ? { ...x, amount: x.splitTotal } : x); have[k] = (have[k] || 0) + 1; });
   const seen = {};
   items.forEach((it) => { const k = keyOf(it); seen[k] = (seen[k] || 0) + 1; it.dupKey = k + '#' + seen[k]; if (seen[k] <= (have[k] || 0)) { it.dup = true; it.use = false; } });
   // 직접 입력한 것과 같은 건? (금액 같음 + 날짜 ±1일 + 같은 카드 또는 승인번호)
@@ -428,32 +444,107 @@ async function saveTemplate() {
   I.tplId = t.id;
 }
 
-/* ── 미확인 정리 (한 건씩, 추천 3 + 다른 분류, "다음에도 자동으로") ── */
-function uncQueue() { return liveTx().filter(isUnc).sort(sortTx); }
+/* ── 미확인 정리 (4-5) ──
+   같은 가맹점끼리 묶어서 한 번에 고르기(건수 많은 순) · 고르면 규칙이 생겨 다음부터 자동.
+   온라인몰·가맹점 없는 건은 묶지 않고 한 건씩 · [나누기]로 여러 분류로 쪼개기. 시작점 이후만. */
+function uncQueue() { return uncList().sort(sortTx); }
+function uncGroups() {
+  const g = new Map();
+  uncQueue().forEach((x) => {
+    const single = !norm(x.merchant) || isMall(x.merchant);
+    const k = single ? 'one:' + x.id : x.kind + '|' + norm(x.merchant);
+    if (!g.has(k)) g.set(k, { key: k, kind: x.kind, merchant: x.merchant || '', single, mall: isMall(x.merchant), items: [] });
+    g.get(k).items.push(x);
+  });
+  return [...g.values()].sort((a, b) => b.items.length - a.items.length || (a.items[0].date < b.items[0].date ? 1 : -1));
+}
 function viewUnc(L) {
-  const q = uncQueue();
-  if (S.uncTotal == null || S.uncTotal < q.length) S.uncTotal = q.length;
-  if (!q.length) {
+  const groups = uncGroups(), left = groups.reduce((t, gr) => t + gr.items.length, 0);
+  if (S.uncTotal == null || S.uncTotal < left) S.uncTotal = left;
+  if (!groups.length) {
     return `<div class="donebox"><span class="donecheck">${ic('check', 36)}</span><span style="font-size:${px(24)};font-weight:700">정리 끝</span><span class="sub" style="font-size:${px(15)}">미확인 내역을 모두 정리했어요.</span><button class="btn ink big" style="margin-top:12px" data-act="home">홈으로</button></div>`;
   }
   const skip = S.uncSkip || [];
-  const x = q.find((t) => !skip.includes(t.id)) || q[0];
-  const done = S.uncTotal - q.length, pos = done + 1;
+  const G = groups.find((gr) => !skip.includes(gr.key)) || groups[0];
+  const done = S.uncTotal - left, x = G.items[0];
+  const recs = recAccounts({ kind: G.kind, merchant: G.merchant }).map(accOf);
+  const all = visibleAccs(G.kind);
+  const many = G.items.length > 1;
+  const sum = G.items.reduce((t, i) => t + signed(i), 0), dates = G.items.map((i) => i.date).sort();
   const pay = payOf(x.payMethodId);
-  const recs = recAccounts({ kind: x.kind, merchant: x.merchant || '' }).map(accOf);
-  const all = visibleAccs(x.kind);
+  const head = many
+    ? `<span class="sub" style="font-size:${px(15)}">같은 가맹점 <b style="color:var(--ink)">${G.items.length}건</b> · ${shortDate(dates[0])}${dates.length > 1 ? ' ~ ' + shortDate(dates[dates.length - 1]) : ''}</span>
+       <span style="font-size:${px(28)};font-weight:700;letter-spacing:-0.02em">${esc(G.merchant)}</span>
+       <span style="font-size:${px(30)};letter-spacing:-0.03em"><span class="amt ${clsOf(sum)}">${moneyTxt(sum)}</span> <span class="sub" style="font-size:${px(15)}">합계</span></span>
+       <div class="uncmini">${G.items.slice(0, 5).map((i) => `<span>${shortDate(i.date)} · ${esc((payOf(i.payMethodId) || {}).name || '')}</span><b class="${clsOf(signed(i))}">${moneyTxt(signed(i))}</b>`).join('')}${G.items.length > 5 ? `<span class="sub">외 ${G.items.length - 5}건</span><b></b>` : ''}</div>`
+    : `<span class="sub" style="font-size:${px(15)}">${dateLabel(x.date)}${pay ? ' · ' + esc(pay.name) : ''}${x.bankId ? ' · ' + esc(bankName(x.bankId)) : ''}</span>
+       <span style="font-size:${px(28)};font-weight:700;letter-spacing:-0.02em">${esc(x.merchant || '가맹점 없음')}</span>
+       <span style="font-size:${px(36)};letter-spacing:-0.03em">${txAmt(x)}</span>${x.memo ? `<span class="sub small">${esc(x.memo)}</span>` : ''}`;
   return `<div class="uncwrap">
-    <div style="display:flex;align-items:center;gap:14px"><span style="font-size:${px(16)};font-weight:700;white-space:nowrap">${pos} / ${S.uncTotal}</span><span class="gbar" style="flex:1"><i style="width:${Math.round(done / S.uncTotal * 100)}%;background:var(--ink)"></i></span></div>
-    <section class="card unchero"><span class="sub" style="font-size:${px(15)}">${dateLabel(x.date)}${pay ? ' · ' + esc(pay.name) : ''}</span>
-      <span style="font-size:${px(28)};font-weight:700;letter-spacing:-0.02em">${esc(x.merchant || '가맹점 없음')}</span>
-      <span style="font-size:${px(36)};letter-spacing:-0.03em">${txAmt(x)}</span></section>
-    <span style="font-size:${px(15)};font-weight:700">추천 분류</span>
-    <div class="recgrid">${recs.map((a) => `<button class="recbtn" data-act="uncPick" data-id="${x.id}" data-acc="${a.id}">${catIcon(a, 26, 52)}${esc(a.name)}</button>`).join('')}</div>
-    <button class="btn" style="min-height:52px;font-size:${px(15)}" data-act="uncAll">${S.uncAll ? '다른 분류 닫기' : '다른 분류'}</button>
-    ${S.uncAll ? `<div class="chips">${all.map((a) => `<button class="chip" data-act="uncPick" data-id="${x.id}" data-acc="${a.id}">${catGlyph(a, 18)}${esc(a.name)}</button>`).join('')}</div>` : ''}
-    ${x.merchant ? `<button class="autochk" data-act="uncAuto" role="checkbox" aria-checked="${S.uncAuto !== false}"><span class="chk ${S.uncAuto !== false ? 'on' : ''}">${S.uncAuto !== false ? ic('check', 16) : ''}</span><span style="font-size:${px(15)}">이 가맹점은 다음에도 자동으로</span></button>` : ''}
-    <div style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" data-act="uncPrev" ${S.uncLast ? '' : 'disabled'}>이전</button><button class="btn ghost" data-act="uncSkip" data-id="${x.id}">건너뛰기</button></div>
+    <div style="display:flex;align-items:center;gap:14px"><span style="font-size:${px(16)};font-weight:700;white-space:nowrap">${done} / ${S.uncTotal}건 정리</span><span class="gbar" style="flex:1"><i style="width:${Math.round(done / S.uncTotal * 100)}%;background:var(--ink)"></i></span><span class="sub small" style="white-space:nowrap">가맹점 ${groups.length}곳 남음</span></div>
+    <section class="card unchero">${head}</section>
+    ${G.mall ? `<div class="infoline">${ic('info', 18)}온라인몰은 한 번에 여러 물건을 사서 자동으로 나누지 않아요. 한 분류면 고르고, 여러 가지면 [나누기]로 나눠 적어요.</div>` : ''}
+    <span style="font-size:${px(15)};font-weight:700">${many ? `${G.items.length}건 모두 이 분류로` : '추천 분류'}</span>
+    <div class="recgrid">${recs.map((a) => `<button class="recbtn" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catIcon(a, 26, 52)}${esc(a.name)}</button>`).join('')}</div>
+    <div class="chips"><button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="uncAll">${S.uncAll ? '다른 분류 닫기' : '다른 분류'}</button>${!many && isMoney(x) ? `<button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="splitOpen" data-id="${x.id}">${ic('columns', 18)}나누기</button>` : ''}</div>
+    ${S.uncAll ? `<div class="chips">${all.map((a) => `<button class="chip" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catGlyph(a, 18)}${esc(a.name)}</button>`).join('')}</div>` : ''}
+    ${G.merchant && !G.mall ? `<button class="autochk" data-act="uncAuto" role="checkbox" aria-checked="${S.uncAuto !== false}"><span class="chk ${S.uncAuto !== false ? 'on' : ''}">${S.uncAuto !== false ? ic('check', 16) : ''}</span><span style="font-size:${px(15)}">이 가맹점은 다음에도 자동으로</span></button>` : ''}
+    <div style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" data-act="uncPrev" ${S.uncLast ? '' : 'disabled'}>이전</button><button class="btn ghost" data-act="uncSkip" data-k="${esc(G.key)}">건너뛰기</button></div>
   </div>`;
+}
+
+/* ── [나누기]: 한 결제를 여러 분류로 (줄마다 메모 = 산 물건). 합계가 원래 금액과 같아야 저장 ──
+   저장하면 결제 한 건이 같은 날·같은 카드/통장의 여러 줄(나눔 1/3…)이 됨 → 잔액·카드 대금은 그대로 */
+function splitGroupOf(x) { return x.splitId ? Store.all('tx').filter((t) => !t.deleted && t.splitId === x.splitId).sort((a, b) => (a.splitIdx || 0) - (b.splitIdx || 0)) : [x]; }
+function openSplit(id) {
+  const x = Store.get('tx', id); if (!x || !isMoney(x)) return;
+  const grp = splitGroupOf(x), total = x.splitId ? x.splitTotal : x.amount;
+  const rows = grp.length > 1 ? grp.map((t) => ({ accountId: t.accountId || '', amount: comma(t.amount), memo: t.memo || '' }))
+    : [{ accountId: x.accountId || '', amount: '', memo: x.memo || '' }, { accountId: '', amount: '', memo: '' }];
+  S.dialog = { type: 'split', id: x.id, total, kind: x.kind, rows }; render();
+}
+function splitSum(D) { return D.rows.reduce((t, r) => t + toInt(r.amount), 0); }
+function viewSplitDlg(D) {
+  const x = Store.get('tx', D.id), sum = splitSum(D), left = D.total - sum;
+  const ok = left === 0 && D.rows.length >= 1 && D.rows.every((r) => r.accountId && toInt(r.amount) > 0);
+  const accs = visibleAccs(D.kind);
+  return `<div class="dlg" style="max-width:560px"><h2 class="dlg-title">나누기 · ${esc(x.merchant || '내역')}</h2>
+    <span class="sub small">${dateLabel(x.date)} · ${esc((payOf(x.payMethodId) || {}).name || '')} · 원래 금액 <b style="color:var(--ink)">${won(D.total)}원</b>. 줄마다 분류·금액·산 물건을 적어요.</span>
+    ${D.rows.map((r, i) => `<div class="splitrow">
+      <select class="input" data-split="accountId" data-i="${i}" aria-label="분류">${optHtml('', r.accountId, '분류 고르기')}${accs.map((a) => optHtml(a.id, r.accountId, a.name)).join('')}</select>
+      <input class="input r" data-split="amount" data-i="${i}" value="${esc(r.amount)}" inputmode="numeric" placeholder="금액" aria-label="금액" autocomplete="off">
+      <input class="input" data-split="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="산 물건 (예: 기저귀)" aria-label="메모" autocomplete="off">
+      ${D.rows.length > 1 ? `<button class="iconbtn" data-act="splitDel" data-i="${i}" aria-label="이 줄 빼기">${ic('x', 18)}</button>` : ''}</div>`).join('')}
+    <div class="chips"><button class="btn" data-act="splitAdd">${ic('plus', 16)}줄 추가</button>${left > 0 ? `<button class="btn" data-act="splitFill">남은 ${won(left)}원 마지막 줄에 넣기</button>` : ''}</div>
+    <div class="conf-note" data-part="splitNote">${splitNote(D)}</div>
+    <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="splitSave" data-part="splitBtn" ${ok ? '' : 'disabled'}>확인하고 저장</button></div></div>`;
+}
+function splitNote(D) {
+  const sum = splitSum(D), left = D.total - sum;
+  return left === 0 ? `합계 ${won(sum)}원 = 원래 금액 ${ic('check', 14)} ${D.rows.some((r) => !r.accountId) ? '<b style="color:var(--warn)">분류를 모두 골라 주세요</b>' : ''}`
+    : left > 0 ? `합계 ${won(sum)}원 · <b style="color:var(--warn)">${won(left)}원 남았어요</b>` : `합계 ${won(sum)}원 · <b style="color:var(--warn)">${won(-left)}원 넘었어요</b>`;
+}
+function onSplitInput(el) {
+  const D = S.dialog, r = D.rows[+el.dataset.i], k = el.dataset.split; if (!r) return;
+  if (k === 'amount') { const n = toInt(el.value); r.amount = el.value.trim() === '' ? '' : comma(n); el.value = r.amount; } else r[k] = el.value;
+  const note = $app.querySelector('[data-part="splitNote"]'), btn = $app.querySelector('[data-part="splitBtn"]');
+  if (note) note.innerHTML = splitNote(D);
+  if (btn) btn.disabled = !(D.total - splitSum(D) === 0 && D.rows.every((q) => q.accountId && toInt(q.amount) > 0));
+}
+async function saveSplit() {
+  const D = S.dialog, x = Store.get('tx', D.id), grp = splitGroupOf(x), items = [];
+  const rows = D.rows.map((r) => ({ accountId: r.accountId, amount: toInt(r.amount), memo: r.memo.trim() }));
+  const gid = x.splitId || x.id, base = grp[0], n = rows.length;
+  const { id: _i, createdAt: _c, updatedAt: _u, ...common } = base;
+  for (let i = 0; i < n; i++) {
+    const r = rows[i], prev = grp[i];
+    const split = n > 1 ? { splitId: gid, splitTotal: D.total, splitIdx: i + 1, splitN: n } : { splitId: null, splitTotal: null, splitIdx: null, splitN: null };
+    const o = { ...(prev || { ...common, createdAt: (base.createdAt || Date.now()) + i }), ...split, accountId: r.accountId, amount: r.amount, memo: r.memo, status: '확인' };
+    items.push({ col: 'tx', id: prev ? prev.id : null, before: prev ? { ...prev } : null });
+    const s = await Store.put('tx', o); items[items.length - 1].id = s.id;
+  }
+  for (const extra of grp.slice(n)) { items.push({ col: 'tx', id: extra.id, before: { ...extra } }); await Store.put('tx', { ...extra, deleted: true, deletedAt: Date.now() }); }
+  S.dialog = null; render(); toast(n > 1 ? `${n}개로 나눴어요` : '분류를 정했어요', { items });
 }
 
 /* ── 자동 분류 규칙 (설정) ── */
@@ -475,6 +566,30 @@ function viewRuleDlg(D) {
     <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="ruleSave">저장</button></div>
     ${D.id ? '<button class="btn ghost" style="align-self:flex-start;color:var(--out)" data-act="ruleDel">이 규칙 지우기</button>' : ''}</div>`;
 }
+
+/* ── 분류 사전 (설정): 가맹점 낱말 → 계정. 온라인몰 목록(늘 미확인) ── */
+function viewDict() {
+  const d = dictOf(), q = norm(S.dictQ || '');
+  const byAcc = {}; d.forEach(([w, acc]) => { if (!q || norm(w).includes(q) || norm(acc).includes(q)) (byAcc[acc] = byAcc[acc] || []).push(w); });
+  const accs = [...visibleAccs('out'), ...visibleAccs('in')];
+  const accOpt = accs.map((a) => `<option value="${esc(a.name)}" ${S.dictAcc === a.name ? 'selected' : ''}>${a.kind === 'in' ? '수입 · ' : ''}${esc(a.name)}</option>`).join('');
+  return `<div class="stack" style="gap:14px">
+    <div class="infoline">${ic('info', 18)}가맹점 이름에 이 낱말이 들어 있으면 그 분류로 저절로 나눠요. 내가 직접 고른 것(자동 분류 규칙·예전에 고른 같은 가맹점)이 먼저예요.</div>
+    <section class="card card-pad" style="display:flex;flex-direction:column;gap:10px"><h2 class="h2" style="font-size:${px(17)}">낱말 추가 · 고치기</h2>
+      <div class="cols" style="gap:8px"><input class="input" style="flex:1 1 160px" data-dictw value="${esc(S.dictW || '')}" placeholder="가맹점 낱말 (예: 노브랜드)" autocomplete="off">
+        <select class="input" style="flex:1 1 180px" data-dicta><option value="">분류 고르기</option>${accOpt}</select>
+        <button class="btn ink" data-act="dictAdd">추가</button></div>
+      <span class="sub small">이미 있는 낱말을 다른 분류로 넣으면 그 분류로 바뀌어요. 낱말을 누르면 지워요.</span></section>
+    <label class="qbox" style="min-height:48px;border-width:1px">${ic('search', 18)}<input data-dictq value="${esc(S.dictQ || '')}" placeholder="낱말·분류 찾기" autocomplete="off"></label>
+    <section class="card" style="padding:4px 20px">${Object.keys(byAcc).sort(ko).map((acc) => { const a = accs.find((x) => x.name === acc); return `<div class="dictrow"><span class="dicta">${a ? catGlyph(a, 16) : ''}<b>${esc(acc)}</b>${a ? '' : ' <span class="tag">계정 없음</span>'}</span><div class="chips" style="gap:6px">${byAcc[acc].map((w) => `<button class="chip" style="min-height:36px;font-size:${px(13)}" data-act="dictDel" data-w="${esc(w)}" aria-label="${esc(w)} 지우기">${esc(w)}${ic('x', 12)}</button>`).join('')}</div></div>`; }).join('') || '<p class="sub" style="margin:0;padding:14px 0">맞는 낱말이 없어요.</p>'}</section>
+    <section class="card card-pad" style="display:flex;flex-direction:column;gap:10px"><h2 class="h2" style="font-size:${px(17)}">온라인몰 · 늘 미확인</h2>
+      <span class="sub small">쿠팡·네이버페이처럼 한 번에 여러 물건을 사는 곳은 자동으로 나누지 않아요. 미확인 정리에서 한 건씩 고르거나 [나누기]로 나눠 적어요.</span>
+      <div class="chips" style="gap:6px">${mallsOf().map((w) => `<button class="chip" style="min-height:36px;font-size:${px(13)}" data-act="mallDel" data-w="${esc(w)}">${esc(w)}${ic('x', 12)}</button>`).join('')}</div>
+      <div class="cols" style="gap:8px"><input class="input" style="flex:1 1 200px" data-mallw value="${esc(S.mallW || '')}" placeholder="온라인몰 이름 추가" autocomplete="off"><button class="btn" data-act="mallAdd">추가</button></div></section>
+    <button class="btn ghost" style="align-self:flex-start" data-act="dictReset">기본 사전으로 되돌리기</button>
+  </div>`;
+}
+async function setDict(dict, malls) { const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, ...(dict ? { dict } : {}), ...(malls ? { malls } : {}) }); }
 
 /* ── 기억한 파일 모양 (설정) ── */
 function viewTemplates() {
@@ -498,14 +613,32 @@ const FILE_ACT = {
   goUncFix: () => { S.uncTotal = null; S.uncSkip = []; S.uncLast = null; go('미확인 정리'); },
   uncAll: () => { S.uncAll = !S.uncAll; render(); },
   uncAuto: () => { S.uncAuto = S.uncAuto === false; render(); },
+  // 묶음(같은 가맹점) 전체를 한 분류로 · 규칙 저장(온라인몰 빼고) → 다음부터 자동
   uncPick: async (el) => {
-    const x = Store.get('tx', el.dataset.id), before = { ...x };
-    await Store.put('tx', { ...x, accountId: el.dataset.acc, status: '확인' });
-    if (S.uncAuto !== false && x.merchant) await saveRule(x.merchant, el.dataset.acc);
-    S.uncLast = { id: x.id, before }; S.uncAll = false; render();
+    const G = uncGroups().find((g) => g.key === el.dataset.k); if (!G) return;
+    const befores = [];
+    for (const x of G.items) { befores.push({ ...x }); await Store.put('tx', { ...x, accountId: el.dataset.acc, status: '확인' }); }
+    if (S.uncAuto !== false && G.merchant && !G.mall) await saveRule(G.merchant, el.dataset.acc);
+    S.uncLast = { befores }; S.uncAll = false; render();
+    if (G.items.length > 1) toast(`${G.items.length}건을 '${(accOf(el.dataset.acc) || {}).name}'(으)로 정했어요`);
   },
-  uncPrev: async () => { const L0 = S.uncLast; if (!L0) return; await Store.put('tx', L0.before); S.uncLast = null; render(); },
-  uncSkip: (el) => { S.uncSkip = [...(S.uncSkip || []), el.dataset.id]; if (uncQueue().every((x) => S.uncSkip.includes(x.id))) S.uncSkip = []; render(); },
+  uncPrev: async () => { const L0 = S.uncLast; if (!L0) return; for (const b of L0.befores || []) await Store.put('tx', b, true); S.uncLast = null; render(); },
+  uncSkip: (el) => { S.uncSkip = [...(S.uncSkip || []), el.dataset.k]; if (uncGroups().every((g) => S.uncSkip.includes(g.key))) S.uncSkip = []; render(); },
+  splitOpen: (el) => openSplit(el.dataset.id),
+  splitFromForm: () => { const f = S.f; if (!f || !f.id) return; S.f = null; openSplit(f.id); },
+  splitAdd: () => { S.dialog.rows.push({ accountId: '', amount: '', memo: '' }); render(); },
+  splitDel: (el) => { S.dialog.rows.splice(+el.dataset.i, 1); render(); },
+  splitFill: () => { const D = S.dialog, last = D.rows[D.rows.length - 1], left = D.total - splitSum(D); last.amount = comma(toInt(last.amount) + left); render(); },
+  splitSave: () => { if (!S.busy) saveSplit(); },
+  goDict: () => go('분류 사전'),
+  dictAdd: async () => {
+    const w = (S.dictW || '').trim(), acc = S.dictAcc || ''; if (!w || !acc) { toast('낱말과 분류를 넣어 주세요'); return; }
+    await setDict([...dictOf().filter(([x]) => norm(x) !== norm(w)), [w, acc]]); S.dictW = ''; render(); toast(`'${w}' → ${acc}`);
+  },
+  dictDel: async (el) => { const w = el.dataset.w; await setDict(dictOf().filter(([x]) => x !== w)); render(); toast(`'${w}'을(를) 사전에서 뺐어요`); },
+  mallAdd: async () => { const w = (S.mallW || '').trim(); if (!w) return; await setDict(null, [...mallsOf().filter((x) => x !== w), w]); S.mallW = ''; render(); },
+  mallDel: async (el) => { await setDict(null, mallsOf().filter((x) => x !== el.dataset.w)); render(); toast(`'${el.dataset.w}'은(는) 이제 자동 분류해요`); },
+  dictReset: async () => { await setDict(DATA.DICT.slice(), DATA.MALLS.slice()); render(); toast('기본 사전으로 되돌렸어요'); },
   goRules: () => go('자동 분류 규칙'),
   ruleNew: () => { S.dialog = { type: 'rule', id: null, d: { pattern: '', matchType: 'contains', accountId: '' } }; render(); },
   ruleEdit: (el) => { const r = Store.get('rules', el.dataset.id); S.dialog = { type: 'rule', id: r.id, d: { pattern: r.pattern, matchType: r.matchType, accountId: r.accountId } }; render(); },

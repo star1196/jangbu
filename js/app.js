@@ -501,6 +501,8 @@ const ACT = {
   ...PLAN_ACT,
   ...MORE_ACT,
   ...XL_ACT,
+  archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
+  archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
   swapColors: () => { [view.inC, view.outC] = [view.outC, view.inC]; saveView(); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
   resetColors: () => { view.inC = DATA.DEFAULT_IN; view.outC = DATA.DEFAULT_OUT; saveView(); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
@@ -530,6 +532,12 @@ $app.addEventListener('input', (e) => {
   if (el.matches && el.matches('[data-q]')) onSearchInput(el);
   if (el.dataset && el.dataset.xlopt && S.xl && S.xl.sheets) onXlOpt(el);
   if (el.dataset && el.dataset.xlfix && S.xl && S.xl.sheets) onXlFix(el);
+  if (el.dataset && el.dataset.xlstart != null && S.xl && S.xl.sheets) onXlStart(el);
+  if (el.dataset && el.dataset.split && S.dialog && S.dialog.type === 'split') onSplitInput(el);
+  if (el.dataset && el.dataset.dictw != null) S.dictW = el.value;
+  if (el.dataset && el.dataset.dicta != null) S.dictAcc = el.value;
+  if (el.dataset && el.dataset.mallw != null) S.mallW = el.value;
+  if (el.dataset && el.dataset.dictq != null) { S.dictQ = el.value; const pos = el.selectionStart; render(); const i = $app.querySelector('[data-dictq]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (er) { /* 그대로 */ } } }
   // 카드 추가 칸
   if (el.dataset && el.dataset.ca && S.cardAdd) { S.cardAdd[el.dataset.ca] = el.dataset.ca === 'last4' ? digits(el.value).slice(0, 4) : el.value; if (el.dataset.ca === 'last4') el.value = S.cardAdd.last4; }
   // 파일 미리보기 칸

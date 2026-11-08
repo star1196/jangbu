@@ -94,7 +94,9 @@ function startDate() {
 const isSep = (bankId) => { const b = bankOf(bankId); return !!b && b.type === 'sep'; };
 // 합계에 넣는 내역인지: 시작점 이전은 보관만, 별도 통장 안의 입출금은 가계부 밖
 function counted(x) { const s = startDate(); return !x.deleted && (!s || x.date >= s) && !(isMoney(x) && isSep(x.bankId)); }
-const isUnc = (x) => isMoney(x) && (!x.accountId || x.status === '미확인');
+// 미확인: 분류가 없는 수입·지출. 시작점 이전 '보관' 내역(엑셀에서 옮긴 옛 기록)은 미확인으로 세지 않음
+const isUnc = (x) => isMoney(x) && !x.archived && (!x.accountId || x.status === '미확인');
+const uncList = () => liveTx().filter((x) => isUnc(x) && counted(x)); // 홈 알림·미확인 정리: 시작점 이후만
 
 /* ── 사용할 기능 (4-27) ── 켜짐/꺼짐만 봄. 꺼도 자료·계산은 그대로. 정해 둔 적 없으면 켜짐. */
 function feat(key) {

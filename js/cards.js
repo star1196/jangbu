@@ -39,7 +39,7 @@ function billParts(x) {
 function cardBills(cardId) {
   const c = payOf(cardId); const out = {};
   if (!c || c.cardType === 'check' || !c.billingDay) return out;
-  liveTx().filter((x) => x.kind === 'out' && x.payMethodId === cardId).forEach((x) => {
+  liveTx().filter((x) => x.kind === 'out' && x.payMethodId === cardId && !x.archived).forEach((x) => {
     billParts(x).forEach((p) => { const b = out[p.ym] || (out[p.ym] = { ym: p.ym, amount: 0, items: [], date: billDateOf(c, p.ym), paid: null }); b.amount += p.amount; b.items.push({ x, p }); });
   });
   liveTx().filter((x) => x.kind === 'bill' && x.cardId === cardId).forEach((x) => {

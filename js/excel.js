@@ -331,7 +331,7 @@ async function startXl(file) {
       const kind = guessKind(n, rows);
       return { idx, name: n, rows, kind, opt: { target: 'new', name: kind === 'bank' ? cleanBankName(n) : n.trim().slice(0, 30), type: sepGuess(n) ? 'sep' : 'home', owner: '나', acctTo: null } };
     });
-    S.xl = { step: 'sheets', name: file.name, sheets, sel: 0 };
+    S.xl = { step: 'sheets', name: file.name, sheets, sel: 0, startYM: settingsOf().startPoint || '2601' };
     xlReparse(S.xl);
     render();
   } catch (e) { S.xl = { step: 'drop' }; render(); toast('엑셀을 읽지 못했어요 (' + e.message + ')'); }
@@ -395,8 +395,12 @@ function viewXl(L) {
       ${guess.length ? `<div class="conf-note"><b>날짜 확인 ${guess.length}건</b> — 126처럼 두 가지로 읽히는 날짜예요. 맞는 쪽을 골라 주세요(고르면 아래 줄도 다시 읽어요).${guess.slice(0, 20).map((it) => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px"><span class="sub small" style="flex:1 1 140px">${String(it.row).replace(/^\d+:/, '')}줄 · '${esc(it.raw)}' · ${esc(it.merchant)}</span>${[it.c1, it.c2].filter(Boolean).map((c) => `<button class="chip ${it.date === c ? 'on' : ''}" style="min-height:36px" data-act="xlDate" data-r="${it.row}" data-v="${c}">${fullDate(c)}</button>`).join('')}</div>`).join('')}${guess.length > 20 ? `<span class="sub small">외 ${guess.length - 20}건은 앞쪽 날짜로 읽어요.</span>` : ''}</div>` : ''}
       ${odd.length ? `<div class="conf-note"><b>날짜가 튀는 줄 ${odd.length}개</b> — 위아래 줄과 날짜가 멀리 떨어져 있어요. 엑셀에 잘못 적었을 수 있어요. 맞는 날짜를 넣어 주세요(그대로 둬도 저장돼요).${odd.slice(0, 20).map((it) => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px"><span class="sub small" style="flex:1 1 160px">${String(it.row).replace(/^\d+:/, '')}줄 · 엑셀에 '${esc(it.raw)}' · ${esc(it.merchant)}</span><input class="input" type="date" style="width:auto;min-height:40px" data-xlfix="${it.row}" value="${it.date}" aria-label="날짜 고치기"></div>`).join('')}</div>` : ''}`;
   }
+  const sdt = xlStartDate(X), archN = sdt ? X.sheets.filter((x) => ['bank', 'card'].includes(x.kind) && x.parsed).reduce((t, x) => t + x.parsed.items.filter((i) => i.date < sdt).length, 0) : 0;
   return `<div class="stack" style="gap:14px">
     <section class="card card-pad" style="display:flex;align-items:center;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:${px(16)};font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(X.name)}</span><span class="sub" style="font-size:${px(14)}">시트 ${X.sheets.length}개 · 시트마다 무엇인지 골라 주세요</span></div><button class="btn" data-act="xlReset">다른 파일</button></section>
+    <section class="card card-pad" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
+      <span class="label" style="margin:0">시작점</span><input class="input" style="width:${px(100)};text-align:center;font-weight:700" data-xlstart value="${esc(X.startYM || '')}" inputmode="numeric" maxlength="4" placeholder="2601" aria-label="시작점 (연도 2자리 + 월 2자리)">
+      <span class="sub" style="flex:1 1 260px;font-size:${px(14)};line-height:1.5" data-part="xlstartnote">${sdt ? `${sdt.slice(0, 4)}년 ${+sdt.slice(5, 7)}월부터 맞춰 써요. 그 전 기록 <b>${archN}건</b>은 '보관'으로 둬요(분류 없이 · 미확인에 안 셈 · 검색·모아보기·통장 표에는 보임). 통장 잔액은 시작점 날의 잔액에서 시작해요.` : '2601처럼 연도 2자리 + 월 2자리. 비우면 모든 기록을 그대로 옮겨요.'}</span></section>
     <div class="cols" style="align-items:flex-start">
       <section class="card" style="flex:1 1 260px;min-width:0;overflow:hidden">${list}</section>
       <section class="card card-pad" style="flex:2 1 380px;min-width:0;display:flex;flex-direction:column;gap:12px">
@@ -409,6 +413,13 @@ function viewXl(L) {
   </div>`;
 }
 
+// 시작점(2601) → '2026-01-01'. 잘못 적었으면 '' (모두 그대로)
+function xlStartDate(X) { const v = digits(X.startYM || ''); return /^\d{4}$/.test(v) && +v.slice(2) >= 1 && +v.slice(2) <= 12 ? `20${v.slice(0, 2)}-${v.slice(2)}-01` : ''; }
+function onXlStart(el) {
+  const v = digits(el.value).slice(0, 4); el.value = v; S.xl.startYM = v;
+  if (v.length === 4 || !v) { const pos = el.selectionStart; render(); const i = $app.querySelector('[data-xlstart]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { /* 그대로 */ } } }
+}
+
 /* ── 저장 (한꺼번에) ── */
 async function saveXl() {
   const X = S.xl, imp = Store.uid(), base = Date.now();
@@ -417,16 +428,21 @@ async function saveXl() {
   S.busy = true;
   const keepX = X; S.xl = { step: 'saving', progress: '통장·카드 만드는 중' }; render();
   try {
-    let n = 0, unc = 0, seq = 0;
+    let n = 0, unc = 0, seq = 0, archived = 0;
     const batch = [], vaultAdd = [];
     const bankPay = Store.all('payMethods').find((p) => p.kind === 'bank'), cash = Store.all('payMethods').find((p) => p.kind === 'cash');
     const txBase = { status: '확인', source: '엑셀:' + imp, deleted: false, originalPrice: 0, discount: 0, pointUsed: 0, memo: '' };
     // 1) 통장 · 카드 · 여행 먼저 만들기 (내역이 가리킬 id가 필요)
     const bankIdOf = {}, made = [];
+    // 시작점: 그 전 기록은 '보관'(분류 없음 · 미확인 아님 · 잔액 계산 밖), 통장 시작 잔액 = 시작점 날의 잔액
+    const sdt = xlStartDate(keepX), isArch = (it) => !!sdt && it.date < sdt;
+    const signedIt = (it) => (it.kind === 'in' ? it.amount : -it.amount);
     let order = Store.all('banks').length;
     for (const s of keepX.sheets.filter((s) => s.kind === 'bank' && s.parsed)) {
       if (s.opt.target !== 'new') { bankIdOf[s.idx] = s.opt.target; continue; }
-      made.push(['banks', { id: Store.uid(), name: s.opt.name.trim() || s.name, type: s.opt.type, bank: '', owner: s.opt.owner, memo: `엑셀 '${s.name}' 시트에서 옮김`, openDate: s.parsed.openDate || '', openBalance: s.parsed.openBal, goal: 0, accountNo: s.opt.acctNo && s.opt.acctTo === 'keep' ? s.opt.acctNo : '', closed: false, closedDate: '', order: order++ }]);
+      const before = s.parsed.items.filter(isArch);
+      const openBal = s.parsed.openBal + before.reduce((t, it) => t + signedIt(it), 0), openDate = before.length ? sdt : s.parsed.openDate || '';
+      made.push(['banks', { id: Store.uid(), name: s.opt.name.trim() || s.name, type: s.opt.type, bank: '', owner: s.opt.owner, memo: `엑셀 '${s.name}' 시트에서 옮김`, openDate, openBalance: openBal, goal: 0, accountNo: s.opt.acctNo && s.opt.acctTo === 'keep' ? s.opt.acctNo : '', closed: false, closedDate: '', order: order++ }]);
       bankIdOf[s.idx] = made[made.length - 1][1].id;
       if (s.opt.acctNo && s.opt.acctTo === 'vault') vaultAdd.push({ bank: '', name: s.opt.name || s.name, num: s.opt.acctNo });
     }
@@ -451,13 +467,15 @@ async function saveXl() {
         if (it.pair) {
           if (doneKeys.has(it.pair.key)) continue; doneKeys.add(it.pair.key);
           const from = it.pair.role === 'from' ? bid : bankIdOf[it.pair.to], to = it.pair.role === 'from' ? bankIdOf[it.pair.to] : bid;
-          batch.push(['tx', { ...txBase, kind: 'tr', date: it.date, amount: it.amount, fromId: from, toId: to, merchant: '', memo: it.merchant, createdAt: base + seq++ }]); n++;
+          batch.push(['tx', { ...txBase, kind: 'tr', date: it.date, amount: it.amount, fromId: from, toId: to, merchant: '', memo: it.merchant, xlBal: it.bal, ...(isArch(it) ? { archived: true, status: '보관' } : {}), createdAt: base + seq++ }]); n++;
           continue;
         }
         if (have.has(`${it.date}|${it.kind}|${it.amount}|${norm(it.merchant)}|${bid}`)) continue;
-        if (it.bill) { const c = billCard(it.merchant); batch.push(['tx', { ...txBase, kind: 'bill', cardId: c ? c.id : null, bankId: bid, billYM: ymOf(it.date), amount: it.amount, date: it.date, memo: it.merchant, createdAt: base + seq++ }]); n++; continue; }
+        const ar = isArch(it) ? { archived: true, status: '보관' } : {};
+        if (it.bill) { const c = billCard(it.merchant); batch.push(['tx', { ...txBase, kind: 'bill', cardId: c ? c.id : null, bankId: bid, billYM: ymOf(it.date), amount: it.amount, date: it.date, memo: it.merchant, xlBal: it.bal, ...ar, createdAt: base + seq++ }]); n++; continue; }
+        if (ar.archived) { batch.push(['tx', { ...txBase, kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, accountId: null, payMethodId: bankPay ? bankPay.id : null, bankId: bid, xlBal: it.bal, ...ar, createdAt: base + seq++ }]); n++; archived++; continue; }
         const c = classify(it.merchant, it.kind);
-        batch.push(['tx', { ...txBase, kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, accountId: c ? c.accountId : null, payMethodId: bankPay ? bankPay.id : null, bankId: bid, status: c ? '확인' : '미확인', createdAt: base + seq++ }]);
+        batch.push(['tx', { ...txBase, kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, accountId: c ? c.accountId : null, payMethodId: bankPay ? bankPay.id : null, bankId: bid, xlBal: it.bal, status: c ? '확인' : '미확인', createdAt: base + seq++ }]);
         n++; if (!c) unc++;
       }
     }
@@ -466,6 +484,7 @@ async function saveXl() {
       for (const it of s.parsed.items.filter((i) => i.use)) {
         const cid = s.parsed.blocks ? cardOf[s.idx + ':' + it.block] : cardOf[s.idx]; if (!cid) continue;
         if (have.has(`${it.date}|out|${it.amount}|${norm(it.merchant)}|`)) continue;
+        if (isArch(it)) { batch.push(['tx', { ...txBase, kind: 'out', date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo || '', accountId: null, payMethodId: cid, bankId: null, archived: true, status: '보관', createdAt: base + seq++ }]); n++; archived++; continue; }
         const c = classify(it.merchant, 'out');
         batch.push(['tx', { ...txBase, kind: 'out', date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo || '', accountId: c ? c.accountId : null, payMethodId: cid, bankId: null, installment: it.inst > 1 ? { months: it.inst } : null, status: c ? '확인' : '미확인', createdAt: base + seq++ }]);
         n++; if (!c) unc++;
@@ -518,9 +537,10 @@ async function saveXl() {
     }
     S.xl.progress = `내역 ${batch.length}건 저장 중`; render();
     const saved = await Store.putMany([...made, ...batch]);
+    if (sdt) await putSettings({ startPoint: digits(keepX.startYM) }); // 장부 시작점도 같이 맞춤 (설정 → 시작점에서 바꿀 수 있음)
     if (needVault) { VAULT.data.accounts = [...(VAULT.data.accounts || []), ...vaultAdd.map((v) => ({ id: Store.uid(), ...v }))]; await vaultSave(); }
     S.busy = false;
-    S.xl = { step: 'done', uncN: unc, doneMsg: `${n}건을 옮겼어요${unc ? ` · 미확인 ${unc}건은 정리해 주세요` : ''}.${linked + tripOnly ? ` 여행 시트 ${linked + tripOnly}건 중 ${linked}건은 통장·카드 내역에 여행을 붙였고, ${tripOnly}건은 여행 안에서만 보여요(합계에 두 번 안 들어가요).` : ''} 통장 잔액이 엑셀과 맞는지 통장 화면에서 한 번 봐 주세요.` };
+    S.xl = { step: 'done', uncN: unc, doneMsg: `${n}건을 옮겼어요${archived ? ` · 시작점(${keepX.startYM}) 이전 ${archived}건은 보관` : ''}${unc ? ` · 미확인 ${unc}건은 정리해 주세요` : ''}.${linked + tripOnly ? ` 여행 시트 ${linked + tripOnly}건 중 ${linked}건은 통장·카드 내역에 여행을 붙였고, ${tripOnly}건은 여행 안에서만 보여요(합계에 두 번 안 들어가요).` : ''} 통장 잔액이 엑셀과 맞는지 통장 화면에서 한 번 봐 주세요.` };
     render();
     toast(`${n}건을 옮겼어요`, saved.length <= 300 ? { items: saved.map((o, i) => ({ col: (i < made.length ? made[i][0] : batch[i - made.length][0]), id: o.id, before: null })) } : null);
   } catch (e) { S.busy = false; S.xl = keepX; keepX.step = 'sheets'; render(); toast('옮기지 못했어요 (' + e.message + ')'); }
