@@ -126,6 +126,22 @@ async function readPdf(file) {
   return { name: file.name, sheets: [{ name: 'PDF', rows: out }], pdf: true, pdfCo: co };
 }
 
+/* ── 시트의 진짜 크기만 읽기 ──
+   엑셀은 빈 서식 때문에 104만 줄짜리로 적혀 있거나, 맨 아래 줄에 합계 식(SUM) 한 칸만 있는 경우가 있음.
+   → 내용이 있는 줄만 세고, 내용에서 500줄 넘게 떨어진 외톨이 줄(맨 아래 합계)은 뺌 */
+function trimSheet(ws) {
+  const rows = new Set(); let mc = 0;
+  for (const k of Object.keys(ws)) {
+    if (k[0] === '!') continue;
+    const c = ws[k]; if (!c || c.v == null || (typeof c.v === 'string' && !c.v.trim())) continue;
+    const a = XLSX.utils.decode_cell(k); rows.add(a.r); if (a.c > mc) mc = a.c;
+  }
+  const rs = [...rows].sort((a, b) => a - b);
+  while (rs.length > 1 && rs[rs.length - 1] - rs[rs.length - 2] > 500) rs.pop();
+  ws['!ref'] = rs.length ? XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rs[rs.length - 1], c: mc } }) : 'A1';
+  return ws;
+}
+
 /* ── 파일 → 시트 줄들 ── */
 async function readFile(file) {
   const name = file.name, low = name.toLowerCase();
@@ -138,7 +154,7 @@ async function readFile(file) {
     if (/�/.test(text)) { try { text = new TextDecoder('euc-kr').decode(buf); } catch (e) { /* 그대로 */ } }
     wb = XLSX.read(text, { type: 'string', cellDates: true, raw: false });
   } else wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const sheets = wb.SheetNames.map((n) => ({ name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }) })).filter((s) => s.rows.some((r) => r.some((c) => String(c).trim())));
+  const sheets = wb.SheetNames.map((n) => ({ name: n, rows: XLSX.utils.sheet_to_json(trimSheet(wb.Sheets[n]), { header: 1, raw: true, defval: '' }) })).filter((s) => s.rows.some((r) => r.some((c) => String(c).trim())));
   if (!sheets.length) throw new Error('빈 파일이에요.');
   return { name, sheets };
 }

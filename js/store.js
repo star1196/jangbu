@@ -146,6 +146,26 @@ const Store = (() => {
     return chain.then(() => o);
   }
 
+  // 한꺼번에 저장 (엑셀 옮기기처럼 수천 건일 때 빠르게: 암호화 후 한 번에 기록)
+  async function putMany(list) {
+    if (!key) throw new Error('잠겨 있어요');
+    const now = Date.now(), out = [], rows = [], k = key, lid = ledger.id;
+    for (const [col, obj] of list) {
+      const o = { ...obj, id: obj.id || uid(), updatedAt: now, createdAt: obj.createdAt || now };
+      (mem[col] = mem[col] || new Map()).set(o.id, o); out.push(o);
+      const box = await encryptWith(k, o);
+      rows.push({ k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct });
+    }
+    await chain;
+    const db = await openDB();
+    for (let i = 0; i < rows.length; i += 2000) {
+      const t = db.transaction('recs', 'readwrite');
+      rows.slice(i, i + 2000).forEach((r) => t.objectStore('recs').put(r));
+      await txDone(t);
+    }
+    return out;
+  }
+
   // 완전히 지우기 (휴지통 비우기 · 방금 만든 것 되돌리기에만 사용)
   // 지운 것은 'gone'에 짧게 적어 둠 → 다른 기기 백업을 합칠 때 되살아나지 않고, 그 기기에서도 지워짐
   // noMark: 합치기 되돌리기처럼 '지운 것'으로 남기지 않을 때
@@ -272,5 +292,5 @@ const Store = (() => {
     return !!(await reqP(db.transaction('ledgers').objectStore('ledgers').get(id)));
   }
 
-  return { LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, remove, migrate, renameLedger, changePassword, uid };
+  return { LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

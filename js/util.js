@@ -82,8 +82,8 @@ function quickDates(raw) {
 const accOf = (id) => Store.get('accounts', id);
 const payOf = (id) => Store.get('payMethods', id);
 const bankOf = (id) => Store.get('banks', id);
-// 장부에 들어간 내역 (휴지통 · 반복 입력 '확인 대기'는 빼고)
-const liveTx = () => Store.all('tx').filter((x) => !x.deleted && !x.pending);
+// 장부에 들어간 내역 (휴지통 · 반복 입력 '확인 대기' · 여행 안에서만 보이는 내역(엑셀 여행 시트)은 빼고)
+const liveTx = () => Store.all('tx').filter((x) => !x.deleted && !x.pending && !x.tripOnly);
 const pendingTx = () => Store.all('tx').filter((x) => !x.deleted && x.pending);
 const signed = (x) => (x.kind === 'in' ? x.amount : x.kind === 'out' ? -x.amount : 0);
 const isMoney = (x) => x.kind === 'in' || x.kind === 'out';

@@ -22,7 +22,8 @@ function tripCatOf(x) {
   return TRIP_BY_ACC[(accOf(x.accountId) || {}).name] || '기타';
 }
 const tripsAll = () => Store.all('trips').sort((a, b) => (a.from < b.from ? 1 : -1));
-const tripTx = (t) => liveTx().filter((x) => x.tripId === t.id && isMoney(x));
+// 여행 내역: 장부 내역 + 여행 안에서만 보이는 내역(tripOnly, 엑셀 여행 시트에서 온 현금 등)
+const tripTx = (t) => Store.all('tx').filter((x) => !x.deleted && !x.pending && x.tripId === t.id && isMoney(x));
 const tripSpent = (t) => tripTx(t).reduce((s, x) => s + (x.kind === 'out' ? x.amount : -x.amount), 0);
 const tripDays = (t) => (t.from && t.to ? Math.round((parseYmd(t.to) - parseYmd(t.from)) / 86400000) + 1 : 1);
 const tripPrev = (t) => tripsAll().filter((o) => o.id !== t.id && o.from < t.from)[0] || null;
@@ -72,9 +73,10 @@ function viewTripDetail(L) {
   const pcat = {}; if (p) tripTx(p).forEach((x) => { const c = tripCatOf(x); pcat[c] = (pcat[c] || 0) + (x.kind === 'out' ? x.amount : -x.amount); });
   const cmax = Math.max(1, ...Object.values(cat));
   const cats = TRIP_CATS.filter(([n]) => cat[n] || pcat[n]).map(([n, icon]) => { const v = cat[n] || 0, d = p ? v - (pcat[n] || 0) : null; return `<div class="tcat">${ic(icon, 18, 'var(--sub)')}<span class="tcn">${n}</span><span class="bar"><i style="width:${Math.round(Math.max(0, v) / cmax * 100)}%"></i></span><span class="tca neg">${won(v)}원</span><span class="tcc" style="${cmpCs(d)}">${p ? cmpTxt(d) : ''}</span></div>`; }).join('');
-  const src = {}; xs.filter((x) => x.kind === 'out').forEach((x) => { const pc = payOf(x.payMethodId); const k = pc && pc.kind === 'card' ? cardLabel(pc) : x.bankId ? bankName(x.bankId) + (isSep(x.bankId) ? ' (별도)' : '') : (pc || {}).name || '현금'; src[k] = (src[k] || 0) + x.amount; });
+  const src = {}; xs.filter((x) => x.kind === 'out').forEach((x) => { const pc = payOf(x.payMethodId); const k = pc && pc.kind === 'card' ? cardLabel(pc) : x.bankId ? bankName(x.bankId) + (isSep(x.bankId) ? ' (별도)' : '') : (pc || {}).name || x.payText || '현금'; src[k] = (src[k] || 0) + x.amount; });
   const srcTot = Object.values(src).reduce((s, v) => s + v, 0) || 1;
-  const pays = {}; xs.filter((x) => x.kind === 'out').forEach((x) => { const k = (payOf(x.payMethodId) || {}).name || '—'; pays[k] = (pays[k] || 0) + x.amount; });
+  const pays = {}; xs.filter((x) => x.kind === 'out').forEach((x) => { const k = (payOf(x.payMethodId) || {}).name || x.payText || '—'; pays[k] = (pays[k] || 0) + x.amount; });
+  const onlyN = xs.filter((x) => x.tripOnly).length;
   // 여행 통장에서 가져온 돈 (4-20)
   const fromBank = t.bankId ? liveTx().filter((x) => x.kind === 'tr' && x.fromId === t.bankId && x.date >= addDays(t.from, -30) && x.date <= (t.to || t.from)).reduce((s, x) => s + x.amount, 0) : 0;
   const byDay = {}; xs.forEach((x) => { (byDay[x.date] = byDay[x.date] || []).push(x); });
@@ -87,6 +89,7 @@ function viewTripDetail(L) {
       <div class="ttiles">${tiles}</div>
       ${t.budget ? `<span class="gbar"><i style="width:${pct}%;background:${used > t.budget ? 'var(--warn)' : 'var(--ink)'}"></i></span><span style="font-size:${px(14)}">예산의 ${Math.round(used / t.budget * 100)}%를 썼어요${left < 0 ? ` · <b style="color:var(--warn)">${won(-left)}원 넘었어요</b>` : ''}</span>` : ''}
       ${fromBank ? `<span style="font-size:${px(14)}">${ic('landmark', 16)} 여행 통장(${esc(bankName(t.bankId))})에서 <b>${won(fromBank)}원</b> 가져와 썼어요</span>` : ''}
+      ${onlyN ? `<span class="sub small">${ic('info', 14)} 엑셀 여행 시트에서 온 ${onlyN}건은 이 여행 안에서만 보여요. 같은 돈이 통장·카드 내역에 이미 있어서 가계부 합계·통장 잔액에는 다시 넣지 않아요.</span>` : ''}
     </section>
     <div class="cols">
       <section class="card" style="flex:3 1 420px;min-width:0;padding:16px 20px 8px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 class="h2" style="font-size:${px(17)}">여행 분류별</h2><span class="sub small">${p ? `직전 여행(${esc(p.name)}) 대비` : '직전 여행 없음'}</span></div>${cats || '<p class="sub" style="margin:0;padding:14px 0">아직 내역이 없어요.</p>'}</section>
@@ -269,7 +272,7 @@ function homeSavedSearch() {
 function viewYearly(L) {
   const kind = S.yrKind || 'acc';
   const sd = startDate(), sy = sd ? +sd.slice(0, 4) : 0;
-  const all = liveTx().filter((x) => !(isMoney(x) && isSep(x.bankId)) || kind === 'bank');
+  const all = (kind === 'trip' ? Store.all('tx').filter((x) => !x.deleted && !x.pending) : liveTx()).filter((x) => !(isMoney(x) && isSep(x.bankId)) || kind === 'bank');
   const valOf = (x, id) => {
     if (kind === 'acc') return x.accountId === id && isMoney(x) ? x.amount : 0;
     if (kind === 'card') return x.kind === 'out' && x.payMethodId === id ? x.amount : 0;

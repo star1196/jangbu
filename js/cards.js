@@ -59,7 +59,8 @@ function upcomingBills() {
 function dueBills() {
   const t = todayStr(), list = [];
   cardsAll().filter((c) => c.cardType !== 'check').forEach((c) => {
-    Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date <= t).forEach((b) => list.push({ card: c, bill: b }));
+    // 엑셀에서 옮겨 온 지난 내역으로만 된 대금은 이미 지난 일이라 묻지 않음
+    Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date <= t && !b.items.every((i) => String(i.x.source || '').startsWith('엑셀'))).forEach((b) => list.push({ card: c, bill: b }));
   });
   return list.sort((a, b) => (a.bill.date < b.bill.date ? -1 : 1));
 }

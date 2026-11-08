@@ -1,5 +1,5 @@
 // 앱을 고칠 때마다 아래 버전 번호를 하나씩 올려요 (jangbu-v5 → jangbu-v6 …)
-const VERSION = 'jangbu-v12';
+const VERSION = 'jangbu-v13';
 
 // 인터넷 없이도 열리도록 기기에 넣어 두는 파일 목록
 const FILES = [

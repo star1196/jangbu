@@ -216,7 +216,7 @@ const alertDays = () => [...new Set((settingsOf().alertDays || [30, 14, 7]).map(
 function savingTodos() {
   if (!feat('savings')) return '';
   const th = alertDays();
-  return savingsActive().filter((s) => s.end).map((s) => {
+  const rows = savingsActive().filter((s) => s.end).map((s) => {
     const dd = dDays(s.end), label = `${esc(s.bank ? s.bank + ' ' : '')}${esc(s.name)} · ${shortDate(s.end)}`;
     if (dd <= 0) {
       return `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic(savIcon(s), 20, 'var(--warn)')}</span>
@@ -228,7 +228,9 @@ function savingTodos() {
     return `<div class="todo"><span class="circ" style="width:40px;height:40px">${ic(savIcon(s), 20, 'var(--ink)')}</span>
       <div class="tm"><span class="tt">${esc(s.stype || '적금')} 만기 ${dd}일 전</span><span class="sub small">${label}</span></div>
       <button class="btn" data-act="matureSeen" data-id="${s.id}" data-t="${t}">보기</button></div>`;
-  }).join('');
+  }).filter(Boolean);
+  // 할 일이 너무 길어지지 않게 3개까지만, 나머지는 한 줄로
+  return rows.slice(0, 3).join('') + (rows.length > 3 ? `<button class="row" data-act="goSavings" style="min-height:48px;color:var(--sub)"><span class="k" style="font-size:${px(14)}">만기 알림 ${rows.length - 3}개 더 보기</span>${ic('chevron-right', 18)}</button>` : '');
 }
 function savCard(s) {
   const dd = s.end ? dDays(s.end) : null, warn = !s.matured && dd != null && dd <= 30;

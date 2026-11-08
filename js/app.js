@@ -529,6 +529,7 @@ $app.addEventListener('input', (e) => {
   if (el.matches && el.matches('[data-recurdate]') && S.recur) { S.recur.date = el.value; render(); }
   if (el.matches && el.matches('[data-q]')) onSearchInput(el);
   if (el.dataset && el.dataset.xlopt && S.xl && S.xl.sheets) onXlOpt(el);
+  if (el.dataset && el.dataset.xlfix && S.xl && S.xl.sheets) onXlFix(el);
   // 카드 추가 칸
   if (el.dataset && el.dataset.ca && S.cardAdd) { S.cardAdd[el.dataset.ca] = el.dataset.ca === 'last4' ? digits(el.value).slice(0, 4) : el.value; if (el.dataset.ca === 'last4') el.value = S.cardAdd.last4; }
   // 파일 미리보기 칸
