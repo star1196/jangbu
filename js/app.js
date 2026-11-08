@@ -245,7 +245,11 @@ function checkAutoLock() {
   if (Date.now() - lastAct > min * 60000) doLock('오래 손대지 않아서 잠갔어요');
 }
 setInterval(checkAutoLock, 10000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkAutoLock(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  checkAutoLock();
+  if (S.mode === 'app') makeDueRepeats().then((n) => { if (n && !S.f && !S.dialog) render(); }).catch(() => {});
+});
 
 function doLock(msg) {
   const cur = Store.current();
@@ -261,7 +265,10 @@ function doLock(msg) {
 function afterOpen() {
   S.mode = 'app'; S.screen = '홈'; S.hist = []; S.fwd = []; S.listF = {}; S.detail = null;
   S.lastPay = null; S.lastBank = null; S.lastTo = null; S.bankId = null; S.sepId = null;
+  S.recur = null; S.planId = null; S.planCmp = null;
   lastAct = Date.now();
+  // 그날이 된 반복 입력을 '확인 대기'로 (다 만들면 다시 그림)
+  setTimeout(() => makeDueRepeats().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}), 0);
 }
 
 async function saveBankDraft() {
@@ -489,6 +496,8 @@ const ACT = {
   ...CARD_ACT,
   ...FILE_ACT,
   ...BACKUP_ACT,
+  ...PLAN_ACT,
+  accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
   swapColors: () => { [view.inC, view.outC] = [view.outC, view.inC]; saveView(); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
   resetColors: () => { view.inC = DATA.DEFAULT_IN; view.outC = DATA.DEFAULT_OUT; saveView(); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
 };
@@ -511,6 +520,7 @@ $app.addEventListener('input', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
   if (el.matches && el.matches('[data-bulkdate]') && S.dialog) { S.dialog.val = el.value || null; render(); }
+  if (el.matches && el.matches('[data-recurdate]') && S.recur) { S.recur.date = el.value; render(); }
   // 카드 추가 칸
   if (el.dataset && el.dataset.ca && S.cardAdd) { S.cardAdd[el.dataset.ca] = el.dataset.ca === 'last4' ? digits(el.value).slice(0, 4) : el.value; if (el.dataset.ca === 'last4') el.value = S.cardAdd.last4; }
   // 파일 미리보기 칸
@@ -519,7 +529,7 @@ $app.addEventListener('input', (e) => {
   if (el.dataset && el.dataset.d && S.dialog && S.dialog.d) {
     const k = el.dataset.d;
     if (el.type === 'checkbox') { S.dialog.d[k] = el.checked; if (k === 'closed') render(); }
-    else if (['openBalance', 'goal', 'real', 'perfGoal'].includes(k)) { const n = toInt(el.value); S.dialog.d[k] = el.value.trim() === '' ? '' : comma(n) || '0'; el.value = S.dialog.d[k]; }
+    else if (['openBalance', 'goal', 'real', 'perfGoal', 'amount', 'monthly', 'deposit', 'paidBefore'].includes(k)) { const n = toInt(el.value); S.dialog.d[k] = el.value.trim() === '' ? '' : comma(n) || '0'; el.value = S.dialog.d[k]; }
     else S.dialog.d[k] = el.value;
     updAdjust();
   }
@@ -531,7 +541,8 @@ $app.addEventListener('change', (e) => {
   else if (el.dataset && el.dataset.file != null && el.files && el.files[0]) { startImport(el.files[0]); el.value = ''; }
   else if (el.dataset && el.dataset.backup != null && el.files && el.files[0]) { const f = el.files[0]; el.value = ''; onBackupFile(f, el.dataset.backup).catch((er) => toast('파일을 읽지 못했어요 (' + er.message + ')')); }
   else if (el.tagName === 'SELECT' && el.dataset && el.dataset.imp && S.imp && S.imp.items) onImpInput(el);
-  else if (el.tagName === 'SELECT' && el.dataset && el.dataset.d && S.dialog && S.dialog.d) S.dialog.d[el.dataset.d] = el.value;
+  else if (el.tagName === 'SELECT' && el.dataset && el.dataset.d && S.dialog && S.dialog.d) { S.dialog.d[el.dataset.d] = el.value; if (el.dataset.d === 'endType') render(); }
+  else if (el.dataset && el.dataset.plan != null) onPlanSelect(el);
 });
 // 파일 끌어다 놓기
 $app.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('[data-drop]')) { e.preventDefault(); e.target.closest('[data-drop]').classList.add('over'); } });
@@ -637,7 +648,8 @@ const FORM = {
     const a = await Store.put('accounts', { name, kind, icon: kind === 'in' ? 'coins' : 'ellipsis', color: n % 7, hidden: false, order: n });
     S.editAccId = a.id; S.dialog = null; render(); toast(`'${name}' 계정을 만들었어요`, { items: [{ col: 'accounts', id: a.id, before: null }] });
   },
-  ...BACKUP_FORM
+  ...BACKUP_FORM,
+  ...PLAN_FORM
 };
 
 $app.addEventListener('submit', (e) => {

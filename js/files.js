@@ -79,10 +79,57 @@ function findHeader(rows) {
 const sigOf = (hdr) => hdr.map((c) => norm(c)).join('|');
 function sigSimilar(a, b) { const A = a.split('|').filter(Boolean), B = new Set(b.split('|').filter(Boolean)); if (!A.length) return 0; return A.filter((x) => B.has(x)).length / Math.max(A.length, B.size); }
 
+/* ── PDF 글자 읽기 (pdf.js, 처음 쓸 때만 불러옴) ──
+   PDF는 표 모양이 제각각이라 "가능한 만큼"만: 줄마다 날짜 · 내용 · 금액을 찾아 미리보기로 보여 주고, 사람이 꼭 확인. */
+let pdfReady = null;
+function loadPDF() {
+  if (window.pdfjsLib) return Promise.resolve();
+  if (!pdfReady) pdfReady = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'vendor/pdf.min.js'; s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js'; res(); }; s.onerror = () => { pdfReady = null; rej(new Error('PDF 도구를 못 불러왔어요')); }; document.head.appendChild(s); });
+  return pdfReady;
+}
+async function readPdf(file) {
+  await loadPDF();
+  let doc;
+  try { doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; }
+  catch (e) { throw new Error(/password/i.test(e && e.name || '') ? '비밀번호가 걸린 PDF는 읽지 못해요. 카드사에서 엑셀로 받아 주세요.' : 'PDF를 열지 못했어요.'); }
+  const lines = [];
+  for (let p = 1; p <= Math.min(doc.numPages, 30); p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    const rows = [];
+    tc.items.filter((it) => it.str && it.str.trim()).forEach((it) => {
+      const y = it.transform[5], x = it.transform[4];
+      let r = rows.find((q) => Math.abs(q.y - y) <= 2.5);
+      if (!r) { r = { y, parts: [] }; rows.push(r); }
+      r.parts.push({ x, s: it.str.trim() });
+    });
+    rows.sort((a, b) => b.y - a.y).forEach((r) => lines.push(r.parts.sort((a, b) => a.x - b.x).map((q) => q.s)));
+  }
+  const all = lines.map((l) => l.join(' ')).join('\n');
+  if (!all.trim()) throw new Error('글자가 없는 PDF예요(사진으로 된 PDF). 엑셀이나 CSV로 받아 주세요.');
+  // 줄마다: 맨 앞 날짜 → 그 뒤 첫 금액(쉼표 있거나 100 이상) → 사이 글자는 내용
+  const out = [['날짜', '내용', '금액']];
+  const isAmt = (s) => /^[-−(]?\d{1,3}(,\d{3})+\)?$|^[-−]?\d{3,}$/.test(s) && !/^\d{8}$/.test(s);
+  lines.forEach((parts) => {
+    const toks = parts.join(' ').split(/\s+/);
+    let di = -1, date = null;
+    for (let i = 0; i < Math.min(3, toks.length); i++) { const d = parseDateCell(toks[i]) || parseDateCell(toks.slice(i, i + 2).join(' ')); if (d && /\d/.test(toks[i])) { di = i; date = d; break; } }
+    if (di < 0) return;
+    let ai = -1;
+    for (let i = di + 1; i < toks.length; i++) if (isAmt(toks[i]) && i > di + 1) { ai = i; break; }
+    if (ai < 0) return;
+    const merchant = toks.slice(di + 1, ai).filter((t) => !/^\d{1,2}:\d{2}(:\d{2})?$/.test(t)).join(' ');
+    if (!merchant) return;
+    out.push([date, merchant, toks[ai].replace(/[()]/g, (m) => (m === '(' ? '-' : ''))]);
+  });
+  if (out.length < 2) throw new Error('PDF에서 날짜·금액이 있는 줄을 찾지 못했어요. 엑셀이나 CSV로 받아 주세요.');
+  const co = companies().find((c) => all.includes(c)) || (all.match(/(\S+은행|\S+카드)/) || [])[1] || '';
+  return { name: file.name, sheets: [{ name: 'PDF', rows: out }], pdf: true, pdfCo: co };
+}
+
 /* ── 파일 → 시트 줄들 ── */
 async function readFile(file) {
   const name = file.name, low = name.toLowerCase();
-  if (low.endsWith('.pdf')) throw new Error('PDF는 아직 읽지 못해요. 카드사·은행 홈페이지에서 엑셀(xlsx·xls)이나 CSV로 받아 올려 주세요.');
+  if (low.endsWith('.pdf')) return readPdf(file);
   await loadXLSX();
   const buf = await file.arrayBuffer();
   let wb;
@@ -101,15 +148,15 @@ async function startImport(file) {
   S.imp = { step: 'loading', name: file.name };
   render();
   try {
-    const { name, sheets } = await readFile(file);
-    const sh = sheets.map((s) => ({ ...s, h: findHeader(s.rows) })).sort((a, b) => (b.h >= 0) - (a.h >= 0) || b.rows.length - a.rows.length)[0];
+    const rf = await readFile(file), { name, sheets } = rf;
+    const sh = rf.pdf ? { ...sheets[0], h: 0 } : sheets.map((s) => ({ ...s, h: findHeader(s.rows) })).sort((a, b) => (b.h >= 0) - (a.h >= 0) || b.rows.length - a.rows.length)[0];
     if (sh.h < 0) throw new Error('날짜가 있는 표를 찾지 못했어요. 카드·통장 거래내역 파일이 맞는지 봐 주세요.');
     const hdr = (sh.rows[sh.h] || []).map((c) => String(c).trim());
-    const sig = sigOf(hdr);
+    const sig = rf.pdf ? `pdf ${norm(rf.pdfCo) || '?'}|` + sigOf(hdr) : sigOf(hdr); // PDF는 카드사·은행 이름으로 구분
     const tpls = Store.all('templates');
     const exact = tpls.find((t) => t.sig === sig);
     const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
-    S.imp = { step: 'map', name, rows: sh.rows, h: sh.h, hdr, sig, sheet: sh.name, sheetsN: sheets.length, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {} };
+    S.imp = { step: 'map', name, rows: sh.rows, h: sh.h, hdr, sig, sheet: sh.name, sheetsN: sheets.length, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {}, pdf: !!rf.pdf };
     hdr.forEach((h, i) => { S.imp.map[i] = guessField(h); });
     if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; }
     else if (near) { S.imp.ask = near[0].id; }
@@ -161,6 +208,14 @@ function buildItems() {
       && ((it.payId && x.payMethodId === it.payId) || (it.approval && x.approval === it.approval) || (it.bankId && x.bankId === it.bankId)));
     if (m) { it.same = { id: m.id, yes: true }; it.use = false; }
   });
+  // 반복 입력 '확인 대기'와 같은 건이면 새로 만들지 않고 그 건을 확인으로 (4-9)
+  const pend = pendingTx();
+  items.filter((it) => !it.dup && !it.same).forEach((it) => {
+    const m = norm(it.merchant);
+    const p = pend.find((x) => x.kind === it.kind && near(x.amount, it.amount, 0.1) && Math.abs(parseYmd(x.date) - parseYmd(it.date)) <= 3 * DAYMS && !items.some((o) => o.pend === x.id)
+      && ((m && (m.includes(norm(x.merchant)) || norm(x.merchant).includes(m))) || (it.payId && x.payMethodId === it.payId && x.amount === it.amount) || (it.bankId && x.bankId === it.bankId && x.amount === it.amount)));
+    if (p) { it.pend = p.id; if (!it.accId) it.accId = p.accountId || null; }
+  });
   // 통장 파일: "○○카드" 출금이 카드 대금 예정액과 같으면 → 결제 완료
   if (T.type === 'bank') {
     items.filter((it) => !it.dup && it.kind === 'out').forEach((it) => {
@@ -175,8 +230,8 @@ function buildItems() {
   }
   // 자동 분류 + 카드 취소 짝짓기
   items.forEach((it) => {
-    if (it.bill) return;
-    const k = it.kind, r = classify(it.merchant, k);
+    if (it.bill) { it.pend = null; return; }
+    const k = it.kind, r = it.accId ? null : classify(it.merchant, k);
     if (r) { it.accId = r.accountId; it.auto = true; }
     if (it.kind === 'out' && it.amount < 0) {
       const orig = items.find((o) => o !== it && o.amount === -it.amount && norm(o.merchant) === norm(it.merchant) && o.payId === it.payId)
@@ -202,7 +257,7 @@ function viewFile(L) {
         <input type="file" accept=".xlsx,.xls,.csv,.pdf" data-file hidden>
         ${ic('upload', 48, 'var(--sub)')}
         <span style="font-size:${px(21)};font-weight:700">여기에 파일을 놓거나 눌러서 선택</span>
-        <span class="sub" style="font-size:${px(15)}">엑셀(xlsx · xls) · CSV · 카드·통장 거래내역</span>
+        <span class="sub" style="font-size:${px(15)}">엑셀(xlsx · xls) · CSV · PDF(읽을 수 있는 만큼) · 카드·통장 거래내역</span>
         <span class="sub small">파일은 이 기기 안에서만 읽고, 어디에도 보내지 않아요.</span>
       </label>
       <section class="card" style="padding:16px 22px 6px"><h2 class="h2" style="font-size:${px(17)};margin-bottom:6px">최근 올린 파일</h2>
@@ -247,7 +302,7 @@ function viewMap(L) {
   return `<div class="stack" style="max-width:860px;gap:14px">
     <section class="card card-pad" style="display:flex;align-items:flex-start;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:${px(16)};font-weight:700">${esc(I.name)}${I.sheetsN > 1 ? ` <span class="sub small">· ${esc(I.sheet)} 시트</span>` : ''}</span>
-      <span style="font-size:${px(14)};line-height:1.55">처음 보는 파일 모양이에요. 어느 칸이 무엇인지 한 번만 알려 주세요. 다음부터는 저절로 읽어요.</span></div></section>
+      <span style="font-size:${px(14)};line-height:1.55">${I.pdf ? 'PDF에서 줄마다 날짜 · 내용 · 금액을 찾아 읽었어요. 어디 내역인지 골라 주세요. PDF는 틀리게 읽을 수 있어서 미리보기에서 꼭 확인해 주세요.' : '처음 보는 파일 모양이에요. 어느 칸이 무엇인지 한 번만 알려 주세요. 다음부터는 저절로 읽어요.'}</span></div></section>
     <section class="card card-pad" style="display:flex;flex-direction:column;gap:10px">
       <span class="label">이 파일은 어디 내역인가요?</span>
       <div class="seg" style="max-width:420px"><button class="${T.type === 'card' ? 'on' : ''}" data-act="impTarget" data-t="card">카드 명세서</button><button class="${T.type === 'bank' ? 'on' : ''}" data-act="impTarget" data-t="bank">통장 거래내역</button></div>
@@ -272,6 +327,7 @@ function viewPreview(L) {
   const note = (it) => it.dup ? '<span class="pnote">중복 · 이미 있어요</span>'
     : it.bill ? `<span class="pnote ok">${ic('check', 12)}${esc((payOf(it.bill.cardId) || {}).name)} 대금 · 결제 완료로 바꿔요</span>`
       : it.same ? `<span class="pnote">직접 입력한 것과 같은 건인가요? <button class="mini ${it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="1">같음</button><button class="mini ${!it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="0">다름</button></span>`
+        : it.pend ? `<span class="pnote ok">${ic('repeat', 12)}반복 입력 확인 대기와 같은 건 · 새로 만들지 않고 확인으로 바꿔요</span>`
         : it.cancelOf ? `<span class="pnote">취소 · ${dateLabel(it.cancelOf.date)} 결제와 짝</span>`
           : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>' : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
@@ -317,6 +373,14 @@ async function saveImport() {
       continue;
     }
     if (!it.use) continue;
+    if (it.pend && Store.get('tx', it.pend)) { // 확인 대기 → 파일 내용으로 확인
+      const x = Store.get('tx', it.pend);
+      undo.push({ col: 'tx', id: x.id, before: { ...x } });
+      const fromFile = T.type === 'card' ? { payMethodId: it.payId || x.payMethodId, bankId: it.bankId || null } : x.bankId ? {} : { payMethodId: it.payId || x.payMethodId, bankId: it.bankId || null };
+      await Store.put('tx', { ...x, ...fromFile, date: it.date, amount: it.amount, merchant: x.merchant || it.merchant, accountId: it.accId || x.accountId || null, pending: false, status: (it.accId || x.accountId) ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, approval: it.approval || '' });
+      if (!(it.accId || x.accountId)) uncN++;
+      savedN++; continue;
+    }
     let o;
     if (it.bill) {
       const c = payOf(it.bill.cardId), b = cardBills(c.id)[it.bill.ym];

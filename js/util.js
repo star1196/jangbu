@@ -82,7 +82,9 @@ function quickDates(raw) {
 const accOf = (id) => Store.get('accounts', id);
 const payOf = (id) => Store.get('payMethods', id);
 const bankOf = (id) => Store.get('banks', id);
-const liveTx = () => Store.all('tx').filter((x) => !x.deleted);
+// 장부에 들어간 내역 (휴지통 · 반복 입력 '확인 대기'는 빼고)
+const liveTx = () => Store.all('tx').filter((x) => !x.deleted && !x.pending);
+const pendingTx = () => Store.all('tx').filter((x) => !x.deleted && x.pending);
 const signed = (x) => (x.kind === 'in' ? x.amount : x.kind === 'out' ? -x.amount : 0);
 const isMoney = (x) => x.kind === 'in' || x.kind === 'out';
 function startDate() {

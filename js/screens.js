@@ -2,7 +2,8 @@
 'use strict';
 
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
-  '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정' };
+  '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
+  '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정' };
 
 function screenBody(L) {
   switch (S.screen) {
@@ -23,6 +24,9 @@ function screenBody(L) {
     case '미확인 정리': return viewUnc(L);
     case '자동 분류 규칙': return viewRules();
     case '파일 서식': return viewTemplates();
+    case '반복 입력': return viewRepeats();
+    case '적금·예금': return viewSavings();
+    case '고정 계획표': return viewPlan(L);
     default: return '';
   }
 }
@@ -78,7 +82,7 @@ function viewHome(L) {
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + cardTodos() + backupTodo();
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + pendingTodos() + cardTodos() + savingTodos() + recurTodo() + backupTodo();
   const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
   return `<div class="stack">
     <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
@@ -126,6 +130,7 @@ function homeBanks() {
       ${hb.length ? rows : `<div class="row" style="cursor:default">${ic('landmark', 20, 'var(--sub)')}<span class="k sub">아직 가계부 통장이 없어요.</span></div>`}
       <button class="row" data-act="addBank" data-type="home" style="min-height:52px;color:var(--sub)">${ic('plus', 18)}<span class="k" style="font-size:${px(14)}">통장 추가</span></button>
       ${feat('sepBanks') ? `<button class="row" data-act="goSep" style="min-height:52px;color:var(--sub)"><span class="k" style="font-size:${px(14)}">별도 통장 ${sepN}개</span><span class="small">금액 숨김</span>${ic('chevron-right', 18)}</button>` : ''}
+      ${feat('savings') ? `<button class="row" data-act="goSavings" style="min-height:52px;color:var(--sub)"><span class="k" style="font-size:${px(14)}">적금 · 예금 ${savingsActive().length}개</span><span class="small">재산 현황</span>${ic('chevron-right', 18)}</button>` : ''}
     </section>`;
 }
 
@@ -430,7 +435,8 @@ function viewSettings() {
   const nTrash = Store.all('tx').filter((x) => x.deleted).length;
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
-      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart'))}
+      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
+      ${feat('repeat') || feat('plan') ? sec('반복 · 계획', (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : '') + (feat('plan') ? rowB('고정 수입·지출 계획표', (curPlan() || {}).name || '아직 없음', 'goPlan') : '')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
       ${sec('통장 · 분류 · 결제', (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('카드 관리', `${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : ''))}
       ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
@@ -462,7 +468,7 @@ function viewSettings() {
 }
 
 /* ───────── 사용할 기능 (4-27) ───────── */
-const BUILT_STEP = 4; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
+const BUILT_STEP = 5; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
 function viewFeatures() {
   const rows = DATA.FEATURES.map((f) => {
     const on = feat(f.key), soonTxt = f.step > BUILT_STEP ? (f.step === 9 ? ' · 2차 기능' : ` · ${f.step}단계에서 만들어요`) : '';
@@ -502,6 +508,7 @@ function viewAcctEdit() {
       <span class="sub" style="font-size:${px(14)}">아이콘 고르기</span>
       <div class="icgrid">${icons}</div>
       <span class="sub small" style="line-height:1.5">선 색은 설정의 수입 색 · 지출 색으로 저절로 정해져요. 목록은 늘 ㄱㄴㄷ 순이에요.</span>
+      ${kind === 'out' && feat('cards') && feat('cardPerf') ? `<button class="autochk" data-act="accPerfEx" role="checkbox" aria-checked="${!!cur.perfEx}"><span class="chk ${cur.perfEx ? 'on' : ''}">${cur.perfEx ? ic('check', 16) : ''}</span><span style="font-size:${px(14)};text-align:left">이 계정은 카드 실적에서 빼기 <span class="sub small">(세금·상품권 등)</span></span></button>` : ''}
       <button class="btn" style="align-self:flex-start;color:var(--out)" data-act="dlgDelAcc">이 계정 지우기</button>
     </section>` : ''}
   </div>`;
@@ -597,6 +604,8 @@ function viewDialog() {
     const a = accOf(S.editAccId);
     body = `<div class="dlg"><h2 class="dlg-title">'${esc(a.name)}' 계정을 지울까요?</h2><span class="sub small">이 계정을 쓴 내역이 없어서 지울 수 있어요. 지우면 되살릴 수 없어요.</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="delAccYes">지우기</button></div></div>`;
+  } else if (PLAN_DLG.includes(D.type)) {
+    body = viewPlansDlg(D);
   } else if (['backup', 'restore', 'device', 'newFromBackup'].includes(D.type)) {
     body = viewBackupDlg(D);
   } else if (D.type === 'emptyTrash') {

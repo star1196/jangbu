@@ -20,7 +20,7 @@ function newForm(keep) {
     mode: 'new', id: null, kind: 'out',
     y: String(t.getFullYear()), mo: pad2(t.getMonth() + 1), d: pad2(t.getDate()),
     amount: 0, merchant: '', accId: null, accTouched: false, payId: lastPayId(), bankId: lastBankId(), memo: '',
-    fromId: null, toId: null, inst: 1, perfEx: false,
+    fromId: null, toId: null, inst: 1, perfEx: false, savingId: null,
     more: false, orig: 0, disc: 0, point: 0, catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
   };
   if (keep) Object.assign(f, { kind: keep.kind, y: keep.y, mo: keep.mo, d: keep.d, payId: keep.payId, bankId: keep.bankId || f.bankId, fromId: keep.fromId || null, toId: keep.toId || null });
@@ -35,7 +35,7 @@ function editForm(x) {
     mode: 'edit', id: x.id, kind: x.kind, y, mo, d,
     amount: x.amount, merchant: x.merchant || '', accId: x.accountId || null, accTouched: true,
     payId: x.payMethodId || lastPayId(), bankId: x.bankId || (x.kind === 'tr' ? null : lastBankId()), memo: x.memo || '',
-    fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx,
+    fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx, savingId: x.savingId || null,
     more: !!(x.originalPrice || x.discount || x.pointUsed), orig: x.originalPrice || 0, disc: x.discount || 0, point: x.pointUsed || 0,
     catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
   };
@@ -54,6 +54,7 @@ function openNew() { openForm(newForm()); }
 function openEdit(id) {
   const x = Store.get('tx', id); if (!x) return;
   if (x.kind === 'adj' || x.kind === 'bill') { S.dialog = { type: 'adjView', id }; render(); return; }
+  if (x.pending) { PLAN_ACT.pendOpen({ dataset: { id } }); return; }
   openForm(editForm(x));
 }
 
@@ -120,6 +121,7 @@ function viewSheet() {
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),
       ...(f.perfEx ? [['실적', '카드 실적에서 빼요']] : []),
+      ...(f.savingId && Store.get('savings', f.savingId) ? [['적금', `${Store.get('savings', f.savingId).name}에 넣은 돈으로 더해요`]] : []),
       ...(needsBank(f) ? [['통장', f.bankId ? bankName(f.bankId) + (isSep(f.bankId) ? ' (별도 통장 · 가계부 합계에서 빠져요)' : '') : '정하지 않음']] : []),
       ['메모', f.memo || '—'],
       ...(f.orig || f.disc || f.point ? [['할인', `원래 ${won(f.orig || f.amount + f.disc + f.point)}원 · 할인 ${won(f.disc)}원 · 포인트 ${won(f.point)}원`]] : [])
@@ -177,6 +179,7 @@ function viewSheet() {
             <label class="catsearch">${ic('search', 18)}<input data-f="catQ" value="${esc(f.catQ)}" placeholder="분류 찾기 (초성도 돼요)" autocomplete="off"></label>
           </div>
           <div class="chips" data-part="cats"></div>
+          <div data-part="sav"></div>
         </div>
         <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}</div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
@@ -190,7 +193,7 @@ function viewSheet() {
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:${px(14)}">실제 낸 돈 <span class="sub">(금액 칸에 자동으로 들어가요)</span></span><span data-part="eff" style="font-size:${px(20)};font-weight:700"></span></div>
         </div>` : ''}
-        ${f.mode === 'edit' ? `<button class="btn" style="align-self:flex-start;color:var(--out)" data-act="fDelete">휴지통으로 옮기기</button>` : ''}
+        ${f.mode === 'edit' ? `<div class="chips">${feat('repeat') && f.kind !== 'tr' ? `<button class="btn" data-act="repFromTx">${ic('repeat', 18)}반복으로 만들기</button>` : ''}<button class="btn" style="color:var(--out)" data-act="fDelete">휴지통으로 옮기기</button></div>` : ''}
         <div class="err" data-part="ferr"></div>
       </div>
       <div class="sheet-foot">
@@ -254,6 +257,13 @@ function updCats() {
     const rest = accs.filter((a) => !rec.some((r) => r.id === a.id));
     const cur = f.accId && !rec.some((r) => r.id === f.accId) && !accs.some((a) => a.id === f.accId) ? accOf(f.accId) : null;
     box.innerHTML = `<span class="sub small">추천</span>${rec.map(chip).join('')}<span class="vbar"></span>${cur ? chip(cur) : ''}${rest.map(chip).join('')}`;
+  }
+  // '저축·적금' 지출이면 어느 적금에 넣었는지 (5-1)
+  const sv = part('sav');
+  if (sv) {
+    if (!isSavAcc(f.accId)) f.savingId = null;
+    else if (!f.savingId && !f.savPicked) { const act = savingsActive().filter((s) => s.stype !== '예금'); if (act.length === 1) f.savingId = act[0].id; }
+    sv.innerHTML = formSavPart(f);
   }
 }
 function updMer() {
@@ -407,6 +417,7 @@ async function formFinal() {
       bankId: needsBank(f) ? f.bankId || null : (formCard(f) && formCard(f).cardType === 'check' ? formCard(f).bankId || null : null),
       installment: formCard(f) && formCard(f).cardType !== 'check' && f.kind === 'out' && f.inst > 1 ? { months: f.inst } : null,
       perfEx: !!(formCard(f) && f.perfEx),
+      savingId: f.kind === 'out' && isSavAcc(f.accId) ? f.savingId || null : null,
       status: f.accId ? '확인' : '미확인',
       originalPrice: f.orig || 0, discount: f.disc || 0, pointUsed: f.point || 0
     };
