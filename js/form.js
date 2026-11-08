@@ -20,7 +20,7 @@ function newForm(keep) {
     mode: 'new', id: null, kind: 'out',
     y: String(t.getFullYear()), mo: pad2(t.getMonth() + 1), d: pad2(t.getDate()),
     amount: 0, merchant: '', accId: null, accTouched: false, payId: lastPayId(), bankId: lastBankId(), memo: '',
-    fromId: null, toId: null, inst: 1, perfEx: false, savingId: null,
+    fromId: null, toId: null, inst: 1, perfEx: false, savingId: null, tripId: null, tripTouched: false,
     more: false, orig: 0, disc: 0, point: 0, catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
   };
   if (keep) Object.assign(f, { kind: keep.kind, y: keep.y, mo: keep.mo, d: keep.d, payId: keep.payId, bankId: keep.bankId || f.bankId, fromId: keep.fromId || null, toId: keep.toId || null });
@@ -35,7 +35,7 @@ function editForm(x) {
     mode: 'edit', id: x.id, kind: x.kind, y, mo, d,
     amount: x.amount, merchant: x.merchant || '', accId: x.accountId || null, accTouched: true,
     payId: x.payMethodId || lastPayId(), bankId: x.bankId || (x.kind === 'tr' ? null : lastBankId()), memo: x.memo || '',
-    fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx, savingId: x.savingId || null,
+    fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx, savingId: x.savingId || null, tripId: x.tripId || null, tripTouched: true,
     more: !!(x.originalPrice || x.discount || x.pointUsed), orig: x.originalPrice || 0, disc: x.discount || 0, point: x.pointUsed || 0,
     catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
   };
@@ -121,7 +121,8 @@ function viewSheet() {
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),
       ...(f.perfEx ? [['실적', '카드 실적에서 빼요']] : []),
-      ...(f.savingId && Store.get('savings', f.savingId) ? [['적금', `${Store.get('savings', f.savingId).name}에 넣은 돈으로 더해요`]] : []),
+      ...(f.tripId && Store.get('trips', f.tripId) ? [['여행', Store.get('trips', f.tripId).name]] : []),
+      ...(f.savingId && Store.get('savings', f.savingId) ?[['적금', `${Store.get('savings', f.savingId).name}에 넣은 돈으로 더해요`]] : []),
       ...(needsBank(f) ? [['통장', f.bankId ? bankName(f.bankId) + (isSep(f.bankId) ? ' (별도 통장 · 가계부 합계에서 빠져요)' : '') : '정하지 않음']] : []),
       ['메모', f.memo || '—'],
       ...(f.orig || f.disc || f.point ? [['할인', `원래 ${won(f.orig || f.amount + f.disc + f.point)}원 · 할인 ${won(f.disc)}원 · 포인트 ${won(f.point)}원`]] : [])
@@ -182,6 +183,7 @@ function viewSheet() {
           <div data-part="sav"></div>
         </div>
         <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}</div>
+        <div data-part="trip"></div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
         <label class="field"><span class="label">메모</span><input class="input" data-f="memo" value="${esc(f.memo)}" placeholder="필요할 때만 적어요" autocomplete="off"></label>
         ${f.kind === 'tr' || !showMore ? '' : `<button class="morebtn" data-act="fMore">${ic(f.more ? 'chevron-down' : 'chevron-right', 18)}더보기 <span class="sub" style="font-weight:400">(원래 가격 · 할인 · 포인트)</span></button>`}
@@ -222,6 +224,12 @@ function fillSheet() {
   if (!S.f || S.f.step !== 'form') return;
   updDate(); updAmt(); updCats(); updMer();
 }
+// 여행 묶음 칩: 사람이 고르기 전에는 날짜가 여행 기간이면 그 여행을 미리 골라 둠 (4-17)
+function updTrip() {
+  const f = S.f, box = part('trip'); if (!box || !f) return;
+  if (!f.tripTouched && feat('trips') && validDate(f.y, f.mo, f.d)) { const t = tripForDate(`${f.y}-${pad2(+f.mo)}-${pad2(+f.d)}`); f.tripId = t ? t.id : null; }
+  box.innerHTML = formTripPart(f);
+}
 const part = (n) => $app.querySelector(`.sheet [data-part="${n}"]`);
 const fld = (n) => $app.querySelector(`.sheet [data-f="${n}"]`);
 
@@ -230,6 +238,7 @@ function updDate() {
   ['y', 'mo', 'd'].forEach((n) => { const el = fld(n); if (el) el.classList.toggle('bad', !ok && !!(f.y && f.mo && f.d)); });
   const dw = part('dow');
   if (dw) dw.textContent = ok ? `(${DOW[new Date(+f.y, +f.mo - 1, +f.d).getDay()]})` : '';
+  updTrip();
   const dc = part('dateChoices');
   if (dc) dc.innerHTML = f.dateChoices ? `<div class="chips" style="margin-top:4px"><span class="sub small">어느 날인가요?</span>${f.dateChoices.map((c, i) => `<button class="chip" data-act="fDateChoice" data-i="${i}">${c.m}월 ${c.d}일</button>`).join('')}</div>` : '';
 }
@@ -418,6 +427,7 @@ async function formFinal() {
       installment: formCard(f) && formCard(f).cardType !== 'check' && f.kind === 'out' && f.inst > 1 ? { months: f.inst } : null,
       perfEx: !!(formCard(f) && f.perfEx),
       savingId: f.kind === 'out' && isSavAcc(f.accId) ? f.savingId || null : null,
+      tripId: feat('trips') ? f.tripId || null : (before && before.tripId) || null,
       status: f.accId ? '확인' : '미확인',
       originalPrice: f.orig || 0, discount: f.disc || 0, pointUsed: f.point || 0
     };
@@ -428,6 +438,7 @@ async function formFinal() {
   const undo = { items: [{ col: 'tx', id: saved.id, before }] };
   if (f.again) {
     S.f = newForm({ kind: f.kind, y: f.y, mo: f.mo, d: f.d, payId: f.payId, bankId: f.bankId, fromId: f.fromId, toId: f.toId });
+    if (f.tripTouched) { S.f.tripId = f.tripId; S.f.tripTouched = true; }
     render(); focusField('amount');
     toast('저장했어요. 하나 더 입력하세요', undo);
   } else {

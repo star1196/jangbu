@@ -69,18 +69,30 @@ function remainingOf(cardId) {
   return Object.values(cardBills(cardId)).filter((b) => !b.paid && b.amount > 0 && b.date >= t.slice(0, 8) + '01').reduce((s, b) => s + b.amount, 0);
 }
 
-/* ── 실적 (4-14) ── 이번 달(1일~말일) 사용액, [실적 제외] 내역·계정은 뺌 */
-function perfOf(card, ym) {
-  ym = ym || todayStr().slice(0, 7);
-  return liveTx().filter((x) => x.kind === 'out' && x.payMethodId === card.id && ymOf(x.date) === ym && !x.perfEx && !((accOf(x.accountId) || {}).perfEx))
+/* ── 실적 (4-14) ── 카드마다 실적 기간: 이번 달 1일~말일(기본) / 전월 1일~말일(지난달 쓴 돈으로 이번 달 혜택) / 직접(○일부터 한 달)
+   [실적 제외] 내역·계정은 뺌 */
+const PERF_CYCLES = [['month', '이번 달 1일~말일'], ['prev', '전월 1일~말일 (지난달 실적으로 이번 달 혜택)'], ['custom', '직접 (○일부터 한 달)']];
+function perfRange(card, offset) {
+  const t = todayStr(), ym = t.slice(0, 7), endOf = (m) => { const [y, mm] = m.split('-').map(Number); return `${m}-${pad2(new Date(y, mm, 0).getDate())}`; };
+  const clampD = (m, d) => { const [y, mm] = m.split('-').map(Number); return `${m}-${pad2(Math.min(d, new Date(y, mm, 0).getDate()))}`; };
+  const off = offset || 0;
+  if (card.perfCycle === 'custom' && card.perfStart > 1) {
+    const S0 = +card.perfStart, startYM = ymAdd(+t.slice(8) >= S0 ? ym : ymAdd(ym, -1), off);
+    return [clampD(startYM, S0), addDays(clampD(ymAdd(startYM, 1), S0), -1)];
+  }
+  const m = ymAdd(ym, off);
+  return [`${m}-01`, endOf(m)];
+}
+function perfOf(card, range) {
+  const [from, to] = range || perfRange(card);
+  return liveTx().filter((x) => x.kind === 'out' && x.payMethodId === card.id && x.date >= from && x.date <= to && !x.perfEx && !((accOf(x.accountId) || {}).perfEx))
     .reduce((s, x) => s + x.amount, 0);
 }
-// 홈 할 일: 이번 달 끝나기 7일 전부터 목표 미달
+const perfCycleTxt = (c) => (c.perfCycle === 'prev' ? '전월 1일~말일' : c.perfCycle === 'custom' && c.perfStart > 1 ? `매달 ${c.perfStart}일부터 한 달` : '이번 달 1일~말일');
+// 홈 할 일: 실적 기간 끝나기 7일 전부터 목표 미달
 function perfAlerts() {
   if (!feat('cardPerf')) return [];
-  const t = new Date(), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
-  if (last - t.getDate() > 7) return [];
-  return cardsOpen().filter((c) => c.perfGoal > 0).map((c) => ({ card: c, left: c.perfGoal - perfOf(c) })).filter((a) => a.left > 0);
+  return cardsOpen().filter((c) => c.perfGoal > 0).map((c) => { const r = perfRange(c); return { card: c, left: c.perfGoal - perfOf(c, r), dd: dDays(r[1]) }; }).filter((a) => a.left > 0 && a.dd <= 7);
 }
 
 /* ── 홈: 다가오는 카드 대금 ── */
@@ -114,7 +126,7 @@ function cardTodos() {
   }
   perfAlerts().forEach(({ card, left }) => {
     out.push(`<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('credit-card', 20, 'var(--warn)')}</span>
-      <div class="tm"><span class="tt">${esc(cardLabel(card))} 실적 <span style="color:var(--warn)">${won(left)}원 부족</span></span><span class="sub small">이번 달 목표 ${won(card.perfGoal)}원</span></div>
+      <div class="tm"><span class="tt">${esc(cardLabel(card))} 실적 <span style="color:var(--warn)">${won(left)}원 부족</span></span><span class="sub small">${card.perfCycle === 'prev' ? '이번 달 사용분(다음 달 혜택)' : '이번 실적 기간'} 목표 ${won(card.perfGoal)}원 · ${shortDate(perfRange(card)[1])}까지</span></div>
       <button class="btn" data-act="openCard" data-id="${card.id}">보기</button></div>`);
   });
   return out.join('');
@@ -128,13 +140,15 @@ function viewCards(L) {
   const nextTotal = next ? up.filter((u) => u.bill.date === next.bill.date).reduce((s, u) => s + u.bill.amount, 0) : 0;
   const cardsHtml = list.map((c) => {
     const bills = feat('cardBill') ? upcomingBills().find((u) => u.card.id === c.id) : null;
-    const perf = perfOf(c), goal = c.perfGoal || 0, pct = goal ? Math.min(100, Math.round(perf / goal * 100)) : 0;
+    const pr = perfRange(c), perf = perfOf(c, pr), goal = c.perfGoal || 0, pct = goal ? Math.min(100, Math.round(perf / goal * 100)) : 0;
+    const prevPerf = c.perfCycle === 'prev' && goal ? perfOf(c, perfRange(c, -1)) : null;
     const info = c.cardType === 'check' ? `통장에서 바로 출금${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : c.billingDay ? `결제일 매달 ${c.billingDay}일 · 이용기간 ${cycleText(c)}${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : '<span style="color:var(--warn)">결제일을 정해 주세요</span>';
     return `<button class="cardbox ${c.id === S.cardSel ? 'on' : ''}" data-act="openCard" data-id="${c.id}">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%">${ic('credit-card', 20)}<span style="font-size:${px(17)};font-weight:700">${esc(c.name)}</span><span class="badge" style="border-radius:6px">${cardTypeTxt(c)}</span>${c.last4 ? `<span class="sub" style="font-size:${px(14)}">··· ${esc(c.last4)}</span>` : ''}<span style="flex:1"></span>${bills ? `<span class="amt neg" style="font-size:${px(18)}">−${won(bills.bill.amount)}원</span>` : ''}</div>
       <span class="sub small">${info}</span>
       ${feat('cardPerf') && goal ? `<span class="gbar"><i style="width:${pct}%;background:${perf >= goal ? 'var(--ink)' : 'var(--warn)'}"></i></span>
-        <span style="display:flex;justify-content:space-between;gap:8px;width:100%;font-size:${px(13)}"><span class="sub">이번 달 실적 ${won(perf)} / ${won(goal)}원</span>${perf >= goal ? `<b style="display:flex;align-items:center;gap:4px">${ic('check', 14)}달성</b>` : `<b style="color:var(--warn)">목표까지 ${won(goal - perf)}원 남음</b>`}</span>` : ''}
+        <span style="display:flex;justify-content:space-between;gap:8px;width:100%;font-size:${px(13)};flex-wrap:wrap"><span class="sub">${c.perfCycle === 'prev' ? '이번 달 사용(다음 달 혜택)' : c.perfCycle === 'custom' && c.perfStart > 1 ? `${shortDate(pr[0])}~${shortDate(pr[1])}` : '이번 달 실적'} ${won(perf)} / ${won(goal)}원</span>${perf >= goal ? `<b style="display:flex;align-items:center;gap:4px">${ic('check', 14)}달성</b>` : `<b style="color:var(--warn)">목표까지 ${won(goal - perf)}원 남음</b>`}</span>
+        ${prevPerf != null ? `<span class="sub small">지난달 실적 ${won(prevPerf)}원 → 이번 달 혜택 ${prevPerf >= goal ? '받아요' : '<b style="color:var(--warn)">못 받아요</b>'}${c.perfMemo ? ' · ' + esc(c.perfMemo) : ''}</span>` : ''}` : ''}
     </button>`;
   }).join('');
   const sel = payOf(S.cardSel);
@@ -227,7 +241,7 @@ function viewCardAdd() {
 
 /* ── 카드 고치기 (대화 상자: 양식 → 확인) ── */
 function cardDraftFrom(c) {
-  return { name: c.name, company: c.company || '', cardType: c.cardType || 'credit', last4: c.last4 || '', billingDay: c.billingDay || '', cycleStart: c.cycleStart || 1, cycleOffset: c.cycleOffset == null ? 1 : c.cycleOffset, bankId: c.bankId || '', issueDate: c.issueDate || '', perfGoal: comma(c.perfGoal || 0), perfMemo: c.perfMemo || '', closed: !!c.closed, closedDate: c.closedDate || '' };
+  return { name: c.name, company: c.company || '', cardType: c.cardType || 'credit', last4: c.last4 || '', billingDay: c.billingDay || '', cycleStart: c.cycleStart || 1, cycleOffset: c.cycleOffset == null ? 1 : c.cycleOffset, bankId: c.bankId || '', issueDate: c.issueDate || '', perfGoal: comma(c.perfGoal || 0), perfMemo: c.perfMemo || '', perfCycle: c.perfCycle || 'month', perfStart: c.perfStart || 1, closed: !!c.closed, closedDate: c.closedDate || '' };
 }
 function viewCardDlg(D) {
   const d = D.d, c = payOf(D.id);
@@ -235,7 +249,7 @@ function viewCardDlg(D) {
     const rows = [['이름', d.name], ['카드사', d.company || '—'], ['종류', d.cardType === 'check' ? '체크카드' : '신용카드'], ['뒤 4자리', d.last4 || '—'],
       ...(d.cardType === 'credit' ? [['결제일', d.billingDay ? `매달 ${d.billingDay}일` : '정하지 않음'], ['이용기간', cycleText({ cycleStart: +d.cycleStart, cycleOffset: +d.cycleOffset })]] : []),
       ['통장', d.bankId ? bankName(d.bankId) : '—'], ['발급일', d.issueDate || '—'],
-      ...(feat('cardPerf') ? [['실적 목표', toInt(d.perfGoal) ? `매달 ${won(toInt(d.perfGoal))}원 · ${d.perfMemo || ''}` : '없음']] : []),
+      ...(feat('cardPerf') ? [['실적 목표', toInt(d.perfGoal) ? `매달 ${won(toInt(d.perfGoal))}원${d.perfMemo ? ' · ' + d.perfMemo : ''}` : '없음'], ['실적 기간', perfCycleTxt({ perfCycle: d.perfCycle, perfStart: +d.perfStart })]] : []),
       ...(d.closed ? [['상태', `해지 · ${d.closedDate || todayStr()}`]] : [])];
     const warn = d.closed && !c.closed && remainingOf(c.id) > 0 ? `<div class="warnbox">${ic('circle-alert', 22)}<div>아직 남은 카드 대금·할부가 <b>${won(remainingOf(c.id))}원</b> 있어요. 해지해도 남은 대금은 계속 계산돼요.</div></div>` : '';
     return `<div class="dlg"><h2 class="dlg-title">이대로 저장할까요?</h2>${warn}
@@ -261,6 +275,10 @@ function viewCardDlg(D) {
     ${feat('cardPerf') ? `<div class="cols" style="gap:10px">
       <label class="field" style="flex:1 1 160px"><span class="label">실적 목표 (매달)</span><input class="input r" data-d="perfGoal" value="${esc(d.perfGoal)}" inputmode="numeric" placeholder="예: 300,000" autocomplete="off"></label>
       <label class="field" style="flex:2 1 200px"><span class="label">혜택 메모</span><input class="input" data-d="perfMemo" value="${esc(d.perfMemo)}" placeholder="예: 통신비 1만 원 할인" autocomplete="off"></label>
+    </div>
+    <div class="cols" style="gap:10px">
+      <label class="field" style="flex:2 1 220px"><span class="label">실적 기간</span><select class="input" data-d="perfCycle">${PERF_CYCLES.map(([k, l]) => opt(k, d.perfCycle, l)).join('')}</select></label>
+      ${d.perfCycle === 'custom' ? `<label class="field" style="flex:1 1 140px"><span class="label">시작일</span><select class="input" data-d="perfStart">${Array.from({ length: 27 }, (_, i) => opt(i + 2, d.perfStart, `매달 ${i + 2}일부터`)).join('')}</select></label>` : ''}
     </div>` : ''}
     <label class="check"><input type="checkbox" data-d="closed" ${d.closed ? 'checked' : ''}>해지한 카드예요 (입력 목록에서 숨기고, 지난 내역은 그대로)</label>
     ${d.closed ? `<label class="field"><span class="label">해지일</span><input class="input" type="date" data-d="closedDate" value="${esc(d.closedDate)}"></label>` : ''}
@@ -316,7 +334,7 @@ const CARD_ACT = {
   cardBack: () => { S.dialog.step = 'form'; render(); },
   cardSave: async () => {
     const D = S.dialog, d = D.d, c = payOf(D.id), before = { ...c };
-    const obj = { ...c, name: d.name.trim(), company: d.company.trim(), cardType: d.cardType, last4: digits(d.last4).slice(0, 4), billingDay: d.cardType === 'credit' && d.billingDay ? +d.billingDay : null, cycleStart: +d.cycleStart || 1, cycleOffset: +d.cycleOffset, bankId: d.bankId || null, issueDate: d.issueDate, perfGoal: toInt(d.perfGoal), perfMemo: d.perfMemo.trim(), closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '' };
+    const obj = { ...c, name: d.name.trim(), company: d.company.trim(), cardType: d.cardType, last4: digits(d.last4).slice(0, 4), billingDay: d.cardType === 'credit' && d.billingDay ? +d.billingDay : null, cycleStart: +d.cycleStart || 1, cycleOffset: +d.cycleOffset, bankId: d.bankId || null, issueDate: d.issueDate, perfGoal: toInt(d.perfGoal), perfMemo: d.perfMemo.trim(), perfCycle: d.perfCycle || 'month', perfStart: d.perfCycle === 'custom' ? +d.perfStart || 2 : 1, closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '' };
     await Store.put('payMethods', obj);
     S.dialog = null; render(); toast(obj.closed && !before.closed ? '해지했어요. 지난 내역은 그대로예요' : '카드를 고쳤어요', { items: [{ col: 'payMethods', id: c.id, before }] });
   },

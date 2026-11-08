@@ -3,7 +3,8 @@
 
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
-  '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정' };
+  '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
+  '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정' };
 
 function screenBody(L) {
   switch (S.screen) {
@@ -27,6 +28,13 @@ function screenBody(L) {
     case '반복 입력': return viewRepeats();
     case '적금·예금': return viewSavings();
     case '고정 계획표': return viewPlan(L);
+    case '검색': return viewSearch(L);
+    case '여행': return viewTrips(L);
+    case '여행 상세': return viewTripDetail(L);
+    case '연도별 모아보기': return viewYearly(L);
+    case '기억할 것': return viewReminders();
+    case '금고': return viewVault();
+    case '엑셀 옮기기': return viewXl(L);
     default: return '';
   }
 }
@@ -82,10 +90,11 @@ function viewHome(L) {
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + pendingTodos() + cardTodos() + savingTodos() + recurTodo() + backupTodo();
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + pendingTodos() + cardTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
   const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
   return `<div class="stack">
-    <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
+    <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·여행·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
+    ${homeSavedSearch()}
     <div class="chips"><span class="sub" style="font-size:${px(14)};margin-right:4px">기간</span>${periods}</div>
     <div class="cols">
       <section class="card card-pad" style="flex:3 1 420px;min-width:0">
@@ -402,6 +411,7 @@ function viewAcct(L) {
     <div style="display:flex;flex-wrap:wrap;gap:12px">
       ${feat('cardBill') ? `<div class="seg" style="flex:1 1 300px;max-width:420px">${[['use', '쓴 날 기준'], ['bank', '통장 나간 날 기준']].map(([k, l]) => `<button class="${(S.acctBasis || 'use') === k ? 'on' : ''}" data-act="acctBasis" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
       <div class="seg" style="flex:0 1 220px">${[['out', '지출'], ['in', '수입']].map(([k, l]) => `<button class="${k === kind ? 'on' : ''}" data-act="acctKind" data-k="${k}">${l}</button>`).join('')}</div>
+      <button class="btn" data-act="goYearly">${ic('chart-pie', 18)}연도별 모아보기</button>
     </div>
     <div class="calmonth"><button class="iconbtn" data-act="acctMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="acctMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>
     <section class="card" style="padding:22px;display:flex;flex-wrap:wrap;align-items:center;gap:24px 36px">
@@ -433,18 +443,22 @@ function viewSettings() {
   const sec = (title, body) => `<section class="card" style="padding:16px 22px 4px"><h2 class="h2" style="font-size:${px(17)};margin-bottom:4px">${title}</h2>${body}</section>`;
   const nAcc = Store.all('accounts').filter((a) => !a.hidden).length;
   const nTrash = Store.all('tx').filter((x) => x.deleted).length;
+  // 디자인 확정본 순서: 왼쪽 [장부] [분류 · 결제] (+ 기능 · 화면), 오른쪽 [기억할 것] [자료] [계획 · 보안] [잠금]
+  const rems = remindersAll(), nearRem = rems.map((r) => (r.end ? dDays(r.end) : null)).filter((d) => d != null && d >= 0).sort((a, b) => a - b)[0];
+  const plansRows = (feat('plan') ? rowB('고정 수입·지출 계획표', (curPlan() || {}).name || '아직 없음', 'goPlan') : '') + (feat('vault') ? rowB('금고', vaultRec() ? (vaultIsOpen() ? '열려 있음' : '비밀번호 따로') : '아직 없음', 'goVault') : '') + (feat('excel') ? rowB('엑셀 시트 옮기기', '예전 가계부 엑셀', 'goXl') : '');
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
-      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
-      ${feat('repeat') || feat('plan') ? sec('반복 · 계획', (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : '') + (feat('plan') ? rowB('고정 수입·지출 계획표', (curPlan() || {}).name || '아직 없음', 'goPlan') : '')) : ''}
+      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
+      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
-      ${sec('통장 · 분류 · 결제', (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('카드 관리', `${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : ''))}
-      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
-      <input type="file" data-backup="merge" hidden>
-      ${sec('잠금', rowB('비밀번호 변경', '', 'dlgPw') + rowB('자동 잠금 시간', (st.autoLockMin || 5) + '분', 'dlgAutoLock') + rowB('지금 잠그기', '', 'lock'))}
-      ${sec('앱 정보', rowB('저장 위치', '이 기기 안 · 암호화') + rowB('앱 버전', S.version || '확인 중'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
+      ${feat('reminders') ? sec('기억할 것', rowB('기억할 것 (끝나는 날 알림)', `${rems.length}개${nearRem != null ? ' · 가까운 것 D-' + nearRem : ''}`, 'goRem')) : ''}
+      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
+      <input type="file" data-backup="merge" hidden>
+      ${plansRows ? sec('계획 · 보안', plansRows) : ''}
+      ${sec('잠금', rowB('비밀번호 변경', '', 'dlgPw') + rowB('자동 잠금 시간', (st.autoLockMin || 5) + '분', 'dlgAutoLock') + rowB('지금 잠그기', '', 'lock'))}
+      ${sec('앱 정보', rowB('저장 위치', '이 기기 안 · 암호화') + rowB('앱 버전', S.version || '확인 중'))}
       <section class="card" style="padding:16px 22px 20px;display:flex;flex-direction:column;gap:12px">
         <h2 class="h2" style="font-size:${px(17)}">화면</h2>
         <span class="sub" style="font-size:${px(14)}">글자 크기 <span class="small">(이 기기에만 적용)</span></span>
@@ -468,7 +482,7 @@ function viewSettings() {
 }
 
 /* ───────── 사용할 기능 (4-27) ───────── */
-const BUILT_STEP = 5; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
+const BUILT_STEP = 8; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
 function viewFeatures() {
   const rows = DATA.FEATURES.map((f) => {
     const on = feat(f.key), soonTxt = f.step > BUILT_STEP ? (f.step === 9 ? ' · 2차 기능' : ` · ${f.step}단계에서 만들어요`) : '';
@@ -604,6 +618,8 @@ function viewDialog() {
     const a = accOf(S.editAccId);
     body = `<div class="dlg"><h2 class="dlg-title">'${esc(a.name)}' 계정을 지울까요?</h2><span class="sub small">이 계정을 쓴 내역이 없어서 지울 수 있어요. 지우면 되살릴 수 없어요.</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="delAccYes">지우기</button></div></div>`;
+  } else if (MORE_DLG.includes(D.type)) {
+    body = viewMoreDlg(D);
   } else if (PLAN_DLG.includes(D.type)) {
     body = viewPlansDlg(D);
   } else if (['backup', 'restore', 'device', 'newFromBackup'].includes(D.type)) {
@@ -621,7 +637,7 @@ function newBankDraft(type) {
   return { name: '', type: type || 'home', bank: '', owner: '', memo: '', openDate: todayStr(), openBalance: '', neg: false, goal: '', accountNo: '', closed: false, closedDate: '' };
 }
 function bankDraftFrom(b) {
-  return { name: b.name, type: b.type, bank: b.bank || '', owner: b.owner || '', memo: b.memo || '', openDate: b.openDate || '', openBalance: comma(Math.abs(b.openBalance || 0)), neg: (b.openBalance || 0) < 0, goal: comma(b.goal || 0), accountNo: b.accountNo || '', closed: !!b.closed, closedDate: b.closedDate || '' };
+  return { name: b.name, type: b.type, bank: b.bank || '', owner: b.owner || '', memo: b.memo || '', openDate: b.openDate || '', openBalance: comma(Math.abs(b.openBalance || 0)), neg: (b.openBalance || 0) < 0, goal: comma(b.goal || 0), accountNo: b.accountNo || '', closed: !!b.closed, closedDate: b.closedDate || '', hidden: !!b.hidden };
 }
 function viewBankDlg(D) {
   const d = D.d, isNew = !D.id;
@@ -657,6 +673,7 @@ function viewBankDlg(D) {
     <label class="check"><input type="checkbox" data-d="neg" ${d.neg ? 'checked' : ''}>시작 잔액이 마이너스예요 (마이너스 통장)</label>
     ${d.type === 'sep' ? `<label class="field"><span class="label">목표 금액 <span style="font-weight:400">(선택)</span></span><input class="input r" data-d="goal" value="${esc(d.goal)}" inputmode="numeric" pattern="[0-9]*" placeholder="예: 4,000,000" autocomplete="off"></label>` : ''}
     <label class="field"><span class="label">계좌번호 <span style="font-weight:400">(선택 · 암호화 저장, 화면엔 뒤 4자리만)</span></span><input class="input" data-d="accountNo" value="${esc(d.accountNo)}" inputmode="numeric" autocomplete="off"></label>
+    ${feat('vault') && vaultRec() ? `<label class="check"><input type="checkbox" data-d="hidden" ${d.hidden ? 'checked' : ''}>숨김 통장 (금고를 열었을 때만 목록에 보여요)</label>` : ''}
     ${isNew ? '' : `<label class="check"><input type="checkbox" data-d="closed" ${d.closed ? 'checked' : ''}>해지한 통장이에요 (입력 목록에서 숨기고, 지난 내역은 그대로 둬요)</label>
       ${d.closed ? `<label class="field"><span class="label">해지일</span><input class="input" type="date" data-d="closedDate" value="${esc(d.closedDate)}"></label>` : ''}`}
     <div class="err" data-err></div>
@@ -693,8 +710,11 @@ function viewBulk(D) {
     if (D.val) { summary = `${n}건의 날짜를 ${dateLabel(D.val, true)}로 바꿔요.`; ok = true; }
   } else if (D.what === 'del') {
     summary = `${n}건을 휴지통으로 옮겨요. 30일 안에는 되살릴 수 있어요.`; ok = true;
+  } else if (D.what === 'trip') {
+    pick = `<div class="chips"><button class="chip ${D.val === 'none' ? 'on' : ''}" data-act="bulkVal" data-v="none">묶음 빼기</button>${tripsAll().map((t) => `<button class="chip ${D.val === t.id ? 'on' : ''}" data-act="bulkVal" data-v="${t.id}">${ic('luggage', 16)}${esc(t.name)}</button>`).join('')}<button class="chip" data-act="tripNew">${ic('plus', 14)}새 여행</button></div>`;
+    if (D.val) { const okN = xs.filter(isMoney).length; summary = D.val === 'none' ? `${okN}건에서 여행 묶음을 빼요.` : `${okN}건을 '${esc((Store.get('trips', D.val) || {}).name)}' 묶음에 붙여요.`; ok = okN > 0; }
   }
-  const title = { cat: '분류 바꾸기', pay: '결제수단 바꾸기', bank: '통장 바꾸기', date: '날짜 바꾸기', del: '휴지통으로 옮기기' }[D.what];
+  const title = { cat: '분류 바꾸기', pay: '결제수단 바꾸기', bank: '통장 바꾸기', date: '날짜 바꾸기', del: '휴지통으로 옮기기', trip: '여행 묶음 붙이기' }[D.what];
   return `<div class="dlg"><h2 class="dlg-title">${title} · ${n}건</h2>${pick}
     ${summary ? `<div class="conf-note">${summary}<br><b>이대로 바꿀까요?</b></div>` : ''}
     <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="bulkApply" ${ok ? '' : 'disabled'}>${D.what === 'del' ? '휴지통으로' : '확인하고 바꾸기'}</button></div></div>`;

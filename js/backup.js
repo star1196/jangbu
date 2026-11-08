@@ -23,7 +23,7 @@ function backupFileName(ts) {
 }
 
 /* 묶음 이름을 사람 말로 (확인 화면 건수 풀이) */
-const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표' };
+const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것' };
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
 
 /* ───────── 백업 저장 ───────── */

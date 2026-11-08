@@ -162,7 +162,7 @@ function viewLock() {
 }
 
 /* 앱 뼈대: 왼쪽 메뉴(가로) 또는 아래 메뉴(세로·휴대폰) + 위 이동 버튼 */
-const NO_FAB = ['계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '미확인 정리', '사용할 기능'];
+const NO_FAB = ['계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '미확인 정리', '사용할 기능', '금고', '엑셀 옮기기'];
 function viewApp(L) {
   const phone = L === 'phone', compact = L !== 'wide';
   const navOn = PARENT[S.screen] || S.screen;
@@ -195,7 +195,7 @@ function viewApp(L) {
   </main>
   ${showFab ? `<button class="fab" data-act="input" aria-label="입력">${ic('plus', 28)}</button>` : ''}
   ${showSel ? `<div class="selbar"><span style="font-size:${px(15)};font-weight:700">${pickedN}건 선택됨</span><span style="flex:1"></span>
-    ${[['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']].map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
+    ${[['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ...(feat('trips') ? [['trip', '묶음 붙이기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']].map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
 }
 
 /* ───────── 이동 (← 홈 →, 기기 뒤로가기) ───────── */
@@ -253,6 +253,7 @@ document.addEventListener('visibilitychange', () => {
 
 function doLock(msg) {
   const cur = Store.current();
+  vaultLock();
   Store.lock();
   S.mode = 'lock'; S.dialog = null; S.busy = false; S.f = null; S.selMode = false; S.picked = {}; S.detail = null;
   if (cur) S.lockSel = cur.id;
@@ -265,7 +266,7 @@ function doLock(msg) {
 function afterOpen() {
   S.mode = 'app'; S.screen = '홈'; S.hist = []; S.fwd = []; S.listF = {}; S.detail = null;
   S.lastPay = null; S.lastBank = null; S.lastTo = null; S.bankId = null; S.sepId = null;
-  S.recur = null; S.planId = null; S.planCmp = null;
+  S.recur = null; S.planId = null; S.planCmp = null; S.q = ''; S.qTab = '통합'; S.qPeriod = '1개월'; S.tripId = null; S.xl = null; S.yrSel = null;
   lastAct = Date.now();
   // 그날이 된 반복 입력을 '확인 대기'로 (다 만들면 다시 그림)
   setTimeout(() => makeDueRepeats().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}), 0);
@@ -279,7 +280,7 @@ async function saveBankDraft() {
     name: d.name.trim(), type: d.type, bank: d.bank.trim(), owner: d.owner.trim(), memo: d.memo.trim(),
     openDate: d.openDate || '', openBalance: toInt(d.openBalance) * (d.neg ? -1 : 1),
     goal: d.type === 'sep' ? toInt(d.goal) : 0, accountNo: d.accountNo.trim(),
-    closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '',
+    closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '', hidden: !!d.hidden,
     order: before ? before.order : Store.all('banks').length
   };
   const saved = await Store.put('banks', obj);
@@ -309,12 +310,12 @@ const ACT = {
   undo: () => doUndo(),
   noop: () => {},
   period: (el) => { S.period = el.dataset.p; if (S.period === '직접') { S.dialog = { type: 'custom' }; } render(); },
-  search: () => soon('통합검색', 6),
+  search: () => { S.q = S.q || ''; S.qTab = '통합'; go('검색'); },
   input: () => openNew(),
   inputOn: (el) => { const f = newForm(); const [y, mo, d] = el.dataset.date.split('-'); Object.assign(f, { y, mo, d }); openForm(f); },
   receipt: () => toast('영수증 찍기는 2차 기능이에요'),
   file: () => soon('파일 올리기', 4),
-  repeatSoon: () => soon('반복 입력', 5),
+  repeatSoon: () => { if (!S.detail) return; S.f = { id: S.detail }; PLAN_ACT.repFromTx(); },
   basisSoon: () => toast('통장 나간 날 기준은 카드 대금을 만드는 4단계에서 열려요'),
   goUnc: () => { S.listF = { unc: true }; go('목록'); },
   // 달력
@@ -339,7 +340,7 @@ const ACT = {
     if (k === '전체') { S.listF = {}; render(); }
     else if (k === '통장별') { const b = banksAll()[0]; S.listF = { bankGroup: true, bankId: b ? b.id : null }; S.detail = null; render(); }
     else if (k === '카드별') { const c = cardsAll()[0]; S.listF = { cardGroup: true, payId: c ? c.id : null }; S.detail = null; render(); }
-    else if (k === '묶음') soon('묶음(여행) 보기', 6);
+    else if (k === '묶음') go('여행');
   },
   listCard: (el) => { S.listF = { cardGroup: true, payId: el.dataset.id }; S.detail = null; render(); },
   acctBasis: (el) => { S.acctBasis = el.dataset.v; render(); },
@@ -401,6 +402,7 @@ const ACT = {
       }
       else if (D.what === 'date') nx = { ...x, date: D.val };
       else if (D.what === 'del') nx = { ...x, deleted: true, deletedAt: Date.now() };
+      else if (D.what === 'trip') { if (isMoney(x)) nx = { ...x, tripId: D.val === 'none' ? null : D.val }; }
       if (nx) { items.push({ col: 'tx', id, before: { ...x } }); await Store.put('tx', nx); }
     }
     S.dialog = null; S.selMode = false; S.picked = {}; S.detail = null; render();
@@ -497,6 +499,8 @@ const ACT = {
   ...FILE_ACT,
   ...BACKUP_ACT,
   ...PLAN_ACT,
+  ...MORE_ACT,
+  ...XL_ACT,
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
   swapColors: () => { [view.inC, view.outC] = [view.outC, view.inC]; saveView(); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
   resetColors: () => { view.inC = DATA.DEFAULT_IN; view.outC = DATA.DEFAULT_OUT; saveView(); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
@@ -505,6 +509,8 @@ const ACT = {
 $app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || !$app.contains(el) || el.disabled) return;
+  const field = e.target.closest('select,input,textarea'); // 줄 안의 고르기 칸을 누를 땐 줄을 열지 않음
+  if (field && el.contains(field) && field !== el) return;
   const fn = ACT[el.dataset.act];
   if (!fn) return;
   if (!['dimClose', 'fDim'].includes(el.dataset.act)) e.preventDefault();
@@ -521,6 +527,8 @@ $app.addEventListener('input', (e) => {
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
   if (el.matches && el.matches('[data-bulkdate]') && S.dialog) { S.dialog.val = el.value || null; render(); }
   if (el.matches && el.matches('[data-recurdate]') && S.recur) { S.recur.date = el.value; render(); }
+  if (el.matches && el.matches('[data-q]')) onSearchInput(el);
+  if (el.dataset && el.dataset.xlopt && S.xl && S.xl.sheets) onXlOpt(el);
   // 카드 추가 칸
   if (el.dataset && el.dataset.ca && S.cardAdd) { S.cardAdd[el.dataset.ca] = el.dataset.ca === 'last4' ? digits(el.value).slice(0, 4) : el.value; if (el.dataset.ca === 'last4') el.value = S.cardAdd.last4; }
   // 파일 미리보기 칸
@@ -539,15 +547,21 @@ $app.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.map != null && S.imp) { S.imp.map[el.dataset.map] = el.value; render(); }
   else if (el.dataset && el.dataset.file != null && el.files && el.files[0]) { startImport(el.files[0]); el.value = ''; }
+  else if (el.dataset && el.dataset.xlfile != null && el.files && el.files[0]) { const f = el.files[0]; el.value = ''; startXl(f); }
+  else if (el.dataset && el.dataset.tripcat) { const x = Store.get('tx', el.dataset.tripcat), before = { ...x }; Store.put('tx', { ...x, tripCat: el.value }).then(() => { render(); toast('여행 분류를 바꿨어요', { items: [{ col: 'tx', id: x.id, before }] }); }); }
   else if (el.dataset && el.dataset.backup != null && el.files && el.files[0]) { const f = el.files[0]; el.value = ''; onBackupFile(f, el.dataset.backup).catch((er) => toast('파일을 읽지 못했어요 (' + er.message + ')')); }
   else if (el.tagName === 'SELECT' && el.dataset && el.dataset.imp && S.imp && S.imp.items) onImpInput(el);
-  else if (el.tagName === 'SELECT' && el.dataset && el.dataset.d && S.dialog && S.dialog.d) { S.dialog.d[el.dataset.d] = el.value; if (el.dataset.d === 'endType') render(); }
+  else if (el.tagName === 'SELECT' && el.dataset && el.dataset.d && S.dialog && S.dialog.d) { S.dialog.d[el.dataset.d] = el.value; if (['endType', 'perfCycle'].includes(el.dataset.d)) render(); }
   else if (el.dataset && el.dataset.plan != null) onPlanSelect(el);
 });
 // 파일 끌어다 놓기
 $app.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('[data-drop]')) { e.preventDefault(); e.target.closest('[data-drop]').classList.add('over'); } });
 $app.addEventListener('dragleave', (e) => { const d = e.target.closest && e.target.closest('[data-drop]'); if (d) d.classList.remove('over'); });
 $app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-drop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) startImport(f); } });
+$app.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('[data-xldrop]')) e.preventDefault(); });
+$app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-xldrop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) startXl(f); } });
+// 검색창 Enter: 최근 검색어에 남김
+$app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-q]')) { e.preventDefault(); rememberQuery(); e.target.blur(); } });
 $app.addEventListener('keydown', (e) => { const el = e.target; if (el.dataset && el.dataset.f && S.f) onFormKey(e, el); });
 $app.addEventListener('focusout', (e) => { const el = e.target; if (el.dataset && el.dataset.f && S.f) onFormBlur(el); });
 $app.addEventListener('focusin', (e) => { const el = e.target; if (el.dataset && el.dataset.f === 'merchant' && S.f) { S.merOpen = true; updMer(); } });
@@ -629,7 +643,7 @@ const FORM = {
     const from = f.elements.from.value, to = f.elements.to.value;
     if (!from || !to) return showErr(f, '시작과 끝 날짜를 골라 주세요.');
     if (from > to) return showErr(f, '시작 날짜가 끝 날짜보다 늦어요.');
-    if (S.dialog.target === 'card') { S.cardCustom = { from, to }; S.cardPeriod = '직접'; } else { S.custom = { from, to }; S.period = '직접'; }
+    if (S.dialog.target === 'card') { S.cardCustom = { from, to }; S.cardPeriod = '직접'; } else if (S.dialog.target === 'search') { S.qCustom = { from, to }; S.qPeriod = '직접'; } else { S.custom = { from, to }; S.period = '직접'; }
     S.dialog = null; render();
   },
   async accName(f) {
@@ -649,7 +663,8 @@ const FORM = {
     S.editAccId = a.id; S.dialog = null; render(); toast(`'${name}' 계정을 만들었어요`, { items: [{ col: 'accounts', id: a.id, before: null }] });
   },
   ...BACKUP_FORM,
-  ...PLAN_FORM
+  ...PLAN_FORM,
+  ...MORE_FORM
 };
 
 $app.addEventListener('submit', (e) => {

@@ -103,7 +103,8 @@ function feat(key) {
 }
 
 /* ── 통장 ── */
-const banksAll = () => Store.all('banks').sort((a, b) => (a.order || 0) - (b.order || 0) || ko(a.name, b.name));
+// 숨김 통장(4-22)은 금고를 열었을 때만 목록에 보임 (내역·계산은 그대로)
+const banksAll = () => Store.all('banks').filter((b) => !b.hidden || (typeof vaultIsOpen === 'function' && vaultIsOpen())).sort((a, b) => (a.order || 0) - (b.order || 0) || ko(a.name, b.name));
 const banksOpen = (type) => banksAll().filter((b) => !b.closed && (!type || b.type === type) && (b.type !== 'sep' || feat('sepBanks')));
 // 이 내역이 그 통장 잔액을 얼마나 바꾸는지
 function bankDelta(x, id) {
