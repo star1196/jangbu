@@ -18,8 +18,13 @@ const DATA = (() => {
   const INK_STEPS = [100, 82, 66, 52, 40, 30, 20, 12];
 
   // 설정의 수입·지출 색 [기본 · 짙게 · 먹색]
-  const IN_OPTS = [['#3B5F8F', '기본'], ['#2B4870', '짙게'], ['#1F1F1F', '먹색']];
-  const OUT_OPTS = [['#B5473F', '기본'], ['#8E3A33', '짙게'], ['#1F1F1F', '먹색']];
+  // 기본: 수입 빨강 / 지출 파랑 (2026-11-08 사용자 요청). 설정에서 서로 바꾸기 가능.
+  const RED = '#B5473F', BLUE = '#3B5F8F';
+  // 색 묶음: 빨강 계열 / 파랑 계열 (각 3가지, 디자인과 같은 모양). [서로 바꾸기]로 묶음이 바뀜.
+  const RED_OPTS = [[RED, '빨강'], ['#8E3A33', '짙은 빨강'], ['#1F1F1F', '먹색']];
+  const BLUE_OPTS = [[BLUE, '파랑'], ['#2B4870', '짙은 파랑'], ['#1F1F1F', '먹색']];
+  const IN_OPTS = RED_OPTS, OUT_OPTS = BLUE_OPTS;
+  const DEFAULT_IN = RED, DEFAULT_OUT = BLUE;
 
   const FONT_SIZES = { '작게': 0.9, '보통': 1, '크게': 1.15 };
 
@@ -62,5 +67,34 @@ const DATA = (() => {
   // 계정 아이콘 고르기 목록 (디자인 계정과목 편집 화면과 같은 순서)
   const ICON_CHOICES = ['utensils', 'coffee', 'shopping-basket', 'shopping-cart', 'package', 'shirt', 'book-open', 'graduation-cap', 'pill', 'car', 'bus', 'plane', 'house', 'building', 'zap', 'droplet', 'wifi', 'smartphone', 'play-square', 'gift', 'heart', 'ticket', 'scissors', 'paw-print', 'shield-check', 'landmark', 'receipt', 'piggy-bank', 'wallet', 'coins', 'banknote', 'briefcase', 'award', 'trending-up', 'rotate-ccw', 'hand-coins', 'umbrella', 'ellipsis'];
 
-  return { THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
+  // 통장 명의 빠른 고르기 (직접 적어도 됨)
+  const OWNERS = ['나', '배우자', '공동', '자녀1', '자녀2', '부모'];
+  const BANK_NAMES = ['국민은행', '신한은행', '우리은행', '하나은행', '농협', 'IBK기업은행', '카카오뱅크', '토스뱅크', '케이뱅크', '새마을금고', '우체국', '대구은행'];
+
+  // 4-27 사용할 기능 (장부마다 켜고 끄기). 끄면 화면에서 숨기기만, 자료는 그대로.
+  // step: 만드는 단계(그 전엔 켜 두어도 안내만). simple: [간단하게]로 만들 때 켜 둘지.
+  const FEATURES = [
+    { key: 'banks', name: '통장', desc: '통장별 잔액 표 · 통장 고르기 · 이체', step: 3, simple: true },
+    { key: 'sepBanks', name: '별도 통장', desc: '비상금·여행·자녀 통장처럼 가계부 밖에서 따로 보는 통장', step: 3, simple: false },
+    { key: 'cards', name: '카드 관리', desc: '카드 등록 · 신용/체크 · 카드별 보기', step: 4, simple: true },
+    { key: 'cardBill', name: '카드 대금', desc: '결제일 대금 · 할부 · 통장 나간 날 기준', step: 4, simple: true },
+    { key: 'cardPerf', name: '카드 실적', desc: '카드별 실적 목표 · 실적 제외 · 부족 알림', step: 4, simple: false },
+    { key: 'files', name: '파일 올리기', desc: '카드·통장 명세서 엑셀로 한 번에 기록', step: 4, simple: true },
+    { key: 'discount', name: '할인·포인트 칸', desc: '입력 화면 [더보기]: 원래 가격 · 할인 · 포인트', step: 2, simple: false },
+    { key: 'receipt', name: '영수증 찍기', desc: '사진으로 입력 (2차 기능)', step: 9, simple: false },
+    { key: 'repeat', name: '반복 입력', desc: '자동이체·고정 지출을 그날 확인 대기로', step: 5, simple: false },
+    { key: 'savings', name: '적금·예금', desc: '적금·예금 · 재산 현황 · 만기 알림', step: 5, simple: false },
+    { key: 'plan', name: '고정 계획표', desc: '매달 고정 수입·지출 계획과 기준 비교', step: 5, simple: false },
+    { key: 'trips', name: '여행 묶음', desc: '여행·행사 묶음 · 예산 · 여행 모아보기', step: 6, simple: false },
+    { key: 'reminders', name: '기억할 것', desc: '계약·만료일 메모와 알림', step: 6, simple: false },
+    { key: 'vault', name: '보안 금고', desc: '계좌번호·중요 메모 · 숨김 통장 (따로 비밀번호)', step: 7, simple: false },
+    { key: 'excel', name: '엑셀 옮기기·내보내기', desc: '예전 엑셀 시트 옮기기 · 통장별 시트 내보내기', step: 7, simple: false }
+  ];
+
+  // 카드사 기본 목록 (설정에서 직접 추가 가능)
+  const CARD_COMPANIES = ['신한카드', 'KB국민카드', '삼성카드', '현대카드', '롯데카드', '하나카드', '우리카드', 'BC카드', 'NH농협카드', 'IBK기업카드'];
+  const BILL_DAYS = [1, 5, 7, 10, 12, 13, 14, 15, 17, 20, 21, 23, 25, 26, 27];
+  const INSTALLMENTS = [1, 2, 3, 4, 5, 6, 10, 12];
+
+  return { CARD_COMPANIES, BILL_DAYS, INSTALLMENTS, FEATURES, OWNERS, BANK_NAMES, THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, RED_OPTS, BLUE_OPTS, DEFAULT_IN, DEFAULT_OUT, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
 })();

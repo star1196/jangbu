@@ -1,7 +1,8 @@
 // 화면 그리기: 홈 · 달력 · 목록 · 계정별 · 설정 · 계정과목 편집 · 휴지통 · 대화 상자
 'use strict';
 
-const PARENT = { '계정과목 편집': '설정', '휴지통': '설정' };
+const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
+  '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정' };
 
 function screenBody(L) {
   switch (S.screen) {
@@ -12,6 +13,16 @@ function screenBody(L) {
     case '설정': return viewSettings();
     case '계정과목 편집': return viewAcctEdit();
     case '휴지통': return viewTrash();
+    case '통장': return viewBank(L, 'home');
+    case '별도 통장': return viewSepBanks(L);
+    case '통장 관리': return viewBankAdmin();
+    case '사용할 기능': return viewFeatures();
+    case '카드 대금': return viewCards(L);
+    case '카드 추가': return viewCardAdd();
+    case '파일 올리기': return viewFile(L);
+    case '미확인 정리': return viewUnc(L);
+    case '자동 분류 규칙': return viewRules();
+    case '파일 서식': return viewTemplates();
     default: return '';
   }
 }
@@ -19,16 +30,21 @@ function screenBody(L) {
 /* 내역 한 줄 (목록·달력·휴지통 공통) */
 function txRow(x, opt) {
   opt = opt || {};
-  const acc = accOf(x.accountId), pay = payOf(x.payMethodId), n = signed(x);
+  const acc = accOf(x.accountId), pay = payOf(x.payMethodId);
   const on = S.selMode && S.picked[x.id];
   const det = opt.detailable && S.detail === x.id && !S.selMode;
-  const sub = opt.sub || `${isUnc(x) ? '미확인' : acc ? acc.name : '미확인'}${pay ? ' · ' + pay.name : ''}`;
+  let sub = opt.sub;
+  if (!sub) {
+    if (x.kind === 'tr') sub = '이체' + (x.memo ? ' · ' + x.memo : '');
+    else if (x.kind === 'adj') sub = bankName(x.bankId) + (x.memo ? ' · ' + x.memo : '');
+    else sub = [isUnc(x) ? '미확인' : acc ? acc.name : '미확인', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : ''].filter(Boolean).join(' · ');
+  }
   const chk = S.selMode && opt.selectable ? `<span class="chk ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>` : '';
   const dot = isUnc(x) ? '<span class="undot"></span>' : '';
   return `<div class="lrow ${on || det ? 'hl' : ''}" data-act="${opt.act || 'rowTap'}" data-id="${x.id}" role="button" tabindex="0">
-    ${chk}<span style="position:relative;flex:none">${catIcon(isUnc(x) ? null : acc, 20, 40)}${dot}</span>
+    ${chk}<span style="position:relative;flex:none">${txIcon(x, 20, 40)}${dot}</span>
     <div class="lmid"><span class="lt">${esc(txTitle(x))}</span><span class="ls">${esc(sub)}</span></div>
-    ${opt.right || ''}<span class="amt ${clsOf(n)}" style="font-size:${px(16)}">${moneyTxt(n)}</span>
+    ${opt.right || ''}${txAmt(x, 16)}
   </div>`;
 }
 
@@ -59,11 +75,11 @@ function viewHome(L) {
   const periods = DATA.PERIODS.map((p) => `<button class="chip ${p === S.period ? 'on' : ''}" data-act="period" data-p="${p}">${p}</button>`).join('');
   const tiles = [['수입', sm.inc], ['쓴 돈', -sm.out], ['통장에서 나간 돈', -sm.bank]].map(([l, v]) => `<div class="tile"><span class="l">${l}</span><span class="a">${money(v)}</span></div>`).join('');
   const unc = liveTx().filter(isUnc).length;
-  const todo = unc
+  const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUnc">보기</button></div>`
-    : `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + cardTodos() + backupTodo();
+  const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
   return `<div class="stack">
     <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
     <div class="chips"><span class="sub" style="font-size:${px(14)};margin-right:4px">기간</span>${periods}</div>
@@ -73,19 +89,136 @@ function viewHome(L) {
           <h2 class="h2">${title}</h2><span class="sub small">${rangeText(from, to)}</span>
         </div>
         <div class="sumgrid">${tiles}</div>
-        ${sm.saved ? `<div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;font-size:${px(13)}"><span class="sub">아낀 돈 (할인 · 포인트)</span><b>${won(sm.saved)}원</b></div>` : ''}
+        ${(() => {
+          const lines = [];
+          if (feat('banks') && feat('sepBanks') && banksAll().some((b) => b.type === 'sep')) {
+            const fl = sepFlows(from, to);
+            lines.push(['별도 통장에서 가져온 돈', money(fl.got)], ['별도 통장으로 보낸 돈', money(-fl.sent)]);
+          }
+          if (sm.saved) lines.push(['아낀 돈 (할인 · 포인트)', `<b>${won(sm.saved)}원</b>`]);
+          return lines.length ? `<div style="display:flex;flex-direction:column;gap:2px;margin-top:10px">${lines.map(([k, v]) => `<div class="sline"><span class="sub">${k}</span><span style="font-weight:600;white-space:nowrap">${v}</span></div>`).join('')}</div>` : '';
+        })()}
+        ${homeCardDue()}
       </section>
       <section class="card" style="flex:2 1 320px;min-width:0;padding:18px 22px 10px">
         <h2 class="h2" style="margin-bottom:4px">할 일</h2>${todo}
       </section>
     </div>
-    <section class="card" style="padding:18px 22px 8px">
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin-bottom:4px">
-        <h2 class="h2">통장</h2><span class="sub small">합계 <b style="color:var(--ink)">${balance(0)}</b></span>
+    ${homeBanks()}
+    ${L === 'phone' ? '' : `<div class="bigbtns"><button class="b1" data-act="input">${ic('plus', 26)}직접 입력</button>${feat('files') ? `<button class="b2" data-act="file">${ic('file-up', 26)}파일 올리기</button>` : ''}</div>`}
+  </div>`;
+}
+
+// 홈의 통장 목록: 가계부 통장만(접었다 펴기) + 합계, 별도 통장은 "N개 ›" 한 줄(금액 숨김)
+function homeBanks() {
+  if (!feat('banks')) return '';
+  const hb = banksOpen('home'), sepN = banksOpen('sep').length;
+  const total = hb.reduce((s, b) => s + bankBalance(b.id), 0);
+  const rows = S.banksFold ? '' : hb.map((b) => `<button class="row bankrow" data-act="openBank" data-id="${b.id}">
+      <span class="circ" style="width:40px;height:40px">${ic('landmark', 20, 'var(--ink)')}</span>
+      <span class="k" style="display:flex;flex-direction:column;gap:1px"><span style="font-weight:600">${esc(b.name)}</span><span class="sub small">${esc(bankSub(b) || '통장')}</span></span>
+      <span style="font-size:${px(17)};white-space:nowrap">${balance(bankBalance(b.id))}</span>${ic('chevron-right', 18, 'var(--sub)')}</button>`).join('');
+  return `<section class="card" style="padding:18px 22px 8px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 12px;margin-bottom:4px">
+        <button class="foldbtn" data-act="foldBanks" aria-expanded="${!S.banksFold}"><h2 class="h2">통장</h2>${ic(S.banksFold ? 'chevron-right' : 'chevron-down', 18, 'var(--sub)')}</button>
+        <span class="sub small">합계 <b style="color:var(--ink)">${balance(total)}</b></span>
       </div>
-      <div class="row" style="cursor:default">${ic('landmark', 20, 'var(--sub)')}<span class="k sub">통장 만들기는 3단계에서 열려요.</span></div>
+      ${hb.length ? rows : `<div class="row" style="cursor:default">${ic('landmark', 20, 'var(--sub)')}<span class="k sub">아직 가계부 통장이 없어요.</span></div>`}
+      <button class="row" data-act="addBank" data-type="home" style="min-height:52px;color:var(--sub)">${ic('plus', 18)}<span class="k" style="font-size:${px(14)}">통장 추가</span></button>
+      ${feat('sepBanks') ? `<button class="row" data-act="goSep" style="min-height:52px;color:var(--sub)"><span class="k" style="font-size:${px(14)}">별도 통장 ${sepN}개</span><span class="small">금액 숨김</span>${ic('chevron-right', 18)}</button>` : ''}
+    </section>`;
+}
+
+/* ───────── 통장 표 (엑셀처럼: 날짜 · 내용 · 지출 · 수입 · 잔액, 줄마다 잔액) ───────── */
+function bankTable(L, id) {
+  const rows = bankLedger(id).slice().reverse(); // 최근이 위
+  const yr = new Date().getFullYear();
+  const dTxt = (s) => { if (!s) return ''; const [y, m, d] = s.split('-'); return (+y !== yr ? y.slice(2) + '.' : '') + m + '.' + d; };
+  const line = (r) => {
+    if (r.open) return { d: dTxt(r.date), icon: ic('landmark', 16, 'var(--sub)'), m: '이월 잔액 (시작 잔액)', open: true, out: '', inn: '', bal: r.bal, a: 0 };
+    const x = r.x;
+    let m = txTitle(x), icon;
+    if (x.kind === 'tr') { const other = x.fromId === id ? x.toId : x.fromId; m = (x.fromId === id ? '→ ' : '← ') + bankName(other) + (x.memo ? ' · ' + x.memo : ''); icon = ic('arrow-left-right', 16, 'var(--sub)'); }
+    else if (x.kind === 'adj') icon = ic('landmark', 16, 'var(--sub)');
+    else icon = catGlyph(isUnc(x) ? null : accOf(x.accountId), 16);
+    return { id: x.id, d: dTxt(x.date), icon, m, out: r.d < 0 ? won(r.d) : '', inn: r.d > 0 ? won(r.d) : '', bal: r.bal, a: r.d };
+  };
+  const ls = rows.map(line);
+  const balTxt = (n) => `<span style="color:${n < 0 ? 'var(--out)' : 'var(--ink)'}">${n < 0 ? '−' : ''}${won(n)}</span>`;
+  if (L === 'phone') {
+    return ls.map((r) => `<div class="bk2" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}>
+      <div class="bk2a"><span class="bd">${r.d}</span>${r.icon}<span class="bm ${r.open ? 'sub' : ''}">${esc(r.m)}</span>${r.open ? '' : `<span class="amt ${clsOf(r.a)}">${moneyTxt(r.a)}</span>`}</div>
+      <span class="bk2b">잔액 ${balTxt(r.bal)}원</span></div>`).join('');
+  }
+  return `<div class="bkrow head"><span>날짜</span><span>내용</span><span class="r">지출</span><span class="r">수입</span><span class="r">잔액</span></div>`
+    + ls.map((r) => `<div class="bkrow" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span></div>`).join('');
+}
+
+function bankHeadCard(b) {
+  const bal = bankBalance(b.id);
+  return `<section class="card" style="padding:18px 22px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <span class="circ" style="width:44px;height:44px">${ic('landmark', 22, 'var(--ink)')}</span>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:${px(18)};font-weight:700">${esc(b.name)}${b.closed ? ' <span class="tag">해지</span>' : ''}</span><span class="sub small">${esc(bankSub(b) || '')}${b.memo ? ' · ' + esc(b.memo) : ''}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span class="sub small">지금 잔액</span><span style="font-size:${px(26)};letter-spacing:-0.02em">${balance(bal)}</span></div>
+      <div class="chips" style="width:100%"><button class="btn" data-act="dlgAdjust" data-id="${b.id}">잔액 맞추기</button><button class="btn" data-act="editBank" data-id="${b.id}">통장 고치기</button><button class="btn" data-act="inputTr" data-id="${b.id}">${ic('arrow-left-right', 18)}이체</button></div>
+    </section>`;
+}
+
+function viewBank(L) {
+  const list = banksOpen('home');
+  if (!list.length) return `<section class="card"><div class="empty">${ic('landmark', 40, 'var(--sub)')}<span>아직 가계부 통장이 없어요.</span><span class="small">생활비 통장, 월급 통장, 카드 대금 통장처럼 가계부에 넣는 통장을 만들어 주세요.</span><button class="btn ink" data-act="addBank" data-type="home">${ic('plus', 18)}통장 추가</button></div></section>`;
+  if (!list.some((b) => b.id === S.bankId)) S.bankId = list[0].id;
+  const b = bankOf(S.bankId);
+  return `<div class="stack" style="gap:14px">
+    <div class="chips">${list.map((x) => `<button class="chip ${x.id === b.id ? 'on' : ''}" data-act="pickBank" data-id="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip" data-act="addBank" data-type="home">${ic('plus', 14)}통장 추가</button></div>
+    ${bankHeadCard(b)}
+    <section class="card" style="overflow:hidden">${bankTable(L, b.id)}</section>
+    <span class="sub small">최근 거래가 위. 줄마다 그 거래 뒤 잔액이에요. 이체는 ← · → 로 보여요. 통장을 고른 내역만 들어가요.</span>
+  </div>`;
+}
+
+/* 별도 통장: 가계부 밖. 합계 → 통장 카드(목표 막대) → 고른 통장 표 */
+function viewSepBanks(L) {
+  const list = banksOpen('sep');
+  const total = list.reduce((s, b) => s + bankBalance(b.id), 0);
+  if (list.length && !list.some((b) => b.id === S.sepId)) S.sepId = list[0].id;
+  const cards = list.map((b) => {
+    const bal = bankBalance(b.id), pct = b.goal ? Math.round(bal / b.goal * 100) : 0;
+    return `<button class="sepcard ${b.id === S.sepId ? 'on' : ''}" data-act="pickSep" data-id="${b.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%"><span style="font-size:${px(16)};font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.name)}</span>${b.owner ? `<span class="badge">${esc(b.owner)}</span>` : ''}</div>
+      <span class="sub small">${esc(b.bank || '')}</span>
+      <span style="font-size:${px(21)};white-space:nowrap">${balance(bal)}</span>
+      ${b.goal ? `<span class="gbar"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span style="display:flex;justify-content:space-between;width:100%" class="small sub"><span>목표 ${won(b.goal)}원</span><b style="color:var(--ink)">${pct}%</b></span>` : '<span class="sub small">목표 없음</span>'}
+    </button>`;
+  }).join('');
+  const sel = bankOf(S.sepId);
+  return `<div class="stack" style="gap:14px">
+    <div class="infoline">${ic('info', 18)}가계부와 별도 · 수입·지출과 자산 총액에 포함 안 됨</div>
+    <section class="card" style="padding:18px 22px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:8px 20px">
+      <div style="display:flex;flex-direction:column;gap:2px"><span class="sub small">별도 통장 합계 · ${list.length}개</span><span style="font-size:${px(28)};letter-spacing:-0.02em">${balance(total)}</span></div>
+      <button class="btn" data-act="addBank" data-type="sep">${ic('plus', 18)}별도 통장 추가</button>
     </section>
-    ${L === 'phone' ? '' : `<div class="bigbtns"><button class="b1" data-act="input">${ic('plus', 26)}직접 입력</button><button class="b2" data-act="file">${ic('file-up', 26)}파일 올리기</button></div>`}
+    ${list.length ? `<div class="sepgrid">${cards}</div>` : `<section class="card"><div class="empty">${ic('piggy-bank', 40, 'var(--sub)')}<span>별도 통장이 없어요.</span><span class="small">비상금·여행·적금·자녀 통장처럼 가계부와 따로 보는 통장이에요.</span></div></section>`}
+    ${sel ? `${bankHeadCard(sel)}<section class="card" style="overflow:hidden"><div style="padding:14px 18px;font-size:${px(16)};font-weight:700">${esc(sel.name)}</div>${bankTable(L, sel.id)}</section>` : ''}
+  </div>`;
+}
+
+/* 통장 관리 (설정): 모든 통장, 해지한 통장 */
+function viewBankAdmin() {
+  const all = banksAll();
+  const row = (b) => `<button class="row bankrow" data-act="editBank" data-id="${b.id}">
+      <span class="circ" style="width:40px;height:40px">${ic(b.type === 'sep' ? 'piggy-bank' : 'landmark', 20, b.closed ? 'var(--sub)' : 'var(--ink)')}</span>
+      <span class="k" style="display:flex;flex-direction:column;gap:1px"><span style="font-weight:600;${b.closed ? 'color:var(--sub)' : ''}">${esc(b.name)}</span><span class="sub small">${b.type === 'sep' ? '별도 통장' : '가계부 통장'}${bankSub(b) ? ' · ' + esc(bankSub(b)) : ''}${b.closed ? ' · 해지 ' + esc(b.closedDate || '') : ''}</span></span>
+      <span style="white-space:nowrap">${balance(bankBalance(b.id))}</span>${ic('chevron-right', 18, 'var(--sub)')}</button>`;
+  const sec = (title, list) => list.length ? `<section class="card" style="padding:16px 22px 4px"><h2 class="h2" style="font-size:${px(17)};margin-bottom:4px">${title}</h2>${list.map(row).join('')}</section>` : '';
+  return `<div class="stack">
+    <div class="chips"><button class="btn ink" data-act="addBank" data-type="home">${ic('plus', 18)}가계부 통장 추가</button>${feat('sepBanks') ? `<button class="btn" data-act="addBank" data-type="sep">${ic('plus', 18)}별도 통장 추가</button>` : ''}</div>
+    ${sec('가계부 통장 · 수입·지출·자산 합계에 들어가요', all.filter((b) => !b.closed && b.type === 'home'))}
+    ${feat('sepBanks') ? sec('별도 통장 · 가계부 밖에서 따로 봐요', all.filter((b) => !b.closed && b.type === 'sep')) : ''}
+    ${sec('해지한 통장 · 입력 목록에서 숨겨져요', all.filter((b) => b.closed))}
+    ${all.length ? '' : `<section class="card"><div class="empty">아직 통장이 없어요.</div></section>`}
   </div>`;
 }
 
@@ -109,7 +242,10 @@ function viewCal(L) {
       const hasIn = xs.some((x) => x.kind === 'in'), hasOut = xs.some((x) => x.kind === 'out' && leftBank(x)), hasCard = xs.some((x) => x.kind === 'out' && !leftBank(x));
       body = `<span class="dots">${hasIn ? '<i style="background:var(--in)"></i>' : ''}${hasOut ? '<i style="background:var(--out)"></i>' : ''}${hasCard ? '<i style="background:var(--sub)"></i>' : ''}</span><span class="ctot ${clsOf(net)}">${short(net)}</span>`;
     } else if (xs.length) {
-      body = xs.slice(0, 2).map((x) => `<span class="ce">${catGlyph(isUnc(x) ? null : accOf(x.accountId), 13)}<span class="${clsOf(signed(x))}">${full ? moneyTxt(signed(x)) : short(signed(x))}</span></span>`).join('')
+      body = xs.slice(0, 2).map((x) => {
+        if (!isMoney(x)) { const n = x.amount; return `<span class="ce">${ic(x.kind === 'tr' ? 'arrow-left-right' : x.kind === 'bill' ? 'credit-card' : 'landmark', 13, 'var(--sub)')}<span style="color:var(--ink)">${full ? won(n) + '원' : short(Math.abs(n)).replace('+', '')}</span></span>`; }
+        return `<span class="ce">${catGlyph(isUnc(x) ? null : accOf(x.accountId), 13)}<span class="${clsOf(signed(x))}">${full ? moneyTxt(signed(x)) : short(signed(x))}</span></span>`;
+      }).join('')
         + (xs.length > 2 ? `<span class="cmore">외 ${xs.length - 2}건</span>` : '');
     }
     const cls = ['cell', ds === t ? 'today' : '', d === S.calSel ? 'sel' : ''].join(' ');
@@ -144,6 +280,8 @@ function listFiltered() {
   const F = S.listF || {};
   return liveTx().filter((x) => ymOf(x.date) === S.listYM
     && (!F.accId || x.accountId === F.accId)
+    && (!F.bankId || touches(x, F.bankId))
+    && (!F.payId || x.payMethodId === F.payId || x.cardId === F.payId)
     && (!F.unc || isUnc(x))).sort(sortTx);
 }
 function viewList(L) {
@@ -158,20 +296,30 @@ function viewList(L) {
     return `<div class="ghead"><span style="font-weight:700;font-size:${px(14)}">${dateLabel(d, F.unc && d.slice(0, 4) !== String(new Date().getFullYear()))}</span><span style="font-size:${px(13)};display:flex;gap:10px">${s.inc ? `<span class="pos" style="font-weight:600">${moneyTxt(s.inc)}</span>` : ''}${s.out ? `<span class="neg" style="font-weight:600">${moneyTxt(-s.out)}</span>` : ''}</span></div>`
       + xs.map((x) => txRow(x, { selectable: true, detailable: wide })).join('');
   }).join('');
-  const chips = ['전체', '통장별', '카드별', '묶음'].map((k) => `<button class="chip ${k === '전체' ? 'on' : ''}" data-act="listGroup" data-k="${k}">${k}</button>`).join('');
+  const grp = F.bankGroup ? '통장별' : F.cardGroup ? '카드별' : '전체';
+  const cardSubChips = F.cardGroup ? `<div class="chips" style="gap:6px">${cardsAll().map((c) => `<button class="chip ${c.id === F.payId ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="listCard" data-id="${c.id}">${esc(cardLabel(c))}${c.closed ? ' · 해지' : ''}</button>`).join('') || '<span class="sub small">등록한 카드가 없어요.</span>'}
+    ${F.payId ? `<button class="linkbtn" data-act="openCard" data-id="${F.payId}">카드별 보기 (실적·대금)</button>` : ''}</div>` : '';
+  const chips = ['전체', ...(feat('banks') ? ['통장별'] : []), ...(feat('cards') ? ['카드별'] : []), ...(feat('trips') ? ['묶음'] : [])].map((k) =>`<button class="chip ${k === grp ? 'on' : ''}" data-act="listGroup" data-k="${k}">${k}</button>`).join('');
   const fchips = [
     F.accId ? `<button class="chip on" data-act="clearF">${esc((accOf(F.accId) || {}).name || '')} ${ic('x', 14)}</button>` : '',
     F.unc ? `<button class="chip on" data-act="clearF">미확인만 ${ic('x', 14)}</button>` : ''
   ].join('');
+  const bankSubChips = F.bankGroup ? `<div class="chips" style="gap:6px">${banksAll().map((b) => `<button class="chip ${b.id === F.bankId ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="listBank" data-id="${b.id}">${esc(b.name)}${b.type === 'sep' ? ' · 별도' : ''}</button>`).join('') || '<span class="sub small">통장이 없어요.</span>'}
+    ${F.bankId ? `<button class="linkbtn" data-act="openBank" data-id="${F.bankId}">통장 표로 보기 (이체·잔액 포함)</button>` : ''}</div>` : '';
   const det = wide && S.detail && !S.selMode ? Store.get('tx', S.detail) : null;
   const detail = !wide ? '' : det && !det.deleted ? (() => {
-    const acc = accOf(det.accountId), pay = payOf(det.payMethodId), n = signed(det);
-    const rows = [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ['메모', det.memo || '—'],
-      ...(det.discount || det.pointUsed ? [['아낀 돈', `할인 ${won(det.discount || 0)}원 · 포인트 ${won(det.pointUsed || 0)}원`]] : []),
-      ...(startDate() && det.date < startDate() ? [['합계', '시작점 이전이라 합계에서 빠져요']] : [])];
-    return `<section class="card detail">${catIcon(isUnc(det) ? null : acc, 28, 56)}
+    const acc = accOf(det.accountId), pay = payOf(det.payMethodId);
+    const rows = det.kind === 'tr'
+      ? [['날짜', dateLabel(det.date, true)], ['보내는 통장', `${bankName(det.fromId)} −${won(det.amount)}원`], ['받는 통장', `${bankName(det.toId)} +${won(det.amount)}원`], ['메모', det.memo || '—'], ['합계', '이체는 수입·지출에 안 들어가요']]
+      : det.kind === 'adj'
+        ? [['날짜', dateLabel(det.date, true)], ['통장', bankName(det.bankId)], ['메모', det.memo || '—']]
+        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ['메모', det.memo || '—'],
+          ...(det.discount || det.pointUsed ? [['아낀 돈', `할인 ${won(det.discount || 0)}원 · 포인트 ${won(det.pointUsed || 0)}원`]] : []),
+          ...(startDate() && det.date < startDate() ? [['합계', '시작점 이전이라 합계에서 빠져요']] : []),
+          ...(isSep(det.bankId) ? [['합계', '별도 통장 안의 돈이라 가계부 합계에서 빠져요']] : [])];
+    return `<section class="card detail">${txIcon(det, 28, 56)}
       <span style="font-size:${px(20)};font-weight:700">${esc(txTitle(det))}</span>
-      <span class="amt ${clsOf(n)}" style="font-size:${px(30)};letter-spacing:-0.03em">${moneyTxt(n)}</span>
+      <span style="font-size:${px(30)};letter-spacing:-0.03em">${txAmt(det)}</span>
       <div>${rows.map(([k, v]) => `<div class="drow"><span class="sub">${k}</span><span style="font-weight:600;text-align:right">${esc(v)}</span></div>`).join('')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn ink" style="flex:1 1 120px;min-height:50px;font-size:${px(15)}" data-act="openTx" data-id="${det.id}">고치기</button><button class="btn" style="flex:1 1 140px;min-height:50px;font-size:${px(15)}" data-act="repeatSoon">${ic('repeat', 18)}반복으로 만들기</button></div>
     </section>`;
@@ -179,6 +327,7 @@ function viewList(L) {
   return `<div class="cols">
     <div class="stack" style="flex:2 1 460px;min-width:0;gap:12px">
       <div class="chips">${chips}<span style="flex:1"></span><button class="btn" data-act="toggleSel">${ic('list-checks', 18)}${S.selMode ? '선택 끝' : '여러 건 선택'}</button></div>
+      ${bankSubChips}${cardSubChips}
       <div class="calhead">
         ${F.unc ? `<span style="font-size:${px(18)};font-weight:700">미확인 내역 전체</span>` : `<div class="calmonth"><button class="iconbtn" data-act="listMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="listMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>`}
         ${fchips ? `<div class="chips">${fchips}</div>` : ''}
@@ -191,9 +340,14 @@ function viewList(L) {
 }
 
 /* ───────── 계정별 ───────── */
+// 계정별 합계. [통장 나간 날 기준]이면 신용카드는 결제일 달(할부는 나눠서)로 셈
 function acctAgg(ym, kind) {
-  const agg = {};
-  liveTx().filter((x) => counted(x) && x.kind === kind && !isUnc(x) && ymOf(x.date) === ym).forEach((x) => { agg[x.accountId] = (agg[x.accountId] || 0) + x.amount; });
+  const agg = {}, bankBasis = S.acctBasis === 'bank' && feat('cardBill') && kind === 'out';
+  liveTx().filter((x) => counted(x) && x.kind === kind && !isUnc(x)).forEach((x) => {
+    if (bankBasis && isCredit(x) && (payOf(x.payMethodId) || {}).billingDay) {
+      billParts(x).forEach((p) => { if (p.ym === ym) agg[x.accountId] = (agg[x.accountId] || 0) + p.amount; });
+    } else if (ymOf(x.date) === ym) agg[x.accountId] = (agg[x.accountId] || 0) + x.amount;
+  });
   return agg;
 }
 function viewAcct(L) {
@@ -241,7 +395,7 @@ function viewAcct(L) {
   }
   return `<div class="stack">
     <div style="display:flex;flex-wrap:wrap;gap:12px">
-      <div class="seg" style="flex:1 1 300px;max-width:420px"><button class="on">쓴 날 기준</button><button data-act="basisSoon">통장 나간 날 기준</button></div>
+      ${feat('cardBill') ? `<div class="seg" style="flex:1 1 300px;max-width:420px">${[['use', '쓴 날 기준'], ['bank', '통장 나간 날 기준']].map(([k, l]) => `<button class="${(S.acctBasis || 'use') === k ? 'on' : ''}" data-act="acctBasis" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
       <div class="seg" style="flex:0 1 220px">${[['out', '지출'], ['in', '수입']].map(([k, l]) => `<button class="${k === kind ? 'on' : ''}" data-act="acctKind" data-k="${k}">${l}</button>`).join('')}</div>
     </div>
     <div class="calmonth"><button class="iconbtn" data-act="acctMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="acctMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>
@@ -255,6 +409,13 @@ function viewAcct(L) {
 }
 
 /* ───────── 설정 ───────── */
+// 이 색이 속한 묶음(빨강/파랑). 먹색이면 다른 쪽 색과 반대 묶음.
+function colorFamily(c, other) {
+  const inR = (x) => DATA.RED_OPTS.slice(0, 2).some(([v]) => v === x), inB = (x) => DATA.BLUE_OPTS.slice(0, 2).some(([v]) => v === x);
+  if (inR(c)) return DATA.RED_OPTS;
+  if (inB(c)) return DATA.BLUE_OPTS;
+  return inR(other) ? DATA.BLUE_OPTS : DATA.RED_OPTS;
+}
 function viewSettings() {
   const st = Store.get('meta', 'settings') || {};
   const book = Store.current();
@@ -270,8 +431,10 @@ function viewSettings() {
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart'))}
-      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + rowB('결제수단 · 카드', '3개 · 카드 등록은 4단계'))}
-      ${sec('자료', rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
+      ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
+      ${sec('통장 · 분류 · 결제', (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('카드 관리', `${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : ''))}
+      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
+      <input type="file" data-backup="merge" hidden>
       ${sec('잠금', rowB('비밀번호 변경', '', 'dlgPw') + rowB('자동 잠금 시간', (st.autoLockMin || 5) + '분', 'dlgAutoLock') + rowB('지금 잠그기', '', 'lock'))}
       ${sec('앱 정보', rowB('저장 위치', '이 기기 안 · 암호화') + rowB('앱 버전', S.version || '확인 중'))}
     </div>
@@ -285,12 +448,32 @@ function viewSettings() {
         <span class="sub" style="font-size:${px(14)}">색 테마 <span class="small">(그래프 · 계정 아이콘 · 여행 막대에만)</span></span>
         ${segOf([['세이지 뮤트', '세이지 뮤트(기본)'], ['로즈 웜', '로즈 웜'], ['기본', '먹색']], view.pal, 'setPal')}
         <div class="sw-row">${sw}</div>
-        <span class="sub" style="font-size:${px(14)}">수입 색</span>
-        <div class="chips">${colorOpts(DATA.IN_OPTS, view.inC, 'setIn', '+12,000원')}</div>
-        <span class="sub" style="font-size:${px(14)}">지출 색</span>
-        <div class="chips">${colorOpts(DATA.OUT_OPTS, view.outC, 'setOut', '−12,000원')}</div>
+        <span class="sub" style="font-size:${px(14)}">장부 종류 보이기 <span class="small">(이 기기에만 · 잠금 화면과 새 장부 만들기)</span></span>
+        <div class="chips">${DATA.LEDGER_TYPES.map((t) => `<button class="chip ${typeVisible(t.type) ? 'on' : ''}" data-act="toggleType" data-t="${t.type}" aria-pressed="${typeVisible(t.type)}">${typeVisible(t.type) ? ic('check', 14) : ''}${esc(t.defaultName)}</button>`).join('')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="sub" style="font-size:${px(14)}">수입 · 지출 색 <span class="small">(이 기기에만)</span></span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-act="swapColors">${ic('arrow-left-right', 16)}서로 바꾸기</button>${view.inC !== DATA.DEFAULT_IN || view.outC !== DATA.DEFAULT_OUT ? '<button class="btn" data-act="resetColors">기본으로</button>' : ''}</span></div>
+        <span class="sub small">수입</span>
+        <div class="chips">${colorOpts(colorFamily(view.inC, view.outC), view.inC, 'setIn', '+12,000원')}</div>
+        <span class="sub small">지출</span>
+        <div class="chips">${colorOpts(colorFamily(view.outC, view.inC), view.outC, 'setOut', '−12,000원')}</div>
       </section>
     </div>
+  </div>`;
+}
+
+/* ───────── 사용할 기능 (4-27) ───────── */
+const BUILT_STEP = 4; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
+function viewFeatures() {
+  const rows = DATA.FEATURES.map((f) => {
+    const on = feat(f.key), soonTxt = f.step > BUILT_STEP ? (f.step === 9 ? ' · 2차 기능' : ` · ${f.step}단계에서 만들어요`) : '';
+    return `<button class="row" style="min-height:64px" data-act="toggleFeat" data-k="${f.key}" role="switch" aria-checked="${on}">
+      <span class="k" style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">${esc(f.name)}</span><span class="sub small">${esc(f.desc)}${soonTxt}</span></span>
+      <span class="tg ${on ? 'on' : ''}"><i></i></span></button>`;
+  }).join('');
+  return `<div class="stack">
+    <div class="infoline">${ic('info', 18)}이 장부에만 적용돼요. 끄면 홈·메뉴·입력 화면에서 숨기기만 하고, 자료는 지우지 않아요. 다시 켜면 그대로 보여요.</div>
+    <div class="chips"><button class="btn" data-act="featPreset" data-p="simple">간단하게로 맞추기</button><button class="btn" data-act="featPreset" data-p="all">전부 켜기</button></div>
+    <section class="card" style="padding:4px 22px">${rows}</section>
   </div>`;
 }
 
@@ -318,7 +501,7 @@ function viewAcctEdit() {
         <div class="err" data-err></div></form>
       <span class="sub" style="font-size:${px(14)}">아이콘 고르기</span>
       <div class="icgrid">${icons}</div>
-      <span class="sub small" style="line-height:1.5">선 색은 수입이면 파랑, 지출이면 빨강으로 저절로 정해져요. 목록은 늘 ㄱㄴㄷ 순이에요.</span>
+      <span class="sub small" style="line-height:1.5">선 색은 설정의 수입 색 · 지출 색으로 저절로 정해져요. 목록은 늘 ㄱㄴㄷ 순이에요.</span>
       <button class="btn" style="align-self:flex-start;color:var(--out)" data-act="dlgDelAcc">이 계정 지우기</button>
     </section>` : ''}
   </div>`;
@@ -356,7 +539,7 @@ function viewDialog() {
     body = `<div class="dlg"><h2 class="dlg-title">자동 잠금 시간</h2><span class="sub small">이 시간 동안 손대지 않으면 장부가 잠겨요.</span>
       <div class="chips">${DATA.AUTO_LOCK_OPTS.map((m) => `<button class="chip ${m === cur ? 'on' : ''}" data-act="setAutoLock" data-v="${m}">${m}분</button>`).join('')}</div>${btns('닫기')}</div>`;
   } else if (D.type === 'switch') {
-    const others = S.ledgers.filter((l) => l.id !== Store.current().id);
+    const others = visibleLedgers().filter((l) => l.id !== Store.current().id);
     body = `<div class="dlg"><h2 class="dlg-title">장부 바꾸기</h2><span class="sub small">다른 장부를 열려면 지금 장부를 잠그고 그 장부의 비밀번호를 넣어야 해요.</span>
       <div class="chips">${others.map((l) => `<button class="chip" data-act="switchTo" data-id="${l.id}">${esc(l.name)}</button>`).join('')}<button class="chip" data-act="switchNew">${ic('plus', 14)}새 장부</button></div>${btns('닫기')}</div>`;
   } else if (D.type === 'discard') {
@@ -376,6 +559,36 @@ function viewDialog() {
       <div class="err" data-err></div>${btns('취소', '보기', 'type="submit"')}</form>`;
   } else if (D.type === 'bulk') {
     body = viewBulk(D);
+  } else if (D.type === 'bank') {
+    body = viewBankDlg(D);
+  } else if (D.type === 'adjust') {
+    const b = bankOf(D.id);
+    body = `<div class="dlg"><h2 class="dlg-title">잔액 맞추기 · ${esc(b.name)}</h2>
+      <span class="sub small">은행 앱에서 본 실제 잔액을 넣으면, 차이를 '잔액 조정'으로 기록해요. 수입·지출 합계에는 안 들어가요.</span>
+      <div class="drow" style="border-top:0"><span class="sub">앱에 있는 잔액</span><b>${balance(bankBalance(b.id))}</b></div>
+      <label class="field"><span class="label">실제 잔액</span><input class="input r" data-d="real" value="${esc(D.d.real)}" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off" data-autofocus></label>
+      <label class="check"><input type="checkbox" data-d="neg" ${D.d.neg ? 'checked' : ''}>실제 잔액이 마이너스예요 (마이너스 통장)</label>
+      <label class="field"><span class="label">날짜</span><input class="input" type="date" data-d="date" value="${esc(D.d.date)}"></label>
+      <div class="conf-note" data-part="adjDiff"></div>
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="adjustYes" data-part="adjBtn">확인하고 기록</button></div></div>`;
+  } else if (D.type === 'card') {
+    body = viewCardDlg(D);
+  } else if (D.type === 'bill') {
+    body = viewBillDlg(D);
+  } else if (D.type === 'rule') {
+    body = viewRuleDlg(D);
+  } else if (D.type === 'adjView') {
+    const x = Store.get('tx', D.id);
+    body = `<div class="dlg"><h2 class="dlg-title">${esc(txTitle(x))}</h2>
+      <div class="drow" style="border-top:0"><span class="sub">통장</span><b>${esc(bankName(x.bankId))}</b></div>
+      <div class="drow"><span class="sub">날짜</span><b>${dateLabel(x.date, true)}</b></div>
+      <div class="drow"><span class="sub">조정한 금액</span>${txAmt(x)}</div>
+      <span class="sub small">${x.kind === 'bill' ? '대금이 실제로 안 나갔으면 휴지통으로 옮기세요. 다시 할 일에 떠요.' : '잘못 넣었으면 휴지통으로 옮긴 뒤 다시 [잔액 맞추기]를 해 주세요.'}</span>
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button><button class="btn ink" data-act="adjDel" data-id="${x.id}">휴지통으로</button></div></div>`;
+  } else if (D.type === 'delBank') {
+    const b = bankOf(D.id);
+    body = `<div class="dlg"><h2 class="dlg-title">'${esc(b.name)}' 통장을 지울까요?</h2><span class="sub small">이 통장을 쓴 내역이 없어서 지울 수 있어요. 지우면 되살릴 수 없어요.</span>
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="delBankYes" data-id="${b.id}">지우기</button></div></div>`;
   } else if (D.type === 'addAcc') {
     body = `<form class="dlg" data-form="addAcc" autocomplete="off"><h2 class="dlg-title">계정 추가 · ${S.editKind === 'out' ? '지출' : '수입'}</h2>
       <input class="input" name="name" maxlength="20" placeholder="계정 이름" data-autofocus>
@@ -384,12 +597,63 @@ function viewDialog() {
     const a = accOf(S.editAccId);
     body = `<div class="dlg"><h2 class="dlg-title">'${esc(a.name)}' 계정을 지울까요?</h2><span class="sub small">이 계정을 쓴 내역이 없어서 지울 수 있어요. 지우면 되살릴 수 없어요.</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="delAccYes">지우기</button></div></div>`;
+  } else if (['backup', 'restore', 'device', 'newFromBackup'].includes(D.type)) {
+    body = viewBackupDlg(D);
   } else if (D.type === 'emptyTrash') {
     const n = Store.all('tx').filter((x) => x.deleted).length;
     body = `<div class="dlg"><h2 class="dlg-title">휴지통을 비울까요?</h2><span class="sub small">${n}건이 완전히 지워지고 되살릴 수 없어요.</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="emptyTrashYes">완전히 지우기</button></div></div>`;
   }
   return `<div class="dim" data-act="dimClose">${body}</div>`;
+}
+
+/* 통장 만들기 · 고치기 (양식 → "이대로 저장할까요?") */
+function newBankDraft(type) {
+  return { name: '', type: type || 'home', bank: '', owner: '', memo: '', openDate: todayStr(), openBalance: '', neg: false, goal: '', accountNo: '', closed: false, closedDate: '' };
+}
+function bankDraftFrom(b) {
+  return { name: b.name, type: b.type, bank: b.bank || '', owner: b.owner || '', memo: b.memo || '', openDate: b.openDate || '', openBalance: comma(Math.abs(b.openBalance || 0)), neg: (b.openBalance || 0) < 0, goal: comma(b.goal || 0), accountNo: b.accountNo || '', closed: !!b.closed, closedDate: b.closedDate || '' };
+}
+function viewBankDlg(D) {
+  const d = D.d, isNew = !D.id;
+  const title = isNew ? (d.type === 'sep' ? '별도 통장 추가' : '통장 추가') : '통장 고치기';
+  if (D.step === 'confirm') {
+    const ob = toInt(d.openBalance) * (d.neg ? -1 : 1);
+    const rows = [['이름', d.name], ['종류', d.type === 'sep' ? '별도 통장 (가계부 합계에서 빠져요)' : '가계부 통장 (가계부 합계에 들어가요)'], ['은행', d.bank || '—'], ['명의', d.owner || '—'], ['용도', d.memo || '—'],
+      ['시작', `${d.openDate ? dateLabel(d.openDate, true) : '처음부터'} · ${ob < 0 ? '−' : ''}${won(ob)}원`],
+      ...(d.type === 'sep' ? [['목표', toInt(d.goal) ? won(toInt(d.goal)) + '원' : '없음']] : []),
+      ['계좌번호', d.accountNo ? '··· ' + last4(d.accountNo) + ' (암호화 저장)' : '—'],
+      ...(d.closed ? [['상태', `해지 · ${d.closedDate || '날짜 없음'}`]] : [])];
+    return `<div class="dlg"><h2 class="dlg-title">이대로 저장할까요?</h2>
+      <div>${rows.map(([k, v]) => `<div class="conf-row"><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`).join('')}</div>
+      <div class="dlg-btns"><button class="btn" data-act="bankBack">고치기</button><button class="btn ink" data-act="bankSave">확인하고 저장</button></div></div>`;
+  }
+  const used = !isNew && Store.all('tx').some((x) => touches(x, D.id));
+  return `<div class="dlg" style="max-width:520px"><h2 class="dlg-title">${title}</h2>
+    <label class="field"><span class="label">이름</span><input class="input" data-d="name" value="${esc(d.name)}" maxlength="20" placeholder="예: 생활비 통장, 비상금" autocomplete="off" data-autofocus></label>
+    <div class="field"><span class="label">종류 <span style="font-weight:400">(언제든 바꿀 수 있어요)</span></span>
+      <div class="seg"><button class="${d.type === 'home' ? 'on' : ''}" data-act="bankType" data-v="home">가계부 통장</button>${feat('sepBanks') || d.type === 'sep' ? `<button class="${d.type === 'sep' ? 'on' : ''}" data-act="bankType" data-v="sep">별도 통장</button>` : ''}</div>
+      <span class="sub small">${d.type === 'sep' ? '비상금·여행·적금·자녀 통장처럼 따로 보는 통장. 가계부 수입·지출과 자산 합계에서 빠지고, 별도 화면에서만 보여요.' : '생활비·월급·카드 대금 통장처럼 가계부에 넣는 통장. 수입·지출과 자산 합계에 들어가요.'}</span></div>
+    <div class="cols" style="gap:10px">
+      <label class="field" style="flex:1 1 180px"><span class="label">은행</span><input class="input" data-d="bank" value="${esc(d.bank)}" list="bankNames" autocomplete="off"></label>
+      <label class="field" style="flex:1 1 140px"><span class="label">명의</span><input class="input" data-d="owner" value="${esc(d.owner)}" list="ownerNames" autocomplete="off"></label>
+    </div>
+    <datalist id="bankNames">${DATA.BANK_NAMES.map((n) => `<option value="${n}">`).join('')}</datalist>
+    <datalist id="ownerNames">${DATA.OWNERS.map((n) => `<option value="${n}">`).join('')}</datalist>
+    <label class="field"><span class="label">용도 메모</span><input class="input" data-d="memo" value="${esc(d.memo)}" placeholder="예: 매달 관리비 빠지는 통장" autocomplete="off"></label>
+    <div class="cols" style="gap:10px">
+      <label class="field" style="flex:1 1 160px"><span class="label">시작 날짜</span><input class="input" type="date" data-d="openDate" value="${esc(d.openDate)}"></label>
+      <label class="field" style="flex:1 1 160px"><span class="label">그날 잔액 (시작 잔액)</span><input class="input r" data-d="openBalance" value="${esc(d.openBalance)}" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off"></label>
+    </div>
+    <label class="check"><input type="checkbox" data-d="neg" ${d.neg ? 'checked' : ''}>시작 잔액이 마이너스예요 (마이너스 통장)</label>
+    ${d.type === 'sep' ? `<label class="field"><span class="label">목표 금액 <span style="font-weight:400">(선택)</span></span><input class="input r" data-d="goal" value="${esc(d.goal)}" inputmode="numeric" pattern="[0-9]*" placeholder="예: 4,000,000" autocomplete="off"></label>` : ''}
+    <label class="field"><span class="label">계좌번호 <span style="font-weight:400">(선택 · 암호화 저장, 화면엔 뒤 4자리만)</span></span><input class="input" data-d="accountNo" value="${esc(d.accountNo)}" inputmode="numeric" autocomplete="off"></label>
+    ${isNew ? '' : `<label class="check"><input type="checkbox" data-d="closed" ${d.closed ? 'checked' : ''}>해지한 통장이에요 (입력 목록에서 숨기고, 지난 내역은 그대로 둬요)</label>
+      ${d.closed ? `<label class="field"><span class="label">해지일</span><input class="input" type="date" data-d="closedDate" value="${esc(d.closedDate)}"></label>` : ''}`}
+    <div class="err" data-err></div>
+    <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="bankNext">저장</button></div>
+    ${isNew ? '' : `<button class="btn ghost" style="align-self:flex-start;color:var(--out)" data-act="delBank" data-id="${D.id}" ${used ? 'disabled title="내역이 있어서 지울 수 없어요"' : ''}>${used ? '내역이 있어 지울 수 없어요 · 해지를 써 주세요' : '이 통장 지우기'}</button>`}
+  </div>`;
 }
 
 /* 여러 건 한 번에 바꾸기 */
@@ -408,13 +672,20 @@ function viewBulk(D) {
   } else if (D.what === 'pay') {
     pick = `<div class="chips">${Store.all('payMethods').filter((p) => !p.hidden).sort((a, b) => a.order - b.order).map((p) => `<button class="chip ${D.val === p.id ? 'on' : ''}" data-act="bulkVal" data-v="${p.id}">${esc(p.name)}</button>`).join('')}</div>`;
     if (D.val) { summary = `${n}건의 결제수단을 '${esc(payOf(D.val).name)}'(으)로 바꿔요.`; ok = true; }
+  } else if (D.what === 'bank') {
+    pick = bankChips(D.val, 'bulkVal');
+    if (D.val) {
+      const okN = xs.filter((x) => isMoney(x) && (payOf(x.payMethodId) || {}).kind !== 'card').length;
+      summary = `${okN}건의 통장을 '${esc(bankName(D.val))}'(으)로 정해요. 결제가 현금이던 건은 계좌이체로 바뀌어요.${okN < n ? ` 카드·이체 ${n - okN}건은 그대로 둬요.` : ''}`;
+      ok = okN > 0;
+    }
   } else if (D.what === 'date') {
     pick = `<input class="input" type="date" data-bulkdate value="${D.val || ''}">`;
     if (D.val) { summary = `${n}건의 날짜를 ${dateLabel(D.val, true)}로 바꿔요.`; ok = true; }
   } else if (D.what === 'del') {
     summary = `${n}건을 휴지통으로 옮겨요. 30일 안에는 되살릴 수 있어요.`; ok = true;
   }
-  const title = { cat: '분류 바꾸기', pay: '결제수단 바꾸기', date: '날짜 바꾸기', del: '휴지통으로 옮기기' }[D.what];
+  const title = { cat: '분류 바꾸기', pay: '결제수단 바꾸기', bank: '통장 바꾸기', date: '날짜 바꾸기', del: '휴지통으로 옮기기' }[D.what];
   return `<div class="dlg"><h2 class="dlg-title">${title} · ${n}건</h2>${pick}
     ${summary ? `<div class="conf-note">${summary}<br><b>이대로 바꿀까요?</b></div>` : ''}
     <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="bulkApply" ${ok ? '' : 'disabled'}>${D.what === 'del' ? '휴지통으로' : '확인하고 바꾸기'}</button></div></div>`;
