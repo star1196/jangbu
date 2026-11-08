@@ -517,3 +517,13 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .dictrow { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
 .dictrow:first-child { border-top: 0; }
 .dicta { display: flex; align-items: center; gap: 6px; font-size: calc(14px * var(--fs)); }
+/* ── 파일 올리기: 제목 줄 고르기 · 실제 값 미리보기 ── */
+.hrow { display: flex; align-items: center; gap: 10px; width: 100%; min-width: fit-content; min-height: 44px; padding: 6px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--ink); font-size: calc(13px * var(--fs)); text-align: left; cursor: pointer; }
+.hrow:first-child { border-top: 0; }
+.hrow:hover, .hrow.on { background: var(--bg); box-shadow: inset 3px 0 0 var(--ink); }
+.hrow span { flex: 0 0 calc(110px * var(--fs)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hrow .hn { flex: 0 0 calc(28px * var(--fs)); color: var(--sub); font-weight: 700; text-align: right; }
+.peek { border-collapse: collapse; width: max-content; min-width: 100%; font-size: calc(13px * var(--fs)); }
+.peek th, .peek td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
+.peek th { font-weight: 700; background: var(--bg); }
+.peekf { display: inline-block; margin-top: 2px; padding: 0 6px; border-radius: 8px; background: var(--ink); color: var(--sf); font-size: calc(11px * var(--fs)); font-weight: 600; }

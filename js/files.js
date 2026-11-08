@@ -81,15 +81,24 @@ function guessField(h) {
   if (/메모|비고/.test(s)) return 'memo';
   return '';
 }
-// 머리글 줄 찾기: 앞 30줄 중 글자 칸이 3개 이상이고, 바로 아래 줄들에 날짜가 있는 줄
+// 머리글(제목) 줄 찾기: 카드사 명세서는 위쪽에 요약 칸(결제정보·출금일·결제금액…)이 있어서
+// '날짜 이름 + 가맹점 이름 + 금액 이름'이 함께 있고, 바로 아래 몇 줄에 날짜가 이어지는 줄에 점수를 줘서 가장 높은 줄을 고름
+const HEAD_WORDS = { date: /(일자|날짜|거래일|이용일|승인일|사용일|매출일|거래일시|이용일시)/, mer: /(가맹점|이용처|사용처|내용|적요|거래처|상호|기재|받는분|보낸분)/, amt: /(금액|출금|입금|찾으신|맡기신|이용액)/, etc: /(할부|카드|승인번호|잔액|구분|수수료|포인트|메모|비고)/ };
+function headScore(rows, i) {
+  const cs = (rows[i] || []).filter((c) => typeof c === 'string' && c.trim()).map((c) => c.replace(/\s/g, ''));
+  if (cs.length < 2) return 0;
+  const has = (re) => cs.some((c) => re.test(c) && c.length <= 12);
+  const d = has(HEAD_WORDS.date), m = has(HEAD_WORDS.mer), a = has(HEAD_WORDS.amt);
+  if (!d || !(m || a)) return 0;
+  // 아래 6줄 중 날짜가 든 줄 수 (요약 칸 아래엔 날짜가 한 줄뿐, 내역 표 아래엔 여러 줄)
+  const dated = rows.slice(i + 1, i + 8).filter((b) => (b || []).slice(0, 4).some((c) => parseDateCell(c))).length;
+  if (!dated) return 0;
+  return 3 + (m ? 3 : 0) + (a ? 2 : 0) + Math.min(3, cs.filter((c) => HEAD_WORDS.etc.test(c)).length) + Math.min(4, dated);
+}
 function findHeader(rows) {
-  for (let i = 0; i < Math.min(30, rows.length - 1); i++) {
-    const r = rows[i] || [], texts = r.filter((c) => typeof c === 'string' && c.trim() && !parseDateCell(c) && !/^[\d,.\-\s]+$/.test(c));
-    if (texts.length < 3) continue;
-    const below = rows.slice(i + 1, i + 6);
-    if (below.some((b) => (b || []).some((c) => parseDateCell(c)))) return i;
-  }
-  return -1;
+  let best = -1, bs = 0;
+  for (let i = 0; i < Math.min(80, rows.length - 1); i++) { const s = headScore(rows, i); if (s > bs) { bs = s; best = i; } }
+  return best;
 }
 const sigOf = (hdr) => hdr.map((c) => norm(c)).join('|');
 function sigSimilar(a, b) { const A = a.split('|').filter(Boolean), B = new Set(b.split('|').filter(Boolean)); if (!A.length) return 0; return A.filter((x) => B.has(x)).length / Math.max(A.length, B.size); }
@@ -181,26 +190,58 @@ async function startImport(file) {
   try {
     const rf = await readFile(file), { name, sheets } = rf;
     const sh = rf.pdf ? { ...sheets[0], h: 0 } : sheets.map((s) => ({ ...s, h: findHeader(s.rows) })).sort((a, b) => (b.h >= 0) - (a.h >= 0) || b.rows.length - a.rows.length)[0];
-    if (sh.h < 0) throw new Error('날짜가 있는 표를 찾지 못했어요. 카드·통장 거래내역 파일이 맞는지 봐 주세요.');
-    const hdr = (sh.rows[sh.h] || []).map((c) => String(c).trim());
-    const sig = rf.pdf ? `pdf ${norm(rf.pdfCo) || '?'}|` + sigOf(hdr) : sigOf(hdr); // PDF는 카드사·은행 이름으로 구분
-    const tpls = Store.all('templates');
-    const exact = tpls.find((t) => t.sig === sig);
-    const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
-    S.imp = { step: 'map', name, rows: sh.rows, h: sh.h, hdr, sig, sheet: sh.name, sheetsN: sheets.length, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {}, pdf: !!rf.pdf };
-    hdr.forEach((h, i) => { S.imp.map[i] = guessField(h); });
-    if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; }
-    else if (near) { S.imp.ask = near[0].id; }
-    render();
+    if (sh.h < 0) { // 제목 줄을 못 찾음 → 위 20줄을 보여 주고 사람이 고름
+      S.imp = { step: 'pickHead', name, sheets, sheetI: sheets.indexOf(sheets.find((s) => s.name === sh.name)), pdf: false };
+      render(); return;
+    }
+    setImpHeader({ name, rows: sh.rows, h: sh.h, sheet: sh.name, sheets, pdf: !!rf.pdf, pdfCo: rf.pdfCo, auto: true });
   } catch (e) {
     S.imp = { step: 'drop' }; render(); toast(e.message || '파일을 읽지 못했어요');
   }
+}
+// 제목 줄이 정해지면: 칸 이름 → 기억한 서식 찾기 → (처음 보는 모양이면) 칸 지정
+function setImpHeader(o) {
+  const hdr = (o.rows[o.h] || []).map((c) => String(c ?? '').trim());
+  const sig = o.pdf ? `pdf ${norm(o.pdfCo) || '?'}|` + sigOf(hdr) : sigOf(hdr); // PDF는 카드사·은행 이름으로 구분
+  const tpls = Store.all('templates');
+  const exact = tpls.find((t) => t.sig === sig);
+  const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
+  S.imp = { step: 'map', name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
+  const used = new Set();
+  hdr.forEach((h, i) => { let f = guessField(h); if (f && f !== 'merchant' && f !== 'skip' && f !== 'memo') { if (used.has(f)) f = ''; else used.add(f); } S.imp.map[i] = f; }); // 같은 종류가 두 칸이면 앞 칸만 (이용금액 vs 이번달 결제금액)
+  if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; }
+  else if (near) { S.imp.ask = near[0].id; }
+  render();
+}
+// 제목 줄 고르기 화면 (못 찾았을 때 · [제목 줄 다시 고르기])
+function viewPickHead(L) {
+  const I = S.imp, sh = I.sheets[I.sheetI || 0], rows = sh.rows.slice(0, 20);
+  const cell = (c) => { const s = c instanceof Date ? ymd(c) : String(c ?? '').trim(); return esc(s.length > 14 ? s.slice(0, 14) + '…' : s); };
+  const maxC = Math.min(8, Math.max(1, ...rows.map((r) => (r || []).reduce((m, c, j) => (String(c ?? '').trim() ? j + 1 : m), 0))));
+  return `<div class="stack" style="max-width:900px;gap:12px">
+    <section class="card card-pad" style="display:flex;flex-direction:column;gap:6px">${ic('file-spreadsheet', 26, 'var(--sub)')}<span style="font-size:${px(17)};font-weight:700">${esc(I.name)}</span>
+      <span style="font-size:${px(15)};line-height:1.55">사용 내역 표의 <b>제목 줄</b>(이용일 · 가맹점 · 금액 같은 이름이 적힌 줄)이 몇 번째 줄인가요? 그 줄을 눌러 주세요.</span></section>
+    ${I.sheets.length > 1 ? `<div class="chips">${I.sheets.map((s, i) => `<button class="chip ${i === (I.sheetI || 0) ? 'on' : ''}" data-act="impSheet" data-i="${i}">${esc(s.name)}</button>`).join('')}</div>` : ''}
+    <section class="card" style="overflow-x:auto">${rows.map((r, i) => `<button class="hrow ${i === I.h ? 'on' : ''}" data-act="impHead" data-i="${i}"><span class="hn">${i + 1}</span>${Array.from({ length: maxC }, (_, j) => `<span>${cell((r || [])[j])}</span>`).join('')}</button>`).join('')}</section>
+    <div class="chips"><button class="btn" data-act="impReset">다른 파일 올리기</button>${I.backTo ? '<button class="btn" data-act="impHeadCancel">취소</button>' : ''}</div>
+  </div>`;
 }
 function applyTemplate(t) {
   const I = S.imp; I.tplId = t.id; I.target = { ...t.target }; I.map = {};
   I.hdr.forEach((h, i) => { const f = t.byName && t.byName[norm(h)]; I.map[i] = f != null ? f : (t.map[i] || ''); });
 }
-function exampleOf(i) { const I = S.imp; return I.rows.slice(I.h + 1, I.h + 4).map((r) => String((r || [])[i] ?? '').trim()).filter(Boolean).slice(0, 2).join(' · '); }
+// 제목 줄 아래 실제 내역 줄(날짜가 든 줄) 처음 몇 개
+function dataRowsOf(I, n) { return I.rows.slice(I.h + 1).filter((r) => (r || []).some((c) => parseDateCell(c))).slice(0, n); }
+const cellTxt = (c) => (c instanceof Date ? ymd(c) : String(c ?? '').trim());
+function exampleOf(i) { const I = S.imp; return dataRowsOf(I, 4).map((r) => cellTxt((r || [])[i])).filter(Boolean).slice(0, 2).join(' · '); }
+// 칸 지정 화면 위: 실제 값 5줄 미리보기 표 (어떤 칸인지 알아보기 쉽게)
+function impPeekTable(I) {
+  const cols = I.hdr.map((h, i) => i).filter((i) => I.hdr[i] || dataRowsOf(I, 5).some((r) => cellTxt((r || [])[i])));
+  const lab = (i) => (FIELDS.find((f) => f[0] === I.map[i]) || ['', ''])[1];
+  const short = (s) => esc(s.length > 16 ? s.slice(0, 16) + '…' : s);
+  return `<section class="card" style="overflow-x:auto"><table class="peek"><thead><tr>${cols.map((i) => `<th><span class="sub small">${String.fromCharCode(65 + (i % 26))}칸</span><br>${short(I.hdr[i].replace(/\s+/g, ' ') || '(제목 없음)')}${I.map[i] && I.map[i] !== 'skip' ? `<br><span class="peekf">${lab(i)}</span>` : ''}</th>`).join('')}</tr></thead>
+    <tbody>${dataRowsOf(I, 5).map((r) => `<tr>${cols.map((i) => `<td>${short(cellTxt((r || [])[i]))}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`;
+}
 
 /* ── 미리보기 줄 만들기 ── */
 function buildItems() {
@@ -209,7 +250,16 @@ function buildItems() {
   const items = [];
   I.rows.slice(I.h + 1).forEach((r, ri) => {
     r = r || [];
-    const date = parseDateCell(r[cD]); if (!date) return;
+    const date = parseDateCell(r[cD]);
+    if (!date) {
+      // 날짜 없는 줄: 바로 위 결제의 할인(−금액)이면 그 결제에 할인으로 합침 (예: 국민카드 '○○ 할인 −12,000')
+      const last = items[items.length - 1], mm = cM.map((c) => String(r[c] ?? '').trim()).filter(Boolean).join(' ');
+      const a = cO != null ? parseAmt(r[cO]) : cA != null ? parseAmt(r[cA]) : 0;
+      if (last && last.kind === 'out' && a < 0 && mm && !/합\s*계|소\s*계|total/i.test(mm) && last.row === ri - 1 - (last.disc ? 1 : 0)) {
+        last.disc = (last.disc || 0) - a; last.amount += a; last.discMemo = [last.discMemo, `${mm} ${won(-a)}원`].filter(Boolean).join(', ');
+      }
+      return;
+    }
     const merchant = cM.map((c) => String(r[c] ?? '').trim()).filter(Boolean).join(' ');
     let out = cO != null ? parseAmt(r[cO]) : 0, inn = cI != null ? parseAmt(r[cI]) : 0;
     if (cA != null) { const a = parseAmt(r[cA]); if (T.type === 'card') out = a; else if (a < 0) out = -a; else inn = a; }
@@ -298,6 +348,7 @@ function viewFile(L) {
       ${Store.all('templates').length ? `<button class="btn" style="align-self:flex-start" data-act="go" data-to="파일 서식">${ic('file-spreadsheet', 18)}기억한 파일 모양 ${Store.all('templates').length}개</button>` : ''}
     </div>`;
   }
+  if (I.step === 'pickHead') return viewPickHead(L);
   if (I.step === 'map') return viewMap(L);
   if (I.step === 'preview') return viewPreview(L);
   if (I.step === 'done') {
@@ -334,7 +385,9 @@ function viewMap(L) {
   return `<div class="stack" style="max-width:860px;gap:14px">
     <section class="card card-pad" style="display:flex;align-items:flex-start;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:${px(16)};font-weight:700">${esc(I.name)}${I.sheetsN > 1 ? ` <span class="sub small">· ${esc(I.sheet)} 시트</span>` : ''}</span>
-      <span style="font-size:${px(14)};line-height:1.55">${I.pdf ? 'PDF에서 줄마다 날짜 · 내용 · 금액을 찾아 읽었어요. 어디 내역인지 골라 주세요. PDF는 틀리게 읽을 수 있어서 미리보기에서 꼭 확인해 주세요.' : '처음 보는 파일 모양이에요. 어느 칸이 무엇인지 한 번만 알려 주세요. 다음부터는 저절로 읽어요.'}</span></div></section>
+      <span style="font-size:${px(14)};line-height:1.55">${I.pdf ? 'PDF에서 줄마다 날짜 · 내용 · 금액을 찾아 읽었어요. 어디 내역인지 골라 주세요. PDF는 틀리게 읽을 수 있어서 미리보기에서 꼭 확인해 주세요.' : `처음 보는 파일 모양이에요. 어느 칸이 무엇인지 한 번만 알려 주세요. 다음부터는 저절로 읽어요.<br><span class="sub small">사용 내역 표의 제목 줄: <b>${I.h + 1}번째 줄</b>${I.autoHead ? '(저절로 찾음)' : ''}</span>`}</span></div>
+      ${I.pdf || !I.sheets ? '' : '<button class="btn" style="flex:none" data-act="impRepick">제목 줄 다시 고르기</button>'}</section>
+    ${I.pdf ? '' : impPeekTable(I)}
     <section class="card card-pad" style="display:flex;flex-direction:column;gap:10px">
       <span class="label">이 파일은 어디 내역인가요?</span>
       <div class="seg" style="max-width:420px"><button class="${T.type === 'card' ? 'on' : ''}" data-act="impTarget" data-t="card">카드 명세서</button><button class="${T.type === 'bank' ? 'on' : ''}" data-act="impTarget" data-t="bank">통장 거래내역</button></div>
@@ -361,6 +414,7 @@ function viewPreview(L) {
       : it.same ? `<span class="pnote">직접 입력한 것과 같은 건인가요? <button class="mini ${it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="1">같음</button><button class="mini ${!it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="0">다름</button></span>`
         : it.pend ? `<span class="pnote ok">${ic('repeat', 12)}반복 입력 확인 대기와 같은 건 · 새로 만들지 않고 확인으로 바꿔요</span>`
         : it.cancelOf ? `<span class="pnote">취소 · ${dateLabel(it.cancelOf.date)} 결제와 짝</span>`
+        : it.disc ? `<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 반영 (원래 ${won(it.amount + it.disc)}원)</span>`
           : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>' : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
   const row = (it) => {
@@ -423,7 +477,8 @@ async function saveImport() {
       o = { kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo, accountId: it.accId || null, payMethodId: it.payId || null,
         bankId: pc && pc.kind === 'card' ? (pc.cardType === 'check' ? pc.bankId || null : null) : it.bankId || null,
         installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst } : null, approval: it.approval || '',
-        status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, originalPrice: 0, discount: 0, pointUsed: 0, deleted: false };
+        status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
+      if (it.discMemo) o.memo = [o.memo, '할인: ' + it.discMemo].filter(Boolean).join(' · ');
       if (!it.accId) uncN++;
     }
     const s = await Store.put('tx', o); undo.push({ col: 'tx', id: s.id, before: null }); savedN++;
@@ -601,6 +656,10 @@ function viewTemplates() {
 const FILE_ACT = {
   file: () => { S.imp = { step: 'drop' }; go('파일 올리기'); },
   impReset: () => { S.imp = { step: 'drop' }; render(); },
+  impSheet: (el) => { S.imp.sheetI = +el.dataset.i; S.imp.h = null; render(); },
+  impHead: (el) => { const I = S.imp, sh = I.sheets[I.sheetI || 0]; setImpHeader({ name: I.name, rows: sh.rows, h: +el.dataset.i, sheet: sh.name, sheets: I.sheets, pdf: false, auto: false }); },
+  impRepick: () => { const I = S.imp; S.imp = { step: 'pickHead', name: I.name, sheets: I.sheets, sheetI: Math.max(0, I.sheets.findIndex((s) => s.name === I.sheet)), h: I.h, backTo: I }; render(); },
+  impHeadCancel: () => { S.imp = S.imp.backTo; render(); },
   impAskYes: () => { const I = S.imp; applyTemplate(Store.get('templates', I.ask)); I.ask = null; buildItems(); I.step = 'preview'; render(); },
   impAskNo: () => { S.imp.ask = null; render(); },
   impTarget: (el) => { S.imp.target.type = el.dataset.t; if (el.dataset.t === 'bank' && !S.imp.target.bankId) S.imp.target.bankId = (banksOpen('home')[0] || {}).id || ''; render(); },
