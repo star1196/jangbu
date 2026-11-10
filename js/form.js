@@ -153,6 +153,7 @@ function viewSheet() {
     const showMore = feat('discount') || f.orig || f.disc || f.point;
     inner = `${head(f.mode === 'edit' ? '고치기' : '입력', feat('receipt') ? `<button class="chip" style="border-radius:22px;font-weight:600" data-act="receipt">${ic('camera', 18)}영수증 찍기</button>` : '')}
       <div class="sheet-body">
+        ${f.rc ? `<div class="rcbanner">${ic('receipt', 20)}<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><b>영수증에서 읽었어요</b>${f.rc.info.length ? `<span class="small">${esc(f.rc.info.join(' · '))}</span>` : ''}${f.rc.missing.length ? `<span class="small" style="color:var(--warn);font-weight:700">주황 칸은 못 읽은 곳이에요. 채워 주세요.</span>` : `<span class="small">맞는지 보고 [저장]을 눌러 주세요.</span>`}${f.rc.warn ? `<span class="small" style="color:var(--warn)">${esc(f.rc.warn)}</span>` : ''}</div></div>` : ''}
         <div class="seg">${kinds}</div>
         <div class="field">
           <span class="label">날짜</span>
@@ -219,10 +220,20 @@ function viewTransferPart(f) {
     <div class="trprev" data-part="trPrev"></div>`;
 }
 
+// 영수증에서 못 읽은 칸은 주황 테두리 (채우면 없어짐)
+const MISS_SEL = { date: ['[data-f="y"]', '[data-f="mo"]', '[data-f="d"]'], amount: ['.amtline'], merchant: ['[data-f="merchant"]'], pay: ['[data-part="pays"]'] };
+function updMiss() {
+  const f = S.f; if (!f) return;
+  const miss = (f.rc && f.rc.missing) || [];
+  Object.entries(MISS_SEL).forEach(([k, sels]) => sels.forEach((s) => { const el = $app.querySelector('.sheet ' + s); if (el) el.classList.toggle('miss', miss.includes(k)); }));
+}
+function unMiss(k) { const f = S.f; if (f && f.rc && f.rc.missing.includes(k)) { f.rc.missing = f.rc.missing.filter((x) => x !== k); updMiss(); } }
+
 // 화면을 그린 뒤 바뀌는 부분 채우기
 function fillSheet() {
   if (!S.f || S.f.step !== 'form') return;
   updDate(); updAmt(); updCats(); updMer();
+  updMiss();
 }
 // 여행 묶음 칩: 사람이 고르기 전에는 날짜가 여행 기간이면 그 여행을 미리 골라 둠 (4-17)
 function updTrip() {
@@ -303,6 +314,7 @@ function recompute(from) {
 /* ── 글자 칠 때 ── */
 function onFormInput(el) {
   const f = S.f, name = el.dataset.f, v = el.value;
+  if (f.rc) { if (['y', 'mo', 'd'].includes(name)) unMiss('date'); else if (name === 'amount' || name === 'merchant') unMiss(name); }
   if (name === 'y') {
     const dg = digits(v);
     // 261225처럼 년 2자리로 시작하면: 6자리가 되는 순간 알아듣고 금액 칸으로
@@ -416,7 +428,8 @@ async function formFinal() {
   const f = S.f;
   const before = f.id ? { ...Store.get('tx', f.id) } : null;
   const date = `${f.y}-${pad2(+f.mo)}-${pad2(+f.d)}`;
-  const common = { ...(before || {}), id: f.id || undefined, date, kind: f.kind, amount: f.amount, memo: f.memo.trim(), source: (before && before.source) || '직접', deleted: false };
+  const common = { ...(before || {}), id: f.id || undefined, date, kind: f.kind, amount: f.amount, memo: f.memo.trim(), source: (before && before.source) || (f.rc ? '영수증' : '직접'), deleted: false,
+    ...(f.rc ? { approval: f.rc.approval || '', receiptHash: f.rc.hash, receiptTime: f.rc.time || '' } : {}) };
   const obj = f.kind === 'tr'
     ? { ...common, fromId: f.fromId, toId: f.toId, merchant: '', accountId: null, payMethodId: null, bankId: null, status: '확인', originalPrice: 0, discount: 0, pointUsed: 0 }
     : {
@@ -491,6 +504,7 @@ const FORM_ACT = {
   fPay: (el) => {
     const f = S.f;
     f.payId = el.dataset.id;
+    if (f.rc) f.rc.missing = f.rc.missing.filter((x) => x !== 'pay');
     if (needsBank(f) && !f.bankId) f.bankId = lastBankId();
     if (!formCard(f)) { f.inst = 1; f.perfEx = false; }
     render();

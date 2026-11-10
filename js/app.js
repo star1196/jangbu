@@ -241,10 +241,10 @@ function viewApp(L) {
       <div class="top-right"><button class="iconbtn" data-act="lock" aria-label="잠그기">${ic('lock', 22)}</button></div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
-    ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="input">${ic('plus', 20)}입력</button></div>` : ''}
+    ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
     ${compact ? `<nav class="tabbar" aria-label="메뉴">${nav()}</nav>` : ''}
   </main>
-  ${showFab ? `<button class="fab" data-act="input" aria-label="입력">${ic('plus', 28)}</button>` : ''}
+  ${showFab ? `<button class="fab" data-act="${phone ? 'plus' : 'input'}" aria-label="입력">${ic('plus', 28)}</button>` : ''}
   ${showSel ? `<div class="selbar"><span style="font-size:${px(15)};font-weight:700">${pickedN}건 선택됨</span><span style="flex:1"></span>
     ${[['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ...(feat('trips') ? [['trip', '묶음 붙이기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']].map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
 }
@@ -364,7 +364,6 @@ const ACT = {
   search: () => { S.q = S.q || ''; S.qTab = '통합'; go('검색'); },
   input: () => openNew(),
   inputOn: (el) => { const f = newForm(); const [y, mo, d] = el.dataset.date.split('-'); Object.assign(f, { y, mo, d }); openForm(f); },
-  receipt: () => toast('영수증 찍기는 2차 기능이에요'),
   file: () => soon('파일 올리기', 4),
   repeatSoon: () => { if (!S.detail) return; S.f = { id: S.detail }; PLAN_ACT.repFromTx(); },
   basisSoon: () => toast('통장 나간 날 기준은 카드 대금을 만드는 4단계에서 열려요'),
@@ -507,6 +506,14 @@ const ACT = {
   emptyTrashYes: async () => { for (const x of Store.all('tx').filter((t) => t.deleted)) await Store.remove('tx', x.id); S.dialog = null; render(); toast('휴지통을 비웠어요'); },
   // 대화 상자 · 장부
   closeDlg: () => { S.dialog = null; render(); },
+  // 휴대폰 ＋: [직접 입력] [영수증 찍기] [파일 올리기] 중 고르기 (켠 기능만)
+  plus: () => {
+    if (layout() !== 'phone') { ACT.input(); return; }
+    const ways = ['input', ...(feat('receipt') ? ['receipt'] : []), ...(feat('files') ? ['file'] : [])];
+    if (ways.length === 1) { ACT.input(); return; }
+    S.dialog = { type: 'plus', ways }; render();
+  },
+  plusGo: (el) => { S.dialog = null; render(); ACT[el.dataset.w](el); },
   errRetry: () => { const f = errRetry; S.dialog = null; render(); if (f) safeRun(f); },
   errCopy: async () => { const ok = await copyText(errDetail); toast(ok ? '오류 내용을 복사했어요. Claude에게 붙여 넣어 주세요' : '복사하지 못했어요. 화면을 캡처해 주세요'); },
   errReload: () => location.reload(),
@@ -557,6 +564,7 @@ const ACT = {
   ...PLAN_ACT,
   ...MORE_ACT,
   ...XL_ACT,
+  ...RC_ACT,
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
@@ -768,7 +776,7 @@ async function boot() {
     navigator.serviceWorker.ready
       .then(() => new Promise((r) => setTimeout(r, 500)))
       .then(() => caches.keys())
-      .then((keys) => { S.version = keys.filter((k) => k.startsWith('jangbu-')).sort().pop() || ''; if (S.mode === 'app' && S.screen === '설정' && !S.dialog && !S.f) render(); })
+      .then((keys) => { S.version = keys.filter((k) => /^jangbu-v\d+$/.test(k)).sort((a, b) => +a.slice(8) - +b.slice(8)).pop() || ''; if (S.mode === 'app' && S.screen === '설정' && !S.dialog && !S.f) render(); })
       .catch(() => {});
   }
   try {

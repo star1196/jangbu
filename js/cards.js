@@ -31,6 +31,7 @@ function cycleText(card) {
 // 신용카드 내역 하나 → 대금 조각들 [{ym, amount}]
 function billParts(x) {
   const c = payOf(x.payMethodId); if (!c || c.kind !== 'card' || c.cardType === 'check') return [];
+  if (x.billYM) return [{ ym: x.billYM, amount: x.amount, idx: 1, n: 1 }]; // 할부 수수료 등: 정해진 달 대금에 그대로
   const n = Math.max(1, (x.installment && x.installment.months) || 1);
   const base = Math.trunc(x.amount / n), rest = x.amount - base * n, ym0 = payYMOf(c, x.date);
   return Array.from({ length: n }, (_, i) => ({ ym: ymAdd(ym0, i), amount: base + (i === 0 ? rest : 0), idx: i + 1, n }));
@@ -63,6 +64,12 @@ function dueBills() {
     Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date <= t && !b.items.every((i) => String(i.x.source || '').startsWith('엑셀'))).forEach((b) => list.push({ card: c, bill: b }));
   });
   return list.sort((a, b) => (a.bill.date < b.bill.date ? -1 : 1));
+}
+// 남은 할부: 아직 안 나간 대금 중 할부 몫 (4-28 카드별 '남은 할부 ○회 · ○○원')
+function instLeftOf(cardId) {
+  const t = todayStr(); let n = 0, amt = 0;
+  Object.values(cardBills(cardId)).filter((b) => !b.paid && b.date >= t).forEach((b) => { const s = b.items.filter((i) => i.p.n > 1).reduce((a, i) => a + i.p.amount, 0); if (s) { n++; amt += s; } });
+  return { n, amt };
 }
 // 남은 할부·대금 (해지 경고용)
 function remainingOf(cardId) {
@@ -146,7 +153,7 @@ function viewCards(L) {
     const info = c.cardType === 'check' ? `통장에서 바로 출금${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : c.billingDay ? `결제일 매달 ${c.billingDay}일 · 이용기간 ${cycleText(c)}${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : '<span style="color:var(--warn)">결제일을 정해 주세요</span>';
     return `<button class="cardbox ${c.id === S.cardSel ? 'on' : ''}" data-act="openCard" data-id="${c.id}">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%">${ic('credit-card', 20)}<span style="font-size:${px(17)};font-weight:700">${esc(c.name)}</span><span class="badge" style="border-radius:6px">${cardTypeTxt(c)}</span>${c.last4 ? `<span class="sub" style="font-size:${px(14)}">··· ${esc(c.last4)}</span>` : ''}<span style="flex:1"></span>${bills ? `<span class="amt neg" style="font-size:${px(18)}">−${won(bills.bill.amount)}원</span>` : ''}</div>
-      <span class="sub small">${info}</span>
+      <span class="sub small">${info}${(() => { const L0 = c.cardType !== 'check' ? instLeftOf(c.id) : null; return L0 && L0.n ? ` · 남은 할부 ${L0.n}회 · ${won(L0.amt)}원` : ''; })()}</span>
       ${feat('cardPerf') && goal ? `<span class="gbar"><i style="width:${pct}%;background:${perf >= goal ? 'var(--ink)' : 'var(--warn)'}"></i></span>
         <span style="display:flex;justify-content:space-between;gap:8px;width:100%;font-size:${px(13)};flex-wrap:wrap"><span class="sub">${c.perfCycle === 'prev' ? '이번 달 사용(다음 달 혜택)' : c.perfCycle === 'custom' && c.perfStart > 1 ? `${shortDate(pr[0])}~${shortDate(pr[1])}` : '이번 달 실적'} ${won(perf)} / ${won(goal)}원</span>${perf >= goal ? `<b style="display:flex;align-items:center;gap:4px">${ic('check', 14)}달성</b>` : `<b style="color:var(--warn)">목표까지 ${won(goal - perf)}원 남음</b>`}</span>
         ${prevPerf != null ? `<span class="sub small">지난달 실적 ${won(prevPerf)}원 → 이번 달 혜택 ${prevPerf >= goal ? '받아요' : '<b style="color:var(--warn)">못 받아요</b>'}${c.perfMemo ? ' · ' + esc(c.perfMemo) : ''}</span>` : ''}` : ''}

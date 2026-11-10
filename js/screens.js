@@ -557,6 +557,13 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (/^rc/.test(D.type)) {
+    body = viewRcDlg(D); // 영수증 찍기 (receipt.js)
+  } else if (D.type === 'plus') {
+    const W = { input: ['plus', '직접 입력', '금액·가맹점을 손으로 적어요'], receipt: ['camera', '영수증 찍기', '사진을 찍으면 칸을 채워 줘요'], file: ['file-up', '파일 올리기', '카드·통장 명세서 엑셀·PDF'] };
+    body = `<div class="dlg"><h2 class="dlg-title">무엇을 할까요?</h2>
+      <div class="stack" style="gap:10px">${D.ways.map((w) => `<button class="btn big" style="justify-content:flex-start;gap:14px;min-height:64px;text-align:left" data-act="plusGo" data-w="${w}">${ic(W[w][0], 26)}<span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:${px(17)}">${W[w][1]}</b><span class="sub small" style="font-weight:400">${W[w][2]}</span></span></button>`).join('')}</div>
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
   } else if (D.type === 'dupFile') {
     body = `<div class="dlg"><h2 class="dlg-title">이미 올린 파일이에요</h2>
       <span style="font-size:${px(16)};line-height:1.55"><b>${esc(D.name)}</b><br>${D.n}건 모두 이미 장부에 있어서 새로 넣을 게 없어요 (중복 ${D.n}건).</span>

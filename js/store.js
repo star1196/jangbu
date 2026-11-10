@@ -205,6 +205,11 @@ const Store = (() => {
           await put('payMethods', { ...p, company: '', cardType: 'credit', last4: '', billingDay: null, cycleStart: 1, cycleOffset: 1, bankId: null, issueDate: '', closed: false, closedDate: '', perfGoal: 0, perfMemo: '' }, true);
         }
       }
+    }],
+    [4, async () => { // 4-28: 카드 할부 수수료를 적을 지출 계정 '카드 수수료·이자' (없을 때만 더함)
+      if (!all('accounts').some((a) => a.kind === 'out' && a.name === '카드 수수료·이자')) {
+        await put('accounts', { name: '카드 수수료·이자', kind: 'out', icon: 'credit-card', color: 3, hidden: false, order: all('accounts').length });
+      }
     }]
   ];
   const LATEST = MIGRATIONS[MIGRATIONS.length - 1][0];

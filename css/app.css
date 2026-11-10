@@ -184,7 +184,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .coloropt .t { font-weight: 700; font-size: calc(14px * var(--fs)); }
 
 /* ── 되돌리기 · 할 일 ── */
-.undobtn { margin-left: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.4); border-radius: 8px; background: transparent; color: inherit; font-weight: 700; font-size: calc(14px * var(--fs)); }
+.undobtn { pointer-events: auto; margin-left: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.4); border-radius: 8px; background: transparent; color: inherit; font-weight: 700; font-size: calc(14px * var(--fs)); }
 .todo { display: flex; align-items: center; gap: 12px; min-height: 66px; border-top: 1px solid var(--line); }
 .todo .tm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .todo .tt { font-size: calc(15px * var(--fs)); font-weight: 700; }
@@ -528,3 +528,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .peek th, .peek td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
 .peek th { font-weight: 700; background: var(--bg); }
 .peekf { display: inline-block; margin-top: 2px; padding: 0 6px; border-radius: 8px; background: var(--ink); color: var(--sf); font-size: calc(11px * var(--fs)); font-weight: 600; }
+/* 영수증 찍기: 읽은 내용 안내 · 못 읽은 칸 주황 */
+.rcbanner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--sf); font-size: calc(15px * var(--fs)); line-height: 1.5; }
+.miss { outline: 2px solid var(--warn) !important; outline-offset: 2px; border-radius: 10px; }
+/* 알림 띠는 아래 버튼을 가리지 않게: 띠 자체는 눌리지 않고(손가락이 아래 버튼에 닿음), [되돌리기]만 눌림 */
+.toast { pointer-events: none; }
+.toast .undobtn { pointer-events: auto; }

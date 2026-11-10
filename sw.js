@@ -1,5 +1,7 @@
 // 앱을 고칠 때마다 아래 버전 번호를 하나씩 올려요 (jangbu-v5 → jangbu-v6 …)
-const VERSION = 'jangbu-v16';
+const VERSION = 'jangbu-v17';
+// 영수증 글자 읽기 자료는 앱 버전과 따로 보관 (새 버전이 와도 다시 받지 않음)
+const OCR_CACHE = 'jangbu-ocr-5.1.1';
 
 // 인터넷 없이도 열리도록 기기에 넣어 두는 파일 목록
 const FILES = [
@@ -18,6 +20,7 @@ const FILES = [
   './js/plans.js',
   './js/more.js',
   './js/excel.js',
+  './js/receipt.js',
   './js/screens.js',
   './vendor/xlsx.full.min.js',
   './vendor/pdf.min.js',
@@ -46,7 +49,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== OCR_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -58,6 +61,11 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req, { cache: 'no-store' }).catch(() => caches.match('./index.html', { ignoreSearch: true }).then((r) => r || caches.match('./'))));
+    return;
+  }
+  // 영수증 글자 읽기 도구·한국어 자료(약 5MB)는 처음 쓸 때 한 번 받아 기기에 보관 → 그 뒤 인터넷 없이 작동
+  if (new URL(req.url).pathname.includes('/vendor/ocr/')) {
+    e.respondWith(caches.open(OCR_CACHE).then((c) => c.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()); return res; }))));
     return;
   }
   e.respondWith(
