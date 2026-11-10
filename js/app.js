@@ -77,6 +77,57 @@ async function doUndo() {
 }
 const soon = (what, step) => toast(`${what}은(는) ${step}단계에서 만들어요`);
 
+/* ───────── 문제가 생겼을 때: 늘 화면에 「문제가 생겼어요」 + [다시 시도] + [오류 내용 복사] ───────── */
+let errRetry = null, errDetail = '', errShowing = false;
+function showError(err, retry) {
+  try { console.error(err); } catch (e0) { /* 그대로 */ }
+  const msg = (err && (err.message || err.reason)) || String(err || '알 수 없는 문제');
+  errDetail = [
+    '[장부 앱 오류]',
+    `앱 버전: ${S.version || '?'}`,
+    `시각: ${new Date().toLocaleString('ko-KR')}`,
+    `화면: ${S.mode || ''} / ${S.screen || ''}${S.f ? ' / 입력 창' : ''}${S.imp && S.imp.step ? ' / 파일 ' + S.imp.step : ''}`,
+    `기기: ${navigator.userAgent}`,
+    `화면 크기: ${innerWidth}×${innerHeight}`,
+    `오류: ${msg}`,
+    err && err.stack ? String(err.stack).slice(0, 2000) : ''
+  ].join('\n');
+  errRetry = typeof retry === 'function' ? retry : null;
+  S.busy = false;
+  if (S.imp && (S.imp.step === 'loading')) S.imp = { step: 'drop' };
+  if (S.xl && (S.xl.step === 'loading' || S.xl.step === 'saving')) S.xl = { step: 'drop' };
+  S.dialog = { type: 'error', msg, canRetry: !!errRetry };
+  if (errShowing) return; // 오류 창을 그리다 또 오류가 나면 되풀이하지 않음
+  errShowing = true;
+  try { render(); }
+  catch (e2) {
+    // 화면 그리기 자체가 안 될 때도 알림은 보이게
+    $app.insertAdjacentHTML('beforeend', `<div class="dim"><div class="dlg" role="alertdialog"><h2 class="dlg-title">문제가 생겼어요</h2><div class="warnbox" style="word-break:break-all">${esc(msg)}</div><div class="dlg-btns"><button class="btn" data-act="errCopy">오류 내용 복사</button><button class="btn ink" data-act="errReload">앱 다시 열기</button></div></div></div>`);
+  } finally { errShowing = false; }
+}
+/** 동작 하나를 실행하고, 실패하면(바로든 나중이든) 늘 오류 창을 띄움 */
+function safeRun(f, retry) {
+  try {
+    const r = f();
+    if (r && typeof r.then === 'function') r.catch((er) => showError(er, retry || f));
+    return r;
+  } catch (er) { showError(er, retry || f); }
+}
+window.addEventListener('error', (e) => {
+  if (e.filename && !e.filename.startsWith(location.origin)) return; // 브라우저 확장 등 바깥 것은 무시
+  if (/ResizeObserver/.test(e.message || '')) return;
+  if (!e.error && !e.message) return;
+  showError(e.error || new Error(e.message));
+});
+window.addEventListener('unhandledrejection', (e) => showError(e.reason || new Error('처리하지 못한 오류')));
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) { ok = false; } ta.remove(); return ok;
+  }
+}
+
 /* ───────── 그리기 ───────── */
 function render() {
   const L = layout();
@@ -456,6 +507,11 @@ const ACT = {
   emptyTrashYes: async () => { for (const x of Store.all('tx').filter((t) => t.deleted)) await Store.remove('tx', x.id); S.dialog = null; render(); toast('휴지통을 비웠어요'); },
   // 대화 상자 · 장부
   closeDlg: () => { S.dialog = null; render(); },
+  errRetry: () => { const f = errRetry; S.dialog = null; render(); if (f) safeRun(f); },
+  errCopy: async () => { const ok = await copyText(errDetail); toast(ok ? '오류 내용을 복사했어요. Claude에게 붙여 넣어 주세요' : '복사하지 못했어요. 화면을 캡처해 주세요'); },
+  errReload: () => location.reload(),
+  dupFileClose: () => { S.dialog = null; render(); },
+  dupFileView: () => { S.dialog = null; S.imp = { step: 'drop' }; go('목록'); },
   dimClose: (el, e) => { if (e.target === el && !S.busy) { S.dialog = null; render(); } },
   discardYes: () => { S.dialog = null; closeForm(true); },
   switchBook: () => { S.dialog = { type: 'switch' }; render(); },
@@ -516,7 +572,7 @@ $app.addEventListener('click', (e) => {
   const fn = ACT[el.dataset.act];
   if (!fn) return;
   if (!['dimClose', 'fDim'].includes(el.dataset.act)) e.preventDefault();
-  fn(el, e);
+  safeRun(() => fn(el, e));
 });
 // 줄(div)도 Enter로 누를 수 있게
 $app.addEventListener('keydown', (e) => {
@@ -555,8 +611,8 @@ $app.addEventListener('input', (e) => {
 $app.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.map != null && S.imp) { S.imp.map[el.dataset.map] = el.value; render(); }
-  else if (el.dataset && el.dataset.file != null && el.files && el.files[0]) { startImport(el.files[0]); el.value = ''; }
-  else if (el.dataset && el.dataset.xlfile != null && el.files && el.files[0]) { const f = el.files[0]; el.value = ''; startXl(f); }
+  else if (el.dataset && el.dataset.file != null) { const f = el.files && el.files[0]; el.value = ''; if (!f) { toast('파일을 고르지 않았어요'); return; } toast(`「${f.name}」 받았어요. 읽는 중…`); safeRun(() => startImport(f)); }
+  else if (el.dataset && el.dataset.xlfile != null) { const f = el.files && el.files[0]; el.value = ''; if (!f) { toast('파일을 고르지 않았어요'); return; } toast(`「${f.name}」 받았어요. 읽는 중…`); safeRun(() => startXl(f)); }
   else if (el.dataset && el.dataset.tripcat) { const x = Store.get('tx', el.dataset.tripcat), before = { ...x }; Store.put('tx', { ...x, tripCat: el.value }).then(() => { render(); toast('여행 분류를 바꿨어요', { items: [{ col: 'tx', id: x.id, before }] }); }); }
   else if (el.dataset && el.dataset.backup != null && el.files && el.files[0]) { const f = el.files[0]; el.value = ''; onBackupFile(f, el.dataset.backup).catch((er) => toast('파일을 읽지 못했어요 (' + er.message + ')')); }
   else if (el.tagName === 'SELECT' && el.dataset && el.dataset.imp && S.imp && S.imp.items) onImpInput(el);
@@ -566,9 +622,9 @@ $app.addEventListener('change', (e) => {
 // 파일 끌어다 놓기
 $app.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('[data-drop]')) { e.preventDefault(); e.target.closest('[data-drop]').classList.add('over'); } });
 $app.addEventListener('dragleave', (e) => { const d = e.target.closest && e.target.closest('[data-drop]'); if (d) d.classList.remove('over'); });
-$app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-drop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) startImport(f); } });
+$app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-drop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { toast(`「${f.name}」 받았어요. 읽는 중…`); safeRun(() => startImport(f)); } } });
 $app.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('[data-xldrop]')) e.preventDefault(); });
-$app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-xldrop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) startXl(f); } });
+$app.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('[data-xldrop]'); if (d) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { toast(`「${f.name}」 받았어요. 읽는 중…`); safeRun(() => startXl(f)); } } });
 // 검색창 Enter: 최근 검색어에 남김
 $app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-q]')) { e.preventDefault(); rememberQuery(); e.target.blur(); } });
 $app.addEventListener('keydown', (e) => { const el = e.target; if (el.dataset && el.dataset.f && S.f) onFormKey(e, el); });
@@ -682,7 +738,7 @@ $app.addEventListener('submit', (e) => {
   e.preventDefault();
   if (S.busy) return;
   const fn = FORM[f.dataset.form];
-  if (fn) fn(f);
+  if (fn) safeRun(() => fn(f));
 });
 
 /* 노트북 단축키: Esc 닫기 · / 검색 */
@@ -704,6 +760,9 @@ async function boot() {
   setupBackButton();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // 새 버전이 깔리면 알려 줌 (입력 중일 수 있어서 저절로 다시 열지는 않음)
+    let hadCtrl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtrl) toast('새 버전을 받았어요. 앱을 한 번 닫았다 열면 적용돼요'); hadCtrl = true; });
   }
   if (window.caches && 'serviceWorker' in navigator) {
     navigator.serviceWorker.ready

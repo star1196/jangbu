@@ -551,7 +551,17 @@ function viewDialog() {
   const D = S.dialog;
   const btns = (cancel, okLabel, okAttr) => `<div class="dlg-btns"><button class="btn" type="button" data-act="closeDlg">${cancel}</button>${okLabel ? `<button class="btn ink" ${okAttr}>${okLabel}</button>` : ''}</div>`;
   let body = '';
-  if (D.type === 'rename') {
+  if (D.type === 'error') {
+    // 무엇을 하다가 막혔는지 늘 화면에 보여 줌
+    body = `<div class="dlg" role="alertdialog"><h2 class="dlg-title" style="display:flex;align-items:center;gap:8px">${ic('circle-alert', 24, 'var(--warn)')}문제가 생겼어요</h2>
+      <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
+      <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
+      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (D.type === 'dupFile') {
+    body = `<div class="dlg"><h2 class="dlg-title">이미 올린 파일이에요</h2>
+      <span style="font-size:${px(16)};line-height:1.55"><b>${esc(D.name)}</b><br>${D.n}건 모두 이미 장부에 있어서 새로 넣을 게 없어요 (중복 ${D.n}건).</span>
+      <div class="dlg-btns"><button class="btn" data-act="dupFileClose">닫기</button><button class="btn ink" data-act="dupFileView">${ic('list', 18)}내역 보기</button></div></div>`;
+  } else if (D.type === 'rename') {
     body = `<form class="dlg" data-form="rename" autocomplete="off"><h2 class="dlg-title">장부 이름</h2>
       <span class="sub small">잠금 화면 · 위쪽 · 백업 파일 이름에 모두 바뀌어 보여요.</span>
       <input class="input" name="name" maxlength="20" value="${esc(Store.current().name)}" data-autofocus>

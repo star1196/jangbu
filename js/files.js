@@ -185,6 +185,7 @@ async function readFile(file) {
 
 /* ── 파일 올리기 시작 ── */
 async function startImport(file) {
+  if (!/\.(xlsx|xls|csv|pdf)$/i.test(file.name || '')) { S.imp = { step: 'drop' }; render(); showError(new Error(`「${file.name}」은(는) 읽을 수 없는 파일이에요. 엑셀(xlsx · xls) · CSV · PDF 파일만 올릴 수 있어요.`)); return; }
   S.imp = { step: 'loading', name: file.name };
   render();
   try {
@@ -196,7 +197,7 @@ async function startImport(file) {
     }
     setImpHeader({ name, rows: sh.rows, h: sh.h, sheet: sh.name, sheets, pdf: !!rf.pdf, pdfCo: rf.pdfCo, auto: true });
   } catch (e) {
-    S.imp = { step: 'drop' }; render(); toast(e.message || '파일을 읽지 못했어요');
+    S.imp = { step: 'drop' }; render(); showError(new Error('파일을 읽지 못했어요: ' + (e.message || e)), () => startImport(file));
   }
 }
 // 제목 줄이 정해지면: 칸 이름 → 기억한 서식 찾기 → (처음 보는 모양이면) 칸 지정
@@ -209,7 +210,7 @@ function setImpHeader(o) {
   S.imp = { step: 'map', name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
   const used = new Set();
   hdr.forEach((h, i) => { let f = guessField(h); if (f && f !== 'merchant' && f !== 'skip' && f !== 'memo') { if (used.has(f)) f = ''; else used.add(f); } S.imp.map[i] = f; }); // 같은 종류가 두 칸이면 앞 칸만 (이용금액 vs 이번달 결제금액)
-  if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; }
+  if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; checkAllDup(); }
   else if (near) { S.imp.ask = near[0].id; }
   render();
 }
@@ -323,6 +324,12 @@ function buildItems() {
   });
   I.items = items; I.shown = 50;
 }
+/** 읽은 줄이 모두 이미 장부에 있으면: 「이미 올린 파일이에요. N건 모두 중복」 */
+function checkAllDup() {
+  const st = impStats();
+  if (st.read && st.dup === st.read) S.dialog = { type: 'dupFile', n: st.read, name: S.imp.name };
+  else if (!st.read) S.dialog = { type: 'error', msg: '파일에서 내역을 한 줄도 찾지 못했어요. 칸 지정(날짜·금액 칸)이 맞는지 확인해 주세요.', canRetry: false };
+}
 function impStats() {
   const its = S.imp.items || [];
   return { read: its.length, auto: its.filter((x) => x.use && (x.accId || x.bill)).length, unc: its.filter((x) => x.use && !x.accId && !x.bill).length, dup: its.filter((x) => x.dup).length, same: its.filter((x) => x.same && x.same.yes).length, use: its.filter((x) => x.use).length };
@@ -336,7 +343,7 @@ function viewFile(L) {
     const recent = Store.all('imports').sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
     return `<div class="stack">
       <label class="dropbox" data-drop>
-        <input type="file" accept=".xlsx,.xls,.csv,.pdf" data-file hidden>
+        <input type="file" accept=".xlsx,.xls,.csv,.pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/pdf" data-file hidden>
         ${ic('upload', 48, 'var(--sub)')}
         <span style="font-size:${px(21)};font-weight:700">여기에 파일을 놓거나 눌러서 선택</span>
         <span class="sub" style="font-size:${px(15)}">엑셀(xlsx · xls) · CSV · PDF(읽을 수 있는 만큼) · 카드·통장 거래내역</span>
@@ -660,12 +667,12 @@ const FILE_ACT = {
   impHead: (el) => { const I = S.imp, sh = I.sheets[I.sheetI || 0]; setImpHeader({ name: I.name, rows: sh.rows, h: +el.dataset.i, sheet: sh.name, sheets: I.sheets, pdf: false, auto: false }); },
   impRepick: () => { const I = S.imp; S.imp = { step: 'pickHead', name: I.name, sheets: I.sheets, sheetI: Math.max(0, I.sheets.findIndex((s) => s.name === I.sheet)), h: I.h, backTo: I }; render(); },
   impHeadCancel: () => { S.imp = S.imp.backTo; render(); },
-  impAskYes: () => { const I = S.imp; applyTemplate(Store.get('templates', I.ask)); I.ask = null; buildItems(); I.step = 'preview'; render(); },
+  impAskYes: () => { const I = S.imp; applyTemplate(Store.get('templates', I.ask)); I.ask = null; buildItems(); I.step = 'preview'; checkAllDup(); render(); },
   impAskNo: () => { S.imp.ask = null; render(); },
   impTarget: (el) => { S.imp.target.type = el.dataset.t; if (el.dataset.t === 'bank' && !S.imp.target.bankId) S.imp.target.bankId = (banksOpen('home')[0] || {}).id || ''; render(); },
   impCard: (el) => { S.imp.target.cardId = el.dataset.id; render(); },
   impBank: (el) => { S.imp.target.bankId = el.dataset.id; render(); },
-  impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; render(); },
+  impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; checkAllDup(); render(); },
   impMore: () => { S.imp.shown += 50; render(); },
   impSame: (el) => { const it = S.imp.items[+el.dataset.i]; it.same.yes = el.dataset.v === '1'; it.use = !it.same.yes; render(); },
   impSave: () => { if (!S.busy) saveImport(); },

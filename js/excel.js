@@ -334,7 +334,7 @@ async function startXl(file) {
     S.xl = { step: 'sheets', name: file.name, sheets, sel: 0, startYM: settingsOf().startPoint || '2601' };
     xlReparse(S.xl);
     render();
-  } catch (e) { S.xl = { step: 'drop' }; render(); toast('엑셀을 읽지 못했어요 (' + e.message + ')'); }
+  } catch (e) { S.xl = { step: 'drop' }; render(); showError(new Error('엑셀을 읽지 못했어요: ' + (e.message || e)), () => startXl(file)); }
 }
 
 function xlSummary(X) {
@@ -351,7 +351,7 @@ function viewXl(L) {
     <div class="chips" style="justify-content:center;margin-top:12px">${X.uncN ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button></div></div>`;
   if (X.step !== 'sheets') {
     return `<div class="stack">
-      <label class="dropbox" data-xldrop><input type="file" accept=".xlsx,.xls" data-xlfile hidden>${ic('file-spreadsheet', 48, 'var(--sub)')}
+      <label class="dropbox" data-xldrop><input type="file" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-xlfile hidden>${ic('file-spreadsheet', 48, 'var(--sub)')}
         <span style="font-size:${px(21)};font-weight:700">예전에 쓰던 가계부 엑셀을 골라 주세요</span>
         <span class="sub" style="font-size:${px(15)};text-align:center">시트마다 통장 · 카드 · 고정 계획표 · 재산 · 기억할 것 · 여행 중 무엇인지 골라서 한 번에 옮겨요.</span>
         <span class="sub small">파일은 이 기기 안에서만 읽고, 어디에도 보내지 않아요. 옮기기 전에 [백업 저장]을 해 두면 안심이에요.</span></label>

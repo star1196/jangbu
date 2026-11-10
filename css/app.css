@@ -190,7 +190,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .todo .tt { font-size: calc(15px * var(--fs)); font-weight: 700; }
 
 /* ── 입력 시트 ── */
-.sheetdim { z-index: 30; align-items: stretch; }
+/* 입력 시트 덮개는 시트(31)보다 아래여야 함. 뒤쪽 .dim(50) 규칙에 덮이지 않게 두 클래스로 지정 */
+.dim.sheetdim { z-index: 30; align-items: stretch; }
 .sheet { position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: min(760px, calc(100% - 48px)); height: 94%; background: var(--sf); border-radius: 20px 20px 0 0; z-index: 31; display: flex; flex-direction: column; overflow: hidden; }
 .compact .sheet { left: 0; right: 0; transform: none; width: auto; height: 92%; }
 .grab { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 10px auto 0; flex: none; }
