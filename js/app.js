@@ -175,6 +175,7 @@ function viewCreate() {
     <div class="field"><span class="label">어떻게 쓸까요?</span>
       <div class="seg"><button type="button" class="${preset === 'simple' ? 'on' : ''}" data-act="createPreset" data-p="simple">간단하게</button><button type="button" class="${preset === 'all' ? 'on' : ''}" data-act="createPreset" data-p="all">전부 쓰기</button></div>
       <span class="sub small">${preset === 'simple' ? '입력·목록·달력·계정별·통장·카드·파일 올리기만 보여요.' : '별도 통장·여행·적금·고정 계획표·금고 등 모든 기능이 보여요.'} 나중에 설정 → 사용할 기능에서 언제든 바꿀 수 있어요.</span></div>
+    ${viewCreateCopy()}
     <label class="field"><span class="label">비밀번호 <span style="font-weight:400">(4자 이상)</span></span><input class="pw left" type="password" name="pw1" autocomplete="new-password" data-autofocus></label>
     <label class="field"><span class="label">비밀번호 한 번 더</span><input class="pw left" type="password" name="pw2" autocomplete="new-password"></label>
     <div class="warnbox">${ic('circle-alert', 22)}<div><b>비밀번호를 잊으면 아무도 열 수 없어요.</b><br>되찾는 방법이 없어요. 앱을 만든 사람도 열어 줄 수 없어요. 종이에 적어 안전한 곳에 두세요.</div></div>
@@ -565,6 +566,7 @@ const ACT = {
   ...MORE_ACT,
   ...XL_ACT,
   ...RC_ACT,
+  ...RESET_ACT,
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
@@ -603,7 +605,7 @@ $app.addEventListener('input', (e) => {
   if (el.dataset && el.dataset.mallw != null) S.mallW = el.value;
   if (el.dataset && el.dataset.dictq != null) { S.dictQ = el.value; const pos = el.selectionStart; render(); const i = $app.querySelector('[data-dictq]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (er) { /* 그대로 */ } } }
   // 카드 추가 칸
-  if (el.dataset && el.dataset.ca && S.cardAdd) { S.cardAdd[el.dataset.ca] = el.dataset.ca === 'last4' ? digits(el.value).slice(0, 4) : el.value; if (el.dataset.ca === 'last4') el.value = S.cardAdd.last4; }
+  if (el.dataset && el.dataset.ca && S.cardAdd) { const k = el.dataset.ca, num = k === 'last4' || k === 'first4'; S.cardAdd[k] = num ? digits(el.value).slice(0, 4) : el.value; if (num) el.value = S.cardAdd[k]; }
   // 파일 미리보기 칸
   if (el.dataset && el.dataset.imp && S.imp && S.imp.items) onImpInput(el);
   // 대화 상자 안 칸(data-d): 다시 그리지 않고 값만 기억 (커서 유지)
@@ -661,11 +663,13 @@ const FORM = {
       const id = await Store.createLedger({ type: 'home', name, password: pw1, preset: S.createPreset || 'simple' });
       await Store.unlock(id, pw1);
       await Store.migrate();
+      let copied = 0;
+      if (S.createImport) { copied = await applyCopy(S.createImport); S.createImport = null; } // 다른 장부의 카드·통장·사전·서식
       S.ledgers = await Store.listLedgers();
       view.lastLedger = id; saveView();
       S.busy = false; S.createName = '';
       afterOpen();
-      render(); toast('장부를 만들었어요');
+      render(); toast(copied ? `장부를 만들었어요. 다른 장부에서 ${copied}개를 가져왔어요` : '장부를 만들었어요');
     } catch (err) {
       S.busy = false; render();
       showErr($app.querySelector('[data-form="create"]'), '장부를 만들지 못했어요. 다시 해 주세요. (' + err.message + ')');

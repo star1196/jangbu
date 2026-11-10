@@ -297,5 +297,46 @@ const Store = (() => {
     return !!(await reqP(db.transaction('ledgers').objectStore('ledgers').get(id)));
   }
 
-  return { LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+  // 여러 개를 한꺼번에 완전히 지우기 (초기화). 지운 것은 'gone'에 적어 다른 기기 백업을 합칠 때 되살아나지 않게.
+  async function removeMany(list) {
+    if (!key) throw new Error('잠겨 있어요');
+    const lid = ledger.id, marks = [];
+    for (const [col, id] of list) {
+      if (mem[col] && mem[col].has(id)) { if (col !== 'gone' && !LOCAL_IDS.includes(id)) marks.push(['gone', { id: col + '|' + id, col, rid: id, at: Date.now() }]); mem[col].delete(id); }
+    }
+    await chain;
+    const db = await openDB();
+    for (let i = 0; i < list.length; i += 2000) {
+      const t = db.transaction('recs', 'readwrite');
+      list.slice(i, i + 2000).forEach(([col, id]) => t.objectStore('recs').delete(lid + '|' + col + '|' + id));
+      await txDone(t);
+    }
+    if (marks.length) await putMany(marks);
+  }
+  // 장부 통째로 지우기 (이 기기에서만. 백업 파일은 그대로)
+  async function deleteLedger(id) {
+    const db = await openDB();
+    const keys = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAllKeys(id));
+    for (let i = 0; i < keys.length; i += 2000) {
+      const t = db.transaction('recs', 'readwrite');
+      keys.slice(i, i + 2000).forEach((k) => t.objectStore('recs').delete(k));
+      await txDone(t);
+    }
+    const t = db.transaction('ledgers', 'readwrite'); t.objectStore('ledgers').delete(id); await txDone(t);
+    if (ledger && ledger.id === id) lock();
+  }
+  // 다른 장부를 열지 않고 내용만 읽기 (새 장부에 카드·통장 등을 가져올 때). 비밀번호가 틀리면 null
+  async function readLedger(id, password, cols) {
+    const db = await openDB();
+    const meta = await reqP(db.transaction('ledgers').objectStore('ledgers').get(id));
+    if (!meta) return null;
+    const k = await deriveKey(password, meta.salt, meta.iter);
+    try { if ((await decryptWith(k, meta.check)) !== CHECK_TEXT) return null; } catch (e) { return null; }
+    const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(id));
+    const out = {};
+    for (const r of rows) { if (cols && !cols.includes(r.col)) continue; (out[r.col] = out[r.col] || []).push(await decryptWith(k, r)); }
+    return out;
+  }
+
+  return { removeMany, deleteLedger, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

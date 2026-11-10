@@ -462,7 +462,7 @@ function viewSettings() {
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${feat('reminders') ? sec('기억할 것', rowB('기억할 것 (끝나는 날 알림)', `${rems.length}개${nearRem != null ? ' · 가까운 것 D-' + nearRem : ''}`, 'goRem')) : ''}
-      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash'))}
+      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}
       <input type="file" data-backup="merge" hidden>
       ${plansRows ? sec('계획 · 보안', plansRows) : ''}
       ${sec('잠금', rowB('비밀번호 변경', '', 'dlgPw') + rowB('자동 잠금 시간', (st.autoLockMin || 5) + '분', 'dlgAutoLock') + rowB('지금 잠그기', '', 'lock'))}
@@ -557,6 +557,8 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {
+    body = viewResetDlg(D); // 초기화 · 장부 지우기 · 가져오기 (reset.js)
   } else if (/^rc/.test(D.type)) {
     body = viewRcDlg(D); // 영수증 찍기 (receipt.js)
   } else if (D.type === 'plus') {

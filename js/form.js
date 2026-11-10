@@ -130,6 +130,7 @@ function viewSheet() {
     inner = `${head('이대로 저장할까요?')}
       <div class="sheet-body">
         <span class="sub" style="font-size:${px(14)}">저장하기 전에 한 번 더 봐 주세요. 틀린 곳은 [고치기]를 누르면 돼요.</span>
+        ${rcBanner(f, true)}
         <div class="conf-hero">
           <span class="circ" style="width:56px;height:56px;background:var(--sf)">${acc ? catGlyph(acc, 28) : ic('circle-help', 28, 'var(--warn)')}</span>
           <span style="font-size:${px(16)};font-weight:600">${esc(f.merchant || (acc ? acc.name : '가맹점 없음'))}</span>
@@ -153,7 +154,7 @@ function viewSheet() {
     const showMore = feat('discount') || f.orig || f.disc || f.point;
     inner = `${head(f.mode === 'edit' ? '고치기' : '입력', feat('receipt') ? `<button class="chip" style="border-radius:22px;font-weight:600" data-act="receipt">${ic('camera', 18)}영수증 찍기</button>` : '')}
       <div class="sheet-body">
-        ${f.rc ? `<div class="rcbanner">${ic('receipt', 20)}<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><b>영수증에서 읽었어요</b>${f.rc.info.length ? `<span class="small">${esc(f.rc.info.join(' · '))}</span>` : ''}${f.rc.missing.length ? `<span class="small" style="color:var(--warn);font-weight:700">주황 칸은 못 읽은 곳이에요. 채워 주세요.</span>` : `<span class="small">맞는지 보고 [저장]을 눌러 주세요.</span>`}${f.rc.warn ? `<span class="small" style="color:var(--warn)">${esc(f.rc.warn)}</span>` : ''}</div></div>` : ''}
+        ${rcBanner(f)}
         <div class="seg">${kinds}</div>
         <div class="field">
           <span class="label">날짜</span>
@@ -276,7 +277,7 @@ function updCats() {
     const rec = recAccounts(f).map(accOf);
     const rest = accs.filter((a) => !rec.some((r) => r.id === a.id));
     const cur = f.accId && !rec.some((r) => r.id === f.accId) && !accs.some((a) => a.id === f.accId) ? accOf(f.accId) : null;
-    box.innerHTML = `<span class="sub small">추천</span>${rec.map(chip).join('')}<span class="vbar"></span>${cur ? chip(cur) : ''}${rest.map(chip).join('')}`;
+    box.innerHTML = `<span class="sub small">추천</span>${rec.map(chip).join('')}<span class="catsep" aria-hidden="true"></span>${cur ? chip(cur) : ''}${rest.map(chip).join('')}`;
   }
   // '저축·적금' 지출이면 어느 적금에 넣었는지 (5-1)
   const sv = part('sav');
