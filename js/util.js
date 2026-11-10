@@ -158,7 +158,7 @@ function sumTx(list) {
   let inc = 0, out = 0, bank = 0, saved = 0;
   for (const x of list) {
     if (x.kind === 'in') inc += x.amount;
-    else if (x.kind === 'out') { out += x.amount; if (leftBank(x)) bank += x.amount; saved += (x.discount || 0) + (x.pointUsed || 0) + (x.feeSaved || 0); } // 할부 수수료 면제도 아낀 돈
+    else if (x.kind === 'out') { out += x.amount; if (leftBank(x)) bank += x.amount; saved += (x.discount || 0) + (x.pointUsed || 0); }
     else if (x.kind === 'bill' && !isSep(x.bankId)) bank += x.amount; // 카드 대금: 통장에서 나간 돈에만
   }
   return { inc, out, bank, saved };

@@ -27,27 +27,17 @@ const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제�
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
 
 /* ───────── 백업 저장 ───────── */
-async function makeBackupText() {
+async function prepareBackup() {
+  const D = S.dialog;
   const at = Date.now(), cols = Store.snapshot();
   const payload = { app: 'jangbu', v: 1, createdAt: at, device: deviceName(), schema: Store.LATEST, ledger: { ...Store.current(), salt: undefined, iter: undefined }, counts: { tx: liveCount(cols) }, cols };
   const sealed = await Store.sealBackup(payload);
   // 겉에는 열기 전에 보여 줄 것만 (만든 시각·기기·장부 종류). 내용은 모두 잠김.
   const file = { app: 'jangbu', kind: 'backup', v: 1, ledgerId: Store.current().id, type: Store.current().type, createdAt: at, device: deviceName(), ...sealed };
-  return { at, text: JSON.stringify(file), n: payload.counts.tx };
-}
-async function prepareBackup() {
-  const D = S.dialog;
-  const b = await makeBackupText();
+  const text = JSON.stringify(file);
   if (S.dialog !== D) return;
-  D.at = b.at; D.name = backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
+  D.at = at; D.name = backupFileName(at); D.text = text; D.n = payload.counts.tx; D.size = text.length;
   render();
-}
-// 지우기 직전 자동 백업 (초기화 · 장부 통째로 지우기): 파일 이름 앞에 '지우기전_'
-async function autoBackup() {
-  const b = await makeBackupText(), name = '지우기전_' + backupFileName(b.at);
-  downloadText(name, b.text);
-  setSync(Store.current().id, { lastSave: b.at });
-  return name;
 }
 function downloadText(name, text) {
   const blob = new Blob([text], { type: 'application/octet-stream' });
