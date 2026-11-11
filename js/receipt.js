@@ -157,7 +157,8 @@ function parseReceipt(raw) {
 
 /* ── 등록 카드 찾기: 앞 4자리 → 뒤 4자리 → 카드사(+신용/체크) ── */
 function findCard(p) {
-  const all = cardsAll(), open = cardsOpen(), coOk = (c) => !p.company || norm(c.company || c.name).includes(norm(p.company)) || norm(p.company).includes(norm(c.company || ''));
+  // 카드사 비교: 카드사가 비어 있는 카드(기본 '카드' 자리표시)는 아무 카드사에나 맞는 것으로 보지 않음
+  const all = cardsAll(), open = cardsOpen(), coOk = (c) => { if (!p.company) return true; const cc = norm(c.company || ''), cn = norm(c.name || ''), pc = norm(p.company); return (!!cc && (cc.includes(pc) || pc.includes(cc.replace(/카드$/, '')))) || (!!cn && cn !== '카드' && cn.includes(pc)); };
   const typeOk = (c) => !p.cardType || (c.cardType === 'check') === (p.cardType === 'check');
   let list = [];
   if (p.first4) list = all.filter((c) => c.first4 === p.first4);
@@ -229,9 +230,43 @@ async function readReceipt(file, force) {
   if (byText && !byMer) warns.push(`영수증의 '${byText.by}' 글자로 '${byText.name}' 분류를 추천했어요. 맞는지 봐 주세요.`);
   if (RC.url) URL.revokeObjectURL(RC.url);
   RC.url = URL.createObjectURL(file);
-  f.rc = { hash, approval: p.approval || '', time: p.time || '', missing, info, warns, lines: p.lines, img: RC.url, cardBy: fc ? fc.by : '', raw: (data.text || '').slice(0, 3000) };
+  const thumb = rcPhotoOn() ? await makeThumb(file).catch(() => null) : null; // 저장할 때 붙일 작은 사진
+  f.rc = { hash, approval: p.approval || '', time: p.time || '', missing, info, warns, lines: p.lines, img: RC.url, thumb, cardBy: fc ? fc.by : '', raw: (data.text || '').slice(0, 3000) };
   S.dialog = null; S.f = f; render();
   toast(missing.length ? `영수증을 읽었어요. 못 읽은 칸 ${missing.length}곳을 채워 주세요` : '영수증을 읽었어요. 사진과 비교해 보고 저장해 주세요');
+}
+
+/* ── 영수증 사진 붙이기 (4-15): 작게 줄여 장부 안('photos' 묶음)에 장부 비밀번호로 암호화해 저장 ──
+   설정 → 자료 → 영수증 사진 붙이기 (기본 켜짐, 끄면 새로 찍는 영수증부터 사진을 안 붙임)
+   내역에는 사진 번호(photoId)만. 내역을 휴지통에서 완전히 지우면 사진도 같이 지움. 백업에도 잠긴 채 들어감. */
+const RC_PHOTO_MAX = 1000, RC_PHOTO_Q = 0.6; // 긴 쪽 1000px · JPEG 품질 60% → 보통 한 장 100~250KB
+const rcPhotoOn = () => feat('receipt') && (Store.get('meta', 'settings') || {}).receiptPhoto !== false;
+async function makeThumb(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); }
+  const k = Math.min(1, RC_PHOTO_MAX / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, cv.width, cv.height);
+  const data = cv.toDataURL('image/jpeg', RC_PHOTO_Q);
+  return { data, w: cv.width, h: cv.height, bytes: Math.round((data.length - 23) * 0.75) };
+}
+const photoOf = (x) => (x && x.photoId ? Store.get('photos', x.photoId) : null);
+function photoStats() { const ps = Store.all('photos'); return { n: ps.length, bytes: ps.reduce((t, p) => t + (p.bytes || 0), 0) }; }
+const mb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB');
+// 주인 내역이 완전히 없어진 사진은 지움 (휴지통에 있는 내역의 사진은 남김 → 되살리면 그대로)
+async function cleanPhotos() {
+  if (!Store.isOpen()) return 0;
+  const gone = Store.all('photos').filter((p) => !Store.get('tx', p.txId));
+  if (gone.length) await Store.removeMany(gone.map((p) => ['photos', p.id]));
+  return gone.length;
+}
+// 고치기 창: 붙은 사진 작게 + 크게 보기 · 사진 빼기
+function photoPart(f) {
+  const x = f && f.id ? Store.get('tx', f.id) : null, p = photoOf(x);
+  if (!p) return '';
+  return `<div class="rcbanner" style="align-items:center"><button class="rcthumb" data-act="rcSavedPhoto" data-id="${p.id}" aria-label="영수증 사진 크게 보기"><img src="${p.data}" alt="붙인 영수증 사진"><span>크게</span></button>
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1"><b>영수증 사진</b><span class="small sub">${mb(p.bytes || 0)} · 장부 비밀번호로 잠겨 저장돼요</span></div>
+    <button class="btn" data-act="rcPhotoDrop">사진 빼기</button></div>`;
 }
 
 /* ── 입력 창 위 안내 (사진 · 못 읽은 칸 · 가맹점 고르기) ── */
@@ -246,6 +281,7 @@ function rcBanner(f, confirm) {
       <b>영수증에서 읽었어요</b>
       ${rc.missing.length ? `<span class="small" style="color:var(--warn);font-weight:700">${esc(missText(rc))}</span>` : `<span class="small">빠진 칸 없이 읽었어요. 사진과 비교해 봐 주세요.</span>`}
       ${rc.info.length ? `<span class="small sub">${esc(rc.info.join(' · '))}</span>` : ''}
+      ${rc.thumb ? `<span class="small sub">사진도 작게 줄여 같이 저장해요 (${mb(rc.thumb.bytes)} · 잠겨서 저장)</span>` : ''}
       ${(rc.warns || []).map((w) => `<span class="small" style="color:var(--warn)">${esc(w)}</span>`).join('')}
     </div></div>
     ${pickMer ? `<div class="rclines"><span class="small sub" style="width:100%">가맹점 이름을 눌러서 고르세요 (영수증에서 읽은 줄)</span>${rc.lines.map((l, i) => `<button class="chip" data-act="rcMer" data-i="${i}">${esc(l)}</button>`).join('')}</div>` : ''}`;
@@ -271,7 +307,17 @@ function viewRcDlg(D) {
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="rcForce">그래도 새로 넣기</button><button class="btn ink" style="flex:1 1 100%" data-act="rcView">그 내역 보기</button></div></div>`;
   }
   if (D.type === 'rcPhoto') {
-    return `<div class="dlg rcbig"><img src="${S.f && S.f.rc ? S.f.rc.img : ''}" alt="영수증 사진 크게"><div class="dlg-btns"><button class="btn ink" data-act="closeDlg">닫기</button></div></div>`;
+    const src = D.photoId ? (Store.get('photos', D.photoId) || {}).data : S.f && S.f.rc ? S.f.rc.img : '';
+    return `<div class="dlg rcbig"><img src="${src || ''}" alt="영수증 사진 크게"><div class="dlg-btns"><button class="btn ink" data-act="closeDlg">닫기</button></div></div>`;
+  }
+  if (D.type === 'rcPhotoSet') {
+    const st = photoStats(), on = rcPhotoOn();
+    return `<div class="dlg"><h2 class="dlg-title">영수증 사진 붙이기</h2>
+      <span class="sub small">영수증으로 넣은 내역에 사진을 작게 줄여 같이 저장해요. 장부 비밀번호로 잠겨서 저장되고, 백업 파일에도 잠긴 채 들어가요.</span>
+      <button class="rsrow ${on ? 'on' : ''}" data-act="rcPhotoToggle" role="switch" aria-checked="${on}"><span style="flex:1;text-align:left"><b>사진 붙이기</b><br><span class="small sub">${on ? '켜짐 · 새로 찍는 영수증에 사진을 붙여요' : '꺼짐 · 사진 지문만 남겨요(같은 사진 막기용)'}</span></span><span class="tg ${on ? 'on' : ''}"><i></i></span></button>
+      <div class="drow"><span class="sub">붙인 사진</span><b>${st.n}장 · ${mb(st.bytes)}</b></div>
+      <span class="sub small">끄면 앞으로 넣는 영수증부터 사진을 안 붙여요. 이미 붙인 사진은 그대로예요(내역 고치기에서 하나씩 뺄 수 있어요).</span>
+      <div class="dlg-btns"><button class="btn ink" data-act="closeDlg">닫기</button></div></div>`;
   }
   return '';
 }
@@ -283,6 +329,16 @@ const RC_ACT = {
   rcView: () => { const id = S.dialog && S.dialog.id; S.dialog = null; render(); if (id) openEdit(id); },
   rcForce: () => { const file = S.dialog && S.dialog.file; S.dialog = null; render(); if (file) safeRun(() => readReceipt(file, true)); },
   rcPhoto: () => { S.dialog = { type: 'rcPhoto' }; render(); },
+  rcSavedPhoto: (el) => { S.dialog = { type: 'rcPhoto', photoId: el.dataset.id }; render(); },
+  rcPhotoSet: () => { S.dialog = { type: 'rcPhotoSet' }; render(); },
+  rcPhotoToggle: async () => { const st = Store.get('meta', 'settings') || { id: 'settings' }; const on = !rcPhotoOn(); await Store.put('meta', { ...st, receiptPhoto: on }); render(); toast(on ? '영수증 사진을 붙여요' : '이제 영수증 사진을 안 붙여요'); },
+  // 고치기 창에서 사진 빼기 (되돌리기 가능)
+  rcPhotoDrop: async () => {
+    const f = S.f, x = f && Store.get('tx', f.id), p = photoOf(x); if (!p) return;
+    const bx = { ...x }, bp = { ...p };
+    await Store.put('tx', { ...x, photoId: null }); await Store.remove('photos', p.id, true);
+    render(); toast('사진을 뺐어요', { items: [{ col: 'tx', id: x.id, before: bx }, { col: 'photos', id: p.id, before: bp }] });
+  },
   // 읽은 줄 하나를 가맹점으로 → 분류도 다시 추천
   rcMer: (el) => {
     const f = S.f; if (!f || !f.rc) return;

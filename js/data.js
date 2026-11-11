@@ -30,7 +30,7 @@ const DATA = (() => {
 
   // 계정과목: [이름, 수입/지출, 아이콘, 색 번호(0~7)]
   const HOME_ACCOUNTS = [
-    ['경조사·선물', 'out', 'gift', 6], ['공과금(전기·가스·수도)', 'out', 'zap', 1], ['관리비', 'out', 'building', 2],
+    ['경조사·선물', 'out', 'gift', 6], ['카드 수수료·이자', 'out', 'credit-card', 3], ['공과금(전기·가스·수도)', 'out', 'zap', 1], ['관리비', 'out', 'building', 2],
     ['교육비·학원', 'out', 'graduation-cap', 3], ['교통비', 'out', 'bus', 3], ['구독료', 'out', 'play-square', 4],
     ['기부', 'out', 'heart', 1], ['도서', 'out', 'book-open', 2], ['마트·장보기', 'out', 'shopping-basket', 1],
     ['미용', 'out', 'scissors', 1], ['반려동물', 'out', 'paw-print', 0], ['병원·약국', 'out', 'pill', 0],
@@ -81,7 +81,7 @@ const DATA = (() => {
     { key: 'cardPerf', name: '카드 실적', desc: '카드별 실적 목표 · 실적 제외 · 부족 알림', step: 4, simple: false },
     { key: 'files', name: '파일 올리기', desc: '카드·통장 명세서 엑셀로 한 번에 기록', step: 4, simple: true },
     { key: 'discount', name: '할인·포인트 칸', desc: '입력 화면 [더보기]: 원래 가격 · 할인 · 포인트', step: 2, simple: false },
-    { key: 'receipt', name: '영수증 찍기', desc: '사진으로 입력 (2차 기능)', step: 9, simple: false },
+    { key: 'receipt', name: '영수증 찍기', desc: '사진을 찍으면 날짜·금액·가맹점·카드를 채워 줘요 (기기 안에서만 읽음)', step: 4, simple: true },
     { key: 'repeat', name: '반복 입력', desc: '자동이체·고정 지출을 그날 확인 대기로', step: 5, simple: false },
     { key: 'savings', name: '적금·예금', desc: '적금·예금 · 재산 현황 · 만기 알림', step: 5, simple: false },
     { key: 'plan', name: '고정 계획표', desc: '매달 고정 수입·지출 계획과 기준 비교', step: 5, simple: false },

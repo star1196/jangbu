@@ -184,13 +184,14 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .coloropt .t { font-weight: 700; font-size: calc(14px * var(--fs)); }
 
 /* ── 되돌리기 · 할 일 ── */
-.undobtn { margin-left: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.4); border-radius: 8px; background: transparent; color: inherit; font-weight: 700; font-size: calc(14px * var(--fs)); }
+.undobtn { pointer-events: auto; margin-left: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(255,255,255,.4); border-radius: 8px; background: transparent; color: inherit; font-weight: 700; font-size: calc(14px * var(--fs)); }
 .todo { display: flex; align-items: center; gap: 12px; min-height: 66px; border-top: 1px solid var(--line); }
 .todo .tm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .todo .tt { font-size: calc(15px * var(--fs)); font-weight: 700; }
 
 /* ── 입력 시트 ── */
-.sheetdim { z-index: 30; align-items: stretch; }
+/* 입력 시트 덮개는 시트(31)보다 아래여야 함. 뒤쪽 .dim(50) 규칙에 덮이지 않게 두 클래스로 지정 */
+.dim.sheetdim { z-index: 30; align-items: stretch; }
 .sheet { position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: min(760px, calc(100% - 48px)); height: 94%; background: var(--sf); border-radius: 20px 20px 0 0; z-index: 31; display: flex; flex-direction: column; overflow: hidden; }
 .compact .sheet { left: 0; right: 0; transform: none; width: auto; height: 92%; }
 .grab { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 10px auto 0; flex: none; }
@@ -219,7 +220,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .qbtn.clear { border: 1px solid var(--line); background: var(--sf); color: var(--sub); font-weight: 500; font-size: calc(15px * var(--fs)); }
 .catsearch { flex: 0 1 260px; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--sub); }
 .catsearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font-size: calc(14px * var(--fs)); }
-.vbar { width: 1px; height: 28px; background: var(--line); margin: 0 4px; }
+.catsep { width: 1px; height: 28px; background: var(--line); margin: 0 4px; } /* 분류: 추천 | ㄱㄴㄷ 구분선 (.vbar는 다른 부품 이름과 겹쳐 검은 알약으로 보였음) */
 .sugbox { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 5; background: var(--sf); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); padding: 6px; }
 .sug { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font-size: calc(15px * var(--fs)); }
 .sug:hover, .sug.on { background: var(--soft); }
@@ -527,3 +528,23 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .peek th, .peek td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
 .peek th { font-weight: 700; background: var(--bg); }
 .peekf { display: inline-block; margin-top: 2px; padding: 0 6px; border-radius: 8px; background: var(--ink); color: var(--sf); font-size: calc(11px * var(--fs)); font-weight: 600; }
+/* 영수증 찍기: 읽은 내용 안내 · 못 읽은 칸 주황 */
+.rcbanner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--sf); font-size: calc(15px * var(--fs)); line-height: 1.5; }
+.miss { outline: 2px solid var(--warn) !important; outline-offset: 2px; border-radius: 10px; }
+/* 알림 띠는 아래 버튼을 가리지 않게: 띠 자체는 눌리지 않고(손가락이 아래 버튼에 닿음), [되돌리기]만 눌림 */
+.toast { pointer-events: none; }
+.toast .undobtn { pointer-events: auto; }
+/* 영수증 사진 작게(눌러서 크게) · 읽은 줄 고르기 · 크게 보기 */
+.rcthumb { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--bg, #fff); overflow: hidden; width: 72px; cursor: zoom-in; }
+.rcthumb img { width: 72px; height: 96px; object-fit: cover; display: block; }
+.rcthumb span { font-size: calc(12px * var(--fs)); padding: 2px 0 4px; color: var(--sub); }
+.rclines { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rclines .chip { min-height: 40px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlg.rcbig { max-width: min(96vw, 720px); max-height: 92vh; overflow: auto; }
+.dlg.rcbig img { width: 100%; height: auto; display: block; border-radius: 8px; }
+/* 초기화 · 가져오기: 체크 목록 */
+.rslist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.rsrow { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; color: inherit; font-size: calc(15px * var(--fs)); }
+.rsrow:first-child { border-top: 0; }
+.ckbox { flex: none; width: 24px; height: 24px; border: 2px solid var(--line); border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.ckbox.on { background: var(--ink); border-color: var(--ink); color: var(--sf); }

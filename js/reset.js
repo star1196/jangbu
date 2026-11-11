@@ -175,6 +175,7 @@ const RESET_ACT = {
     try {
       const file = await autoBackup();
       const n = await runReset(sel);
+      await cleanPhotos(); // 지운 내역의 영수증 사진도 같이
       S.busy = false; S.dialog = null; S.f = null; S.imp = null; S.xl = null;
       go('홈'); toast(`초기화했어요 (${n}건 지움). 직전 백업: ${file}`);
     } catch (e) { S.busy = false; throw e; }

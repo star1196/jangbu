@@ -23,21 +23,31 @@ function backupFileName(ts) {
 }
 
 /* 묶음 이름을 사람 말로 (확인 화면 건수 풀이) */
-const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것' };
+const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것', photos: '영수증 사진' };
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
 
 /* ───────── 백업 저장 ───────── */
-async function prepareBackup() {
-  const D = S.dialog;
+async function makeBackupText() {
   const at = Date.now(), cols = Store.snapshot();
   const payload = { app: 'jangbu', v: 1, createdAt: at, device: deviceName(), schema: Store.LATEST, ledger: { ...Store.current(), salt: undefined, iter: undefined }, counts: { tx: liveCount(cols) }, cols };
   const sealed = await Store.sealBackup(payload);
   // 겉에는 열기 전에 보여 줄 것만 (만든 시각·기기·장부 종류). 내용은 모두 잠김.
   const file = { app: 'jangbu', kind: 'backup', v: 1, ledgerId: Store.current().id, type: Store.current().type, createdAt: at, device: deviceName(), ...sealed };
-  const text = JSON.stringify(file);
+  return { at, text: JSON.stringify(file), n: payload.counts.tx };
+}
+async function prepareBackup() {
+  const D = S.dialog;
+  const b = await makeBackupText();
   if (S.dialog !== D) return;
-  D.at = at; D.name = backupFileName(at); D.text = text; D.n = payload.counts.tx; D.size = text.length;
+  D.at = b.at; D.name = backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
   render();
+}
+// 지우기 직전 자동 백업 (초기화 · 장부 통째로 지우기): 파일 이름 앞에 '지우기전_'
+async function autoBackup() {
+  const b = await makeBackupText(), name = '지우기전_' + backupFileName(b.at);
+  downloadText(name, b.text);
+  setSync(Store.current().id, { lastSave: b.at });
+  return name;
 }
 function downloadText(name, text) {
   const blob = new Blob([text], { type: 'application/octet-stream' });

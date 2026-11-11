@@ -81,6 +81,56 @@ function guessField(h) {
   if (/메모|비고/.test(s)) return 'memo';
   return '';
 }
+
+/* ── 4-28 카드 명세서 표준 칸 ──
+   사용자는 카드 용어나 +/−를 몰라도 됨. 칸 이름만 맞으면 앱이 부호를 알아서 맞춤. 모르는 칸은 [필요없음]. */
+const CARD_FIELDS = [
+  ['', '고르세요', ''],
+  ['date', '이용일', '카드 쓴 날'],
+  ['merchant', '사용처', '어디서 썼나'],
+  ['out', '이용금액(원금)', '물건값 전체'],
+  ['inst', '할부', '일시불 / 2~24개월'],
+  ['instIdx', '회차', '몇 번째 달인지'],
+  ['principal', '이번 달 낼 원금', '이번 달 청구되는 원금'],
+  ['fee', '수수료', '할부 이자·수수료 (내야 하는 돈)'],
+  ['disc', '할인·혜택', '깎아 준 돈 (면제·청구할인·포인트)'],
+  ['billTotal', '이번 달 낼 돈 합계', '원금 + 수수료 − 할인'],
+  ['cardNo', '카드번호', '뒤 4자리로 카드 구분'],
+  ['approval', '승인번호', '중복 확인용'],
+  ['skip', '필요없음', '나머지 전부']
+];
+// 카드사마다 다른 칸 이름 → 표준 칸 (자동 인식 사전). 순서가 중요(더 좁은 이름 먼저)
+function guessCardField(h) {
+  const s = norm(h); if (!s) return 'skip';
+  if (/승인번호/.test(s)) return 'approval';
+  if (/카드번호|이용카드|카드no|카드구분|본인가족/.test(s)) return 'cardNo';
+  if (/잔액|잔여|남은|결제후|미결제|누적/.test(s)) return 'skip';
+  if (/이용일|거래일|승인일|매출일|사용일|이용일자|거래일자|승인일자|^일자$|^날짜$/.test(s)) return 'date';
+  if (/수수료|이자/.test(s)) return 'fee';
+  if (/할인|혜택|면제|포인트|캐시백|적립/.test(s)) return 'disc';
+  if (/회차|납부회차|할부회차|^회$/.test(s)) return 'instIdx';
+  if (/할부|개월|이용구분|결제구분|결제방법/.test(s)) return 'inst';
+  if (/결제원금|청구원금|이번달원금|당월원금|이번달결제금액|당월결제금액/.test(s)) return 'principal';
+  if (/결제하실|결제금액|청구금액|결제예정|입금하실|이번달결제|합계금액/.test(s)) return 'billTotal';
+  if (/이용금액|거래금액|승인금액|매출금액|사용금액|^원금$|^금액$|이용액/.test(s)) return 'out';
+  if (/가맹점|이용처|사용처|거래처|상호|이용내역|내용|적요/.test(s)) return 'merchant';
+  return 'skip';
+}
+const fieldsFor = (I) => (I && I.target && I.target.type === 'card' ? CARD_FIELDS : FIELDS);
+// 제목 줄로 카드 명세서인지 짐작 (입금·출금·잔액 칸이 있으면 통장)
+function looksCard(hdr) { const t = hdr.map(norm).join('|'); return /가맹점|이용금액|할부|승인|이용처|사용처/.test(t) && !/입금|출금|맡기신|찾으신/.test(t); } // 카드 명세서에도 '결제후잔액' 칸이 있어서 잔액만으로는 통장이라 보지 않음
+// 칸 이름 → 칸 종류 (같은 종류가 두 칸이면 앞 칸만. 가맹점·필요없음은 여러 칸 가능)
+function mapFor(hdr, type) {
+  const map = {}, used = new Set();
+  hdr.forEach((h, i) => {
+    let f = type === 'card' ? guessCardField(h) : guessField(h);
+    if (f && !['merchant', 'skip', 'memo'].includes(f)) { if (used.has(f)) f = type === 'card' ? 'skip' : ''; else used.add(f); }
+    map[i] = f;
+  });
+  return map;
+}
+// 할부 칸 글자 → 개월 수 (일시불 → 1)
+function instOf(v) { const s = String(v ?? '').trim(); if (!s || /일시불/.test(s)) return 1; const n = toInt(s); return n > 1 && n <= 60 ? n : 1; }
 // 머리글(제목) 줄 찾기: 카드사 명세서는 위쪽에 요약 칸(결제정보·출금일·결제금액…)이 있어서
 // '날짜 이름 + 가맹점 이름 + 금액 이름'이 함께 있고, 바로 아래 몇 줄에 날짜가 이어지는 줄에 점수를 줘서 가장 높은 줄을 고름
 const HEAD_WORDS = { date: /(일자|날짜|거래일|이용일|승인일|사용일|매출일|거래일시|이용일시)/, mer: /(가맹점|이용처|사용처|내용|적요|거래처|상호|기재|받는분|보낸분)/, amt: /(금액|출금|입금|찾으신|맡기신|이용액)/, etc: /(할부|카드|승인번호|잔액|구분|수수료|포인트|메모|비고)/ };
@@ -185,6 +235,7 @@ async function readFile(file) {
 
 /* ── 파일 올리기 시작 ── */
 async function startImport(file) {
+  if (!/\.(xlsx|xls|csv|pdf)$/i.test(file.name || '')) { S.imp = { step: 'drop' }; render(); showError(new Error(`「${file.name}」은(는) 읽을 수 없는 파일이에요. 엑셀(xlsx · xls) · CSV · PDF 파일만 올릴 수 있어요.`)); return; }
   S.imp = { step: 'loading', name: file.name };
   render();
   try {
@@ -196,7 +247,7 @@ async function startImport(file) {
     }
     setImpHeader({ name, rows: sh.rows, h: sh.h, sheet: sh.name, sheets, pdf: !!rf.pdf, pdfCo: rf.pdfCo, auto: true });
   } catch (e) {
-    S.imp = { step: 'drop' }; render(); toast(e.message || '파일을 읽지 못했어요');
+    S.imp = { step: 'drop' }; render(); showError(new Error('파일을 읽지 못했어요: ' + (e.message || e)), () => startImport(file));
   }
 }
 // 제목 줄이 정해지면: 칸 이름 → 기억한 서식 찾기 → (처음 보는 모양이면) 칸 지정
@@ -206,10 +257,11 @@ function setImpHeader(o) {
   const tpls = Store.all('templates');
   const exact = tpls.find((t) => t.sig === sig);
   const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
-  S.imp = { step: 'map', name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: '', cardId: '', bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
-  const used = new Set();
-  hdr.forEach((h, i) => { let f = guessField(h); if (f && f !== 'merchant' && f !== 'skip' && f !== 'memo') { if (used.has(f)) f = ''; else used.add(f); } S.imp.map[i] = f; }); // 같은 종류가 두 칸이면 앞 칸만 (이용금액 vs 이번달 결제금액)
-  if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; }
+  const type0 = !o.pdf && looksCard(hdr) ? 'card' : '';
+  const card0 = type0 === 'card' && cardsOpen().length === 1 ? cardsOpen()[0].id : '';
+  S.imp = { step: 'map', name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: type0, cardId: card0, bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
+  S.imp.map = mapFor(hdr, type0); // 카드 명세서면 표준 칸 사전으로 미리 채움 (모르는 칸은 필요없음)
+  if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; checkAllDup(); }
   else if (near) { S.imp.ask = near[0].id; }
   render();
 }
@@ -237,7 +289,7 @@ function exampleOf(i) { const I = S.imp; return dataRowsOf(I, 4).map((r) => cell
 // 칸 지정 화면 위: 실제 값 5줄 미리보기 표 (어떤 칸인지 알아보기 쉽게)
 function impPeekTable(I) {
   const cols = I.hdr.map((h, i) => i).filter((i) => I.hdr[i] || dataRowsOf(I, 5).some((r) => cellTxt((r || [])[i])));
-  const lab = (i) => (FIELDS.find((f) => f[0] === I.map[i]) || ['', ''])[1];
+  const lab = (i) => (fieldsFor(I).find((f) => f[0] === I.map[i]) || ['', ''])[1];
   const short = (s) => esc(s.length > 16 ? s.slice(0, 16) + '…' : s);
   return `<section class="card" style="overflow-x:auto"><table class="peek"><thead><tr>${cols.map((i) => `<th><span class="sub small">${String.fromCharCode(65 + (i % 26))}칸</span><br>${short(I.hdr[i].replace(/\s+/g, ' ') || '(제목 없음)')}${I.map[i] && I.map[i] !== 'skip' ? `<br><span class="peekf">${lab(i)}</span>` : ''}</th>`).join('')}</tr></thead>
     <tbody>${dataRowsOf(I, 5).map((r) => `<tr>${cols.map((i) => `<td>${short(cellTxt((r || [])[i]))}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`;
@@ -247,17 +299,31 @@ function impPeekTable(I) {
 function buildItems() {
   const I = S.imp, T = I.target, col = (f) => Object.keys(I.map).filter((k) => I.map[k] === f).map(Number);
   const cD = col('date')[0], cM = col('merchant'), cO = col('out')[0], cI = col('in')[0], cA = col('amount')[0], cInst = col('inst')[0], cNo = col('cardNo')[0], cAp = col('approval')[0], cMemo = col('memo')[0];
+  const cF = col('fee')[0], cDi = col('disc')[0], cIdx = col('instIdx')[0], cP = col('principal')[0], cBT = col('billTotal')[0];
+  const absAmt = (v) => Math.abs(parseAmt(v)); // 수수료·할인은 명세서 부호와 상관없이 크기만 씀
   const items = [];
   I.rows.slice(I.h + 1).forEach((r, ri) => {
     r = r || [];
     const date = parseDateCell(r[cD]);
     if (!date) {
-      // 날짜 없는 줄: 바로 위 결제의 할인(−금액)이면 그 결제에 할인으로 합침 (예: 국민카드 '○○ 할인 −12,000')
+      // 날짜 없는 줄 (바로 위 결제에 딸린 줄):
+      //  −금액 → 위 결제의 할인 (예: 국민카드 '○○ 할인 −12,000')
+      //  +금액이고 '수수료·이자' → 위 결제의 수수료 / 그 밖의 +금액 → 수수료인지 혜택인지 물어봄(기본: 수수료)
       const last = items[items.length - 1], mm = cM.map((c) => String(r[c] ?? '').trim()).filter(Boolean).join(' ');
       const a = cO != null ? parseAmt(r[cO]) : cA != null ? parseAmt(r[cA]) : 0;
-      if (last && last.kind === 'out' && a < 0 && mm && !/합\s*계|소\s*계|total/i.test(mm) && last.row === ri - 1 - (last.disc ? 1 : 0)) {
-        last.disc = (last.disc || 0) - a; last.amount += a; last.discMemo = [last.discMemo, `${mm} ${won(-a)}원`].filter(Boolean).join(', ');
-      }
+      const fA = cF != null ? absAmt(r[cF]) : 0, dA = cDi != null ? absAmt(r[cDi]) : 0;
+      const rowTxt = r.map((x) => String(x ?? '')).join(' ');
+      if (!last || last.kind !== 'out' || last.tail !== ri - 1 || /합\s*계|소\s*계|total|총\s*건|총\s*액|총\s*이용/i.test(rowTxt)) return;
+      if (!a && !fA && !dA) return;
+      last.tail = ri;
+      if (T.type === 'card') {
+        if (fA) last.fee0 += fA;
+        if (dA) { last.disc0 += dA; last.discMemo = [last.discMemo, `${mm || '할인'} ${won(dA)}원`].filter(Boolean).join(', '); }
+        if (a < 0) { last.disc0 += -a; last.discMemo = [last.discMemo, `${mm || '할인'} ${won(-a)}원`].filter(Boolean).join(', '); }
+        else if (a > 0 && /수수료|이자/.test(mm)) last.fee0 += a;
+        else if (a > 0 && a < Math.abs(last.base)) last.asks.push({ amount: a, label: mm || '설명 없는 금액', choice: 'fee' }); // 물건값보다 큰 + 금액은 합계 같은 줄로 보고 무시
+        cardSplit(last);
+      } else if (a < 0 && mm) { last.disc = (last.disc || 0) - a; last.amount += a; last.discMemo = [last.discMemo, `${mm} ${won(-a)}원`].filter(Boolean).join(', '); }
       return;
     }
     const merchant = cM.map((c) => String(r[c] ?? '').trim()).filter(Boolean).join(' ');
@@ -274,8 +340,16 @@ function buildItems() {
       payId = (byNo || payOf(T.cardId) || {}).id || null;
       const pc = payOf(payId); if (pc && pc.cardType === 'check') bankId = pc.bankId || null;
     } else { bankId = T.bankId || null; payId = (Store.all('payMethods').find((p) => p.kind === 'bank') || {}).id || null; }
-    const instN = cInst != null ? toInt(r[cInst]) : 0;
-    items.push({ i: items.length, row: ri, date, merchant, kind, amount, payId, bankId, inst: instN > 1 ? instN : 1, approval: cAp != null ? String(r[cAp] ?? '').trim() : '', memo: cMemo != null ? String(r[cMemo] ?? '').trim() : '', accId: null, auto: false, use: true, dup: false, same: null, bill: null, cancelOf: null });
+    const instN = cInst != null ? instOf(r[cInst]) : 1;
+    const it = { i: items.length, row: ri, tail: ri, date, merchant, kind, amount, payId, bankId, inst: instN > 1 ? instN : 1, approval: cAp != null ? String(r[cAp] ?? '').trim() : '', memo: cMemo != null ? String(r[cMemo] ?? '').trim() : '', accId: null, auto: false, use: true, dup: false, same: null, bill: null, cancelOf: null };
+    if (T.type === 'card') {
+      // 이용금액이 −면 취소·환불(위에서 이미 −로 둠). 수수료·할인은 부호와 상관없이 크기로.
+      Object.assign(it, { base: amount, fee0: cF != null ? absAmt(r[cF]) : 0, disc0: cDi != null ? absAmt(r[cDi]) : 0, asks: [], feeCol: cF != null,
+        idx: cIdx != null ? toInt(r[cIdx]) || 0 : 0, principalCol: cP != null ? absAmt(r[cP]) : null, billTotalCol: cBT != null ? parseAmt(r[cBT]) : null,
+        noInterest: /무이자/.test(r.map((c) => String(c ?? '')).join(' ')) });
+      cardSplit(it);
+    }
+    items.push(it);
   });
   // 중복 제외: 날짜+금액+가맹점이 같은 내역이 이미 있으면 건너뜀. 파일 안에 실제로 2건이면 둘 다(순번으로 비교)
   const keyOf = (x) => `${x.date}|${x.kind}|${x.amount}|${norm(x.merchant)}`;
@@ -286,7 +360,7 @@ function buildItems() {
   // 직접 입력한 것과 같은 건? (금액 같음 + 날짜 ±1일 + 같은 카드 또는 승인번호)
   const near1 = (a, b) => Math.abs(parseYmd(a) - parseYmd(b)) <= 86400000;
   items.filter((it) => !it.dup).forEach((it) => {
-    const m = liveTx().find((x) => x.kind === it.kind && x.amount === it.amount && (x.source || '직접') === '직접' && near1(x.date, it.date)
+    const m = liveTx().find((x) => x.kind === it.kind && x.amount === it.amount && ['직접', '영수증'].includes(x.source || '직접') && near1(x.date, it.date)
       && ((it.payId && x.payMethodId === it.payId) || (it.approval && x.approval === it.approval) || (it.bankId && x.bankId === it.bankId)));
     if (m) { it.same = { id: m.id, yes: true }; it.use = false; }
   });
@@ -323,6 +397,79 @@ function buildItems() {
   });
   I.items = items; I.shown = 50;
 }
+/* ── 4-28 카드 명세서: 부호 정리 · 이번 달 낼 돈 · 쉬운 문장 · 명세서 합계 확인 ── */
+// 수수료와 할인이 함께 있으면 할인으로 먼저 수수료를 깎아 줌(= 수수료 면제). 남는 할인은 물건값에서 뺌(아낀 돈).
+function cardSplit(it) {
+  let fee = it.fee0 || 0, disc = it.disc0 || 0;
+  for (const q of it.asks || []) { if (q.choice === 'fee') fee += q.amount; else disc += q.amount; }
+  const waived = Math.min(fee, disc);
+  it.fee = fee; it.feeWaived = waived; it.feeNet = fee - waived;
+  const pd = Math.max(0, Math.min(disc - waived, it.base)); // 취소 줄(−)에는 할인을 붙이지 않음
+  it.disc = pd; it.amount = it.base - pd;
+}
+// 이번 달 카드 대금에 들어가는 원금 (할부는 회차 몫, 취소는 −)
+function thisMonthOf(it) {
+  if (it.amount < 0 || it.inst <= 1) return it.amount;
+  if (it.principalCol) return it.principalCol;
+  const per = Math.trunc(it.amount / it.inst);
+  return (it.idx || 1) <= 1 ? per + (it.amount - per * it.inst) : per;
+}
+const rowBillOf = (it) => thisMonthOf(it) + (it.feeNet || 0); // 이번 달 낼 돈 = 원금 + 수수료 − 할인
+function cardSentence(it) {
+  const p = [`${+it.date.slice(5, 7)}월 ${+it.date.slice(8)}일`, it.merchant || '(사용처 없음)', `${won(Math.abs(it.amount))}원`];
+  if (it.amount < 0) p.push('취소·환불');
+  else if (it.inst > 1) { p.push(`${it.inst}개월 할부${it.idx ? ` 중 ${it.idx}번째` : ''}`); p.push(`이번 달 ${won(thisMonthOf(it))}원`); if (it.noInterest || (it.feeCol && !it.fee)) p.push('무이자'); }
+  else p.push('일시불');
+  return p.join(' · ');
+}
+function cardNotes(it) {
+  if (S.imp.target.type !== 'card' || it.dup) return '';
+  const n = [`<span class="pnote plain">${esc(cardSentence(it))}</span>`];
+  if (it.feeWaived && !it.feeNet) n.push(`<span class="pnote ok">${ic('check', 12)}수수료 ${won(it.fee)}원 → 카드 혜택으로 면제</span>`);
+  else if (it.feeNet) n.push(`<span class="pnote">수수료 ${won(it.feeNet)}원${it.feeWaived ? ` (혜택 ${won(it.feeWaived)}원 빼고)` : ''} → 결제일에 '카드 수수료·이자'로 적어요</span>`);
+  if (it.disc > 0) n.push(`<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 → 아낀 돈 · 실제 낸 돈 ${won(it.amount)}원${it.discMemo ? ` (${esc(it.discMemo)})` : ''}</span>`);
+  (it.asks || []).forEach((q, qi) => n.push(`<span class="pnote warn">이 ${won(q.amount)}원(${esc(q.label)})은 무엇인가요? <button class="mini ${q.choice === 'fee' ? 'on' : ''}" data-act="impAsk" data-i="${it.i}" data-q="${qi}" data-v="fee">내야 하는 수수료</button><button class="mini ${q.choice === 'benefit' ? 'on' : ''}" data-act="impAsk" data-i="${it.i}" data-q="${qi}" data-v="benefit">깎아 준 혜택</button></span>`));
+  return n.join('');
+}
+// 명세서에 적힌 합계 찾기: [이번 달 낼 돈 합계] 칸의 합 → 아니면 표 밖(위 요약 칸 · 아래 합계 줄)에서 '결제금액·청구금액·합계' 옆 숫자
+function stmtTotalOf(I, appT) {
+  if (I.items.some((it) => it.billTotalCol != null)) return { amount: I.items.reduce((s, it) => s + (it.billTotalCol || 0), 0), label: '이번 달 낼 돈 합계 칸' };
+  const dataRows = new Set(I.items.flatMap((it) => [it.row, it.tail].map((r) => r + I.h + 1)));
+  const numOf = (v) => (typeof v === 'number' ? Math.round(v) : /^[-−(]?[\d,]+\)?\s*원?$/.test(String(v ?? '').trim()) ? parseAmt(v) : null);
+  const cands = [];
+  I.rows.forEach((r, ri) => {
+    if (!r || ri === I.h || dataRows.has(ri)) return;
+    r.forEach((c, j) => {
+      const lab = String(c ?? '').replace(/\s/g, '');
+      if (!lab || lab.length > 24 || !/결제|청구|합계|총|이용금액|카드/.test(lab)) return;
+      const inner = lab.match(/([\d,]{3,})원?$/); if (inner && toInt(inner[1]) >= 100) { cands.push({ n: toInt(inner[1]), lab }); return; }
+      let found = false;
+      for (let k = j + 1; k < Math.min(r.length, j + 8); k++) { const n = numOf(r[k]); if (n != null && Math.abs(n) >= 100) { cands.push({ n, lab }); found = true; } } // 한 줄에 여러 합계(이용금액 합 · 결제금액 합)가 있을 수 있어 모두 후보로
+      if (found) return;
+      const below = I.rows[ri + 1] && numOf(I.rows[ri + 1][j]); if (below != null && Math.abs(below) >= 100) cands.push({ n: below, lab });
+    });
+  });
+  const hit = cands.find((c) => c.n === appT); if (hit) return { amount: hit.n, label: hit.lab };
+  // 꼭 맞는 숫자가 없으면 '결제·청구·합계' 이름이 붙은 숫자 중 앱 합계와 가장 가까운 것과 비교 (차이를 보여 줌)
+  const pool = cands.filter((c) => /결제|청구|합계|총/.test(c.lab));
+  const pri = (pool.length ? pool : cands).sort((a, b) => Math.abs(a.n - appT) - Math.abs(b.n - appT))[0];
+  return pri ? { amount: pri.n, label: pri.lab } : null;
+}
+function totalLine(I) {
+  if (I.target.type !== 'card' || !I.items.length) return '';
+  const appT = I.items.reduce((s, it) => s + rowBillOf(it), 0), st = stmtTotalOf(I, appT);
+  if (!st) return `<span style="font-size:${px(14)}">앱이 계산한 이번 달 낼 돈 <b>${won(appT)}원</b> <span class="sub small">(명세서 합계 칸을 못 찾았어요. 명세서와 직접 비교해 주세요)</span></span>`;
+  return st.amount === appT
+    ? `<span style="font-size:${px(15)};font-weight:700;color:var(--ok, inherit)">명세서 ${won(st.amount)}원 = 앱 ${won(appT)}원 ✓</span>`
+    : `<span style="font-size:${px(15)};font-weight:700;color:var(--warn)">명세서 ${won(st.amount)}원 · 앱 ${won(appT)}원 · 차이 ${won(Math.abs(st.amount - appT))}원</span><span class="sub small">다른 줄이 없는지, 할부·할인·수수료 칸이 맞는지 확인해 주세요. (명세서에서 찾은 칸: ${esc(st.label)})</span>`;
+}
+
+/** 읽은 줄이 모두 이미 장부에 있으면: 「이미 올린 파일이에요. N건 모두 중복」 */
+function checkAllDup() {
+  const st = impStats();
+  if (st.read && st.dup === st.read) S.dialog = { type: 'dupFile', n: st.read, name: S.imp.name };
+  else if (!st.read) S.dialog = { type: 'error', msg: '파일에서 내역을 한 줄도 찾지 못했어요. 칸 지정(날짜·금액 칸)이 맞는지 확인해 주세요.', canRetry: false };
+}
 function impStats() {
   const its = S.imp.items || [];
   return { read: its.length, auto: its.filter((x) => x.use && (x.accId || x.bill)).length, unc: its.filter((x) => x.use && !x.accId && !x.bill).length, dup: its.filter((x) => x.dup).length, same: its.filter((x) => x.same && x.same.yes).length, use: its.filter((x) => x.use).length };
@@ -336,7 +483,7 @@ function viewFile(L) {
     const recent = Store.all('imports').sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
     return `<div class="stack">
       <label class="dropbox" data-drop>
-        <input type="file" accept=".xlsx,.xls,.csv,.pdf" data-file hidden>
+        <input type="file" accept=".xlsx,.xls,.csv,.pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/pdf" data-file hidden>
         ${ic('upload', 48, 'var(--sub)')}
         <span style="font-size:${px(21)};font-weight:700">여기에 파일을 놓거나 눌러서 선택</span>
         <span class="sub" style="font-size:${px(15)}">엑셀(xlsx · xls) · CSV · PDF(읽을 수 있는 만큼) · 카드·통장 거래내역</span>
@@ -372,16 +519,18 @@ function viewMap(L) {
       <div class="chips"><button class="btn ink" data-act="impAskYes">네, 맞아요</button><button class="btn" data-act="impAskNo">아니요, 칸을 다시 알려 줄게요</button></div>
     </section></div>`;
   }
-  const opts = FIELDS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const FL = fieldsFor(I), isCard = T.type === 'card';
+  // 카드 명세서: 표준 칸 이름 + 쉬운 설명을 같이 (예: "이용금액(원금) — 물건값 전체")
+  const opts = FL.map(([v, l, d]) => `<option value="${v}">${l}${isCard && d ? ' — ' + d : ''}</option>`).join('');
   const rows = I.hdr.map((h, i) => {
     if (!h && !exampleOf(i)) return '';
-    const v = I.map[i] || '';
+    const v = I.map[i] || '', f = FL.find((x) => x[0] === v);
     return `<div class="maprow ${v ? '' : 'unk'}"><div style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:${px(15)};font-weight:700">${String.fromCharCode(65 + (i % 26))}칸 · ${esc(h || '(제목 없음)')}</span><span class="sub small">예: ${esc(exampleOf(i) || '—')}</span></div>
-      <select class="input" style="flex:0 1 220px;min-height:48px" data-map="${i}" aria-label="${esc(h)} 칸 종류">${opts.replace(`value="${v}"`, `value="${v}" selected`)}</select></div>`;
+      <div style="flex:0 1 240px;min-width:0;display:flex;flex-direction:column;gap:3px"><select class="input" style="min-height:48px" data-map="${i}" aria-label="${esc(h)} 칸 종류">${opts.replace(`value="${v}"`, `value="${v}" selected`)}</select>${isCard && f && f[2] && v && v !== 'skip' ? `<span class="sub small">${esc(f[2])}</span>` : ''}</div></div>`;
   }).join('');
   const has = (f) => Object.values(I.map).includes(f);
   const ready = T.type && (T.type === 'card' ? (T.cardId || has('cardNo')) : T.bankId || !feat('banks')) && has('date') && has('merchant') && (has('out') || has('in') || has('amount'));
-  const status = [['날짜', has('date')], ['가맹점·내용', has('merchant')], ['금액', has('out') || has('in') || has('amount')]].map(([l, ok]) => `<span class="mstat ${ok ? 'ok' : ''}">${ic(ok ? 'check' : 'circle-alert', 16)}${l}</span>`).join('');
+  const status = (isCard ? [['이용일', has('date')], ['사용처', has('merchant')], ['이용금액', has('out') || has('amount')]] : [['날짜', has('date')], ['가맹점·내용', has('merchant')], ['금액', has('out') || has('in') || has('amount')]]).map(([l, ok]) => `<span class="mstat ${ok ? 'ok' : ''}">${ic(ok ? 'check' : 'circle-alert', 16)}${l}</span>`).join('');
   return `<div class="stack" style="max-width:860px;gap:14px">
     <section class="card card-pad" style="display:flex;align-items:flex-start;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:${px(16)};font-weight:700">${esc(I.name)}${I.sheetsN > 1 ? ` <span class="sub small">· ${esc(I.sheet)} 시트</span>` : ''}</span>
@@ -397,7 +546,7 @@ function viewMap(L) {
     </section>
     <div class="chips">${status}</div>
     <section class="card" style="overflow:hidden">${rows}</section>
-    <div class="stickyfoot"><span class="sub" style="flex:1 1 200px;font-size:${px(14)}">${ready ? '좋아요. 이 모양을 기억하고 미리보기로 갈게요.' : '어디 내역인지 고르고, 날짜·가맹점·금액 칸을 알려 주세요.'}</span>
+    <div class="stickyfoot"><span class="sub" style="flex:1 1 200px;font-size:${px(14)}">${ready ? '좋아요. 이 모양을 기억하고 미리보기로 갈게요.' : (isCard ? '카드를 고르고, 이용일·사용처·이용금액 칸을 알려 주세요. 나머지는 [필요없음]이어도 돼요.' : '어디 내역인지 고르고, 날짜·가맹점·금액 칸을 알려 주세요.')}</span>
       <button class="btn big" style="flex:1" data-act="impReset">취소</button><button class="btn ink big" style="flex:1.4" data-act="impMapGo" ${ready ? '' : 'disabled'}>이 모양 기억하고 계속</button></div>
   </div>`;
 }
@@ -411,10 +560,10 @@ function viewPreview(L) {
   const its = I.items.slice(0, I.shown);
   const note = (it) => it.dup ? '<span class="pnote">중복 · 이미 있어요</span>'
     : it.bill ? `<span class="pnote ok">${ic('check', 12)}${esc((payOf(it.bill.cardId) || {}).name)} 대금 · 결제 완료로 바꿔요</span>`
-      : it.same ? `<span class="pnote">직접 입력한 것과 같은 건인가요? <button class="mini ${it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="1">같음</button><button class="mini ${!it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="0">다름</button></span>`
+      : it.same ? `<span class="pnote">직접 입력·영수증으로 넣은 것과 같은 건인가요? <button class="mini ${it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="1">같음</button><button class="mini ${!it.same.yes ? 'on' : ''}" data-act="impSame" data-i="${it.i}" data-v="0">다름</button></span>`
         : it.pend ? `<span class="pnote ok">${ic('repeat', 12)}반복 입력 확인 대기와 같은 건 · 새로 만들지 않고 확인으로 바꿔요</span>`
         : it.cancelOf ? `<span class="pnote">취소 · ${dateLabel(it.cancelOf.date)} 결제와 짝</span>`
-        : it.disc ? `<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 반영 (원래 ${won(it.amount + it.disc)}원)</span>`
+        : it.disc && T.type !== 'card' ? `<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 반영 (원래 ${won(it.amount + it.disc)}원)</span>`
           : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>' : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
   const row = (it) => {
@@ -424,18 +573,18 @@ function viewPreview(L) {
     if (phone) {
       return `<div class="pcard ${it.use ? '' : 'off'}"><div class="prow">${use}${dot}<input class="pin" style="width:${px(118)};flex:none" type="date" data-imp="date" data-i="${it.i}" value="${it.date}" aria-label="날짜"><input class="pin b" style="flex:1;min-width:0" data-imp="merchant" data-i="${it.i}" value="${esc(it.merchant)}" aria-label="가맹점"></div>
         <div class="prow" style="padding-left:30px"><input class="pin r ${amtCls(it)}" style="width:${px(110)};flex:none" data-imp="amount" data-i="${it.i}" value="${(it.amount < 0 ? '−' : '') + comma(Math.abs(it.amount))}" inputmode="numeric" aria-label="금액"><div style="flex:1;min-width:0">${cat}</div></div>
-        <div class="prow" style="padding-left:30px"><select class="pin" style="flex:1" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select></div>${note(it)}</div>`;
+        <div class="prow" style="padding-left:30px"><select class="pin" style="flex:1" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select></div>${cardNotes(it)}${note(it)}</div>`;
     }
     return `<div class="ptr ${it.use ? '' : 'off'}">${use}<span style="display:flex;align-items:center;gap:4px;min-width:0">${dot}<input class="pin" type="date" data-imp="date" data-i="${it.i}" value="${it.date}" aria-label="날짜"></span>
       <input class="pin b" data-imp="merchant" data-i="${it.i}" value="${esc(it.merchant)}" aria-label="가맹점">
       <input class="pin r ${amtCls(it)}" data-imp="amount" data-i="${it.i}" value="${(it.amount < 0 ? '−' : '') + comma(Math.abs(it.amount))}" inputmode="numeric" aria-label="금액">
       ${cat}<select class="pin" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select>
-      ${note(it) ? `<div class="pnotes">${note(it)}</div>` : ''}</div>`;
+      ${note(it) || cardNotes(it) ? `<div class="pnotes">${cardNotes(it)}${note(it)}</div>` : ''}</div>`;
   };
   return `<div class="stack" style="gap:12px">
     <section class="card card-pad" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">${ic('file-spreadsheet', 28, 'var(--sub)')}
       <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:${px(15)};font-weight:700">${esc(I.name)}</span>
-      <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}</span></div></section>
+      <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}</span>${totalLine(I)}</div></section>
     <span class="sub" style="font-size:${px(14)}">칸을 눌러 바로 고칠 수 있어요. 왼쪽 네모를 끄면 그 줄은 저장하지 않아요. [확인하고 저장]을 누르기 전에는 장부에 들어가지 않아요.</span>
     <section class="card" style="overflow:hidden">
       ${phone ? '' : `<div class="ptr head"><span></span><span style="padding-left:16px">날짜</span><span>가맹점</span><span class="r">금액</span><span>분류</span><span>${T.type === 'card' ? '카드' : '통장'}</span></div>`}
@@ -452,10 +601,23 @@ async function saveImport() {
   const I = S.imp, T = I.target, impId = Store.uid(), undo = [];
   let savedN = 0, uncN = 0;
   S.busy = true;
+  const feeAcc = Store.all('accounts').find((a) => a.kind === 'out' && a.name === '카드 수수료·이자');
   for (const it of I.items) {
+    // 4-28 수수료: 물건값과 따로 '카드 수수료·이자'로, 그 달 결제일에 (같은 수수료는 두 번 안 넣음)
+    if (T.type === 'card' && it.feeNet > 0 && (it.use || it.dup || (it.same && it.same.yes))) {
+      const pc = payOf(it.payId), credit = pc && pc.kind === 'card' && pc.cardType !== 'check' && pc.billingDay;
+      const ym = credit ? ymAdd(payYMOf(pc, it.date), Math.max(0, (it.idx || 1) - 1)) : null;
+      const feeKey = `fee|${it.payId || ''}|${ym || it.date}|${norm(it.merchant)}|${it.feeNet}`;
+      if (!liveTx().some((x) => x.dupKey === feeKey)) {
+        const fx = await Store.put('tx', { kind: 'out', date: ym ? billDateOf(pc, ym) : it.date, amount: it.feeNet, merchant: `${it.merchant || '카드'} 할부 수수료`, memo: it.inst > 1 ? `${it.inst}개월 할부${it.idx ? ` ${it.idx}회차` : ''} 수수료` : '카드 수수료',
+          accountId: feeAcc ? feeAcc.id : null, payMethodId: it.payId || null, bankId: pc && pc.cardType === 'check' ? pc.bankId || null : null, billYM: ym, perfEx: true,
+          status: feeAcc ? '확인' : '미확인', source: '파일:' + impId, dupKey: feeKey, originalPrice: 0, discount: 0, pointUsed: 0, deleted: false });
+        undo.push({ col: 'tx', id: fx.id, before: null }); savedN++;
+      }
+    }
     if (it.same && it.same.yes) { // 같은 건: 새로 만들지 않고 할부·승인번호만 보충 (사람이 고친 분류는 그대로)
       const x = Store.get('tx', it.same.id);
-      if (x) { undo.push({ col: 'tx', id: x.id, before: { ...x } }); await Store.put('tx', { ...x, installment: it.inst > 1 ? { months: it.inst } : x.installment || null, approval: x.approval || it.approval, dupKey: x.dupKey || it.dupKey }); }
+      if (x) { undo.push({ col: 'tx', id: x.id, before: { ...x } }); await Store.put('tx', { ...x, installment: it.inst > 1 ? { months: it.inst, index: it.idx || 1 } : x.installment || null, approval: x.approval || it.approval, dupKey: x.dupKey || it.dupKey, feeSaved: x.feeSaved || it.feeWaived || 0 }); }
       continue;
     }
     if (!it.use) continue;
@@ -476,7 +638,7 @@ async function saveImport() {
       const pc = payOf(it.payId);
       o = { kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo, accountId: it.accId || null, payMethodId: it.payId || null,
         bankId: pc && pc.kind === 'card' ? (pc.cardType === 'check' ? pc.bankId || null : null) : it.bankId || null,
-        installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst } : null, approval: it.approval || '',
+        installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst, index: it.idx || 1 } : null, approval: it.approval || '', feeSaved: it.feeWaived || 0,
         status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
       if (it.discMemo) o.memo = [o.memo, '할인: ' + it.discMemo].filter(Boolean).join(' · ');
       if (!it.accId) uncN++;
@@ -660,15 +822,22 @@ const FILE_ACT = {
   impHead: (el) => { const I = S.imp, sh = I.sheets[I.sheetI || 0]; setImpHeader({ name: I.name, rows: sh.rows, h: +el.dataset.i, sheet: sh.name, sheets: I.sheets, pdf: false, auto: false }); },
   impRepick: () => { const I = S.imp; S.imp = { step: 'pickHead', name: I.name, sheets: I.sheets, sheetI: Math.max(0, I.sheets.findIndex((s) => s.name === I.sheet)), h: I.h, backTo: I }; render(); },
   impHeadCancel: () => { S.imp = S.imp.backTo; render(); },
-  impAskYes: () => { const I = S.imp; applyTemplate(Store.get('templates', I.ask)); I.ask = null; buildItems(); I.step = 'preview'; render(); },
+  impAskYes: () => { const I = S.imp; applyTemplate(Store.get('templates', I.ask)); I.ask = null; buildItems(); I.step = 'preview'; checkAllDup(); render(); },
   impAskNo: () => { S.imp.ask = null; render(); },
-  impTarget: (el) => { S.imp.target.type = el.dataset.t; if (el.dataset.t === 'bank' && !S.imp.target.bankId) S.imp.target.bankId = (banksOpen('home')[0] || {}).id || ''; render(); },
+  impTarget: (el) => {
+    const I = S.imp, t = el.dataset.t, was = I.target.type; I.target.type = t;
+    if (t === 'bank' && !I.target.bankId) I.target.bankId = (banksOpen('home')[0] || {}).id || '';
+    if (t === 'card' && !I.target.cardId && cardsOpen().length === 1) I.target.cardId = cardsOpen()[0].id;
+    if (was !== t && !I.pdf) I.map = mapFor(I.hdr, t); // 카드 ↔ 통장을 바꾸면 그 종류의 칸 이름으로 다시 짐작
+    render();
+  },
   impCard: (el) => { S.imp.target.cardId = el.dataset.id; render(); },
   impBank: (el) => { S.imp.target.bankId = el.dataset.id; render(); },
-  impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; render(); },
+  impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; checkAllDup(); render(); },
   impMore: () => { S.imp.shown += 50; render(); },
   impSame: (el) => { const it = S.imp.items[+el.dataset.i]; it.same.yes = el.dataset.v === '1'; it.use = !it.same.yes; render(); },
   impSave: () => { if (!S.busy) saveImport(); },
+  impAsk: (el) => { const it = S.imp.items[+el.dataset.i]; it.asks[+el.dataset.q].choice = el.dataset.v; cardSplit(it); render(); },
   goUncFix: () => { S.uncTotal = null; S.uncSkip = []; S.uncLast = null; go('미확인 정리'); },
   uncAll: () => { S.uncAll = !S.uncAll; render(); },
   uncAuto: () => { S.uncAuto = S.uncAuto === false; render(); },

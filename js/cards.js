@@ -31,6 +31,7 @@ function cycleText(card) {
 // 신용카드 내역 하나 → 대금 조각들 [{ym, amount}]
 function billParts(x) {
   const c = payOf(x.payMethodId); if (!c || c.kind !== 'card' || c.cardType === 'check') return [];
+  if (x.billYM) return [{ ym: x.billYM, amount: x.amount, idx: 1, n: 1 }]; // 할부 수수료 등: 정해진 달 대금에 그대로
   const n = Math.max(1, (x.installment && x.installment.months) || 1);
   const base = Math.trunc(x.amount / n), rest = x.amount - base * n, ym0 = payYMOf(c, x.date);
   return Array.from({ length: n }, (_, i) => ({ ym: ymAdd(ym0, i), amount: base + (i === 0 ? rest : 0), idx: i + 1, n }));
@@ -63,6 +64,12 @@ function dueBills() {
     Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date <= t && !b.items.every((i) => String(i.x.source || '').startsWith('엑셀'))).forEach((b) => list.push({ card: c, bill: b }));
   });
   return list.sort((a, b) => (a.bill.date < b.bill.date ? -1 : 1));
+}
+// 남은 할부: 아직 안 나간 대금 중 할부 몫 (4-28 카드별 '남은 할부 ○회 · ○○원')
+function instLeftOf(cardId) {
+  const t = todayStr(); let n = 0, amt = 0;
+  Object.values(cardBills(cardId)).filter((b) => !b.paid && b.date >= t).forEach((b) => { const s = b.items.filter((i) => i.p.n > 1).reduce((a, i) => a + i.p.amount, 0); if (s) { n++; amt += s; } });
+  return { n, amt };
 }
 // 남은 할부·대금 (해지 경고용)
 function remainingOf(cardId) {
@@ -146,7 +153,7 @@ function viewCards(L) {
     const info = c.cardType === 'check' ? `통장에서 바로 출금${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : c.billingDay ? `결제일 매달 ${c.billingDay}일 · 이용기간 ${cycleText(c)}${c.bankId ? ' · ' + esc(bankName(c.bankId)) : ''}` : '<span style="color:var(--warn)">결제일을 정해 주세요</span>';
     return `<button class="cardbox ${c.id === S.cardSel ? 'on' : ''}" data-act="openCard" data-id="${c.id}">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%">${ic('credit-card', 20)}<span style="font-size:${px(17)};font-weight:700">${esc(c.name)}</span><span class="badge" style="border-radius:6px">${cardTypeTxt(c)}</span>${c.last4 ? `<span class="sub" style="font-size:${px(14)}">··· ${esc(c.last4)}</span>` : ''}<span style="flex:1"></span>${bills ? `<span class="amt neg" style="font-size:${px(18)}">−${won(bills.bill.amount)}원</span>` : ''}</div>
-      <span class="sub small">${info}</span>
+      <span class="sub small">${info}${(() => { const L0 = c.cardType !== 'check' ? instLeftOf(c.id) : null; return L0 && L0.n ? ` · 남은 할부 ${L0.n}회 · ${won(L0.amt)}원` : ''; })()}</span>
       ${feat('cardPerf') && goal ? `<span class="gbar"><i style="width:${pct}%;background:${perf >= goal ? 'var(--ink)' : 'var(--warn)'}"></i></span>
         <span style="display:flex;justify-content:space-between;gap:8px;width:100%;font-size:${px(13)};flex-wrap:wrap"><span class="sub">${c.perfCycle === 'prev' ? '이번 달 사용(다음 달 혜택)' : c.perfCycle === 'custom' && c.perfStart > 1 ? `${shortDate(pr[0])}~${shortDate(pr[1])}` : '이번 달 실적'} ${won(perf)} / ${won(goal)}원</span>${perf >= goal ? `<b style="display:flex;align-items:center;gap:4px">${ic('check', 14)}달성</b>` : `<b style="color:var(--warn)">목표까지 ${won(goal - perf)}원 남음</b>`}</span>
         ${prevPerf != null ? `<span class="sub small">지난달 실적 ${won(prevPerf)}원 → 이번 달 혜택 ${prevPerf >= goal ? '받아요' : '<b style="color:var(--warn)">못 받아요</b>'}${c.perfMemo ? ' · ' + esc(c.perfMemo) : ''}</span>` : ''}` : ''}
@@ -204,10 +211,10 @@ function viewCardDetail(c) {
 }
 
 /* ── 카드 추가 (한 화면 한 단계: 카드사 → 신용/체크 → 이름 → 뒤 4자리·결제일 → 확인) ── */
-function newCardDraft() { return { step: 0, company: '', custom: false, cardType: '', name: '', last4: '', billingDay: 25, bankId: (banksOpen('home')[0] || {}).id || null }; }
+function newCardDraft() { return { step: 0, company: '', custom: false, cardType: '', name: '', first4: '', last4: '', billingDay: 25, bankId: (banksOpen('home')[0] || {}).id || null }; }
 function viewCardAdd() {
   const A = S.cardAdd || (S.cardAdd = newCardDraft());
-  const titles = ['카드사를 골라 주세요', '신용카드인가요, 체크카드인가요?', '어떤 이름으로 부를까요?', '카드 번호 뒤 4자리', '이대로 추가할까요?'];
+  const titles = ['카드사를 골라 주세요', '신용카드인가요, 체크카드인가요?', '어떤 이름으로 부를까요?', '카드 번호 앞 4자리 · 뒤 4자리', '이대로 추가할까요?'];
   let body = '';
   if (A.step === 0) {
     body = `<div class="cogrid">${companies().map((c) => `<button class="cobtn ${A.company === c && !A.custom ? 'on' : ''}" data-act="caCo" data-v="${esc(c)}">${esc(c)}</button>`).join('')}<button class="cobtn ${A.custom ? 'on' : ''}" data-act="caCustom">직접 입력</button></div>
@@ -220,12 +227,14 @@ function viewCardAdd() {
     body = `<input class="input" style="min-height:60px;font-size:${px(18)};font-weight:600" data-ca="name" value="${esc(A.name)}" placeholder="예: 생활비 카드" data-autofocus>
       <div class="chips">${sugs.map((s) => `<button class="chip" data-act="caNick" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
   } else if (A.step === 3) {
-    body = `<input class="input" style="min-height:72px;max-width:260px;text-align:center;font-size:${px(32)};font-weight:700;letter-spacing:.35em" data-ca="last4" value="${esc(A.last4)}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000" data-autofocus>
-      <span class="sub small">같은 카드사 카드가 2장 이상일 때 구분하고, 명세서 파일의 카드번호로 저절로 연결해요. 몰라도 넘어가도 돼요.</span>
+    body = `<div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label class="field" style="flex:1 1 130px;max-width:200px"><span class="label">앞 4자리 <span style="font-weight:400">(영수증에 나와요)</span></span><input class="input" style="min-height:64px;text-align:center;font-size:${px(28)};font-weight:700;letter-spacing:.3em" data-ca="first4" value="${esc(A.first4 || '')}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000" data-autofocus></label>
+        <label class="field" style="flex:1 1 130px;max-width:200px"><span class="label">뒤 4자리 <span style="font-weight:400">(명세서에 나와요)</span></span><input class="input" style="min-height:64px;text-align:center;font-size:${px(28)};font-weight:700;letter-spacing:.3em" data-ca="last4" value="${esc(A.last4)}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000"></label></div>
+      <span class="sub small">카드 실물이나 카드사 앱에 적힌 번호예요. 앞 4자리는 영수증 사진으로, 뒤 4자리는 명세서 파일로 이 카드를 저절로 찾을 때 써요. 몰라도 넘어가도 돼요.</span>
       ${A.cardType === 'credit' ? `<span class="label">결제일</span><div class="chips">${DATA.BILL_DAYS.map((d) => `<button class="chip ${A.billingDay === d ? 'on' : ''}" data-act="caDay" data-v="${d}">${d}일</button>`).join('')}</div>` : ''}
       ${feat('banks') && banksOpen('home').length ? `<span class="label">${A.cardType === 'check' ? '연결 통장 (바로 빠지는 통장)' : '대금 빠지는 통장'}</span>${bankChips(A.bankId, 'caBank')}` : ''}`;
   } else {
-    const rows = [['카드사', A.company, 0], ['종류', A.cardType === 'check' ? '체크카드' : '신용카드', 1], ['이름', A.name, 2], ['뒤 4자리', A.last4 || '—', 3],
+    const rows = [['카드사', A.company, 0], ['종류', A.cardType === 'check' ? '체크카드' : '신용카드', 1], ['이름', A.name, 2], ['앞 4자리', A.first4 || '—', 3], ['뒤 4자리', A.last4 || '—', 3],
       ...(A.cardType === 'credit' ? [['결제일', `매달 ${A.billingDay}일 · 이용기간 전월 1일 ~ 말일`, 3]] : []),
       ...(A.bankId ? [[A.cardType === 'check' ? '연결 통장' : '대금 통장', bankName(A.bankId), 3]] : [])];
     body = `<section class="card" style="padding:4px 20px">${rows.map(([k, v, s]) => `<div class="conf-row"><span class="k">${k}</span><span class="v">${esc(v)}</span><button class="linkbtn" data-act="caGo" data-s="${s}">고치기</button></div>`).join('')}</section>
@@ -242,12 +251,12 @@ function viewCardAdd() {
 
 /* ── 카드 고치기 (대화 상자: 양식 → 확인) ── */
 function cardDraftFrom(c) {
-  return { name: c.name, company: c.company || '', cardType: c.cardType || 'credit', last4: c.last4 || '', billingDay: c.billingDay || '', cycleStart: c.cycleStart || 1, cycleOffset: c.cycleOffset == null ? 1 : c.cycleOffset, bankId: c.bankId || '', issueDate: c.issueDate || '', perfGoal: comma(c.perfGoal || 0), perfMemo: c.perfMemo || '', perfCycle: c.perfCycle || 'month', perfStart: c.perfStart || 1, closed: !!c.closed, closedDate: c.closedDate || '' };
+  return { name: c.name, company: c.company || '', cardType: c.cardType || 'credit', first4: c.first4 || '', last4: c.last4 || '', billingDay: c.billingDay || '', cycleStart: c.cycleStart || 1, cycleOffset: c.cycleOffset == null ? 1 : c.cycleOffset, bankId: c.bankId || '', issueDate: c.issueDate || '', perfGoal: comma(c.perfGoal || 0), perfMemo: c.perfMemo || '', perfCycle: c.perfCycle || 'month', perfStart: c.perfStart || 1, closed: !!c.closed, closedDate: c.closedDate || '' };
 }
 function viewCardDlg(D) {
   const d = D.d, c = payOf(D.id);
   if (D.step === 'confirm') {
-    const rows = [['이름', d.name], ['카드사', d.company || '—'], ['종류', d.cardType === 'check' ? '체크카드' : '신용카드'], ['뒤 4자리', d.last4 || '—'],
+    const rows = [['이름', d.name], ['카드사', d.company || '—'], ['종류', d.cardType === 'check' ? '체크카드' : '신용카드'], ['앞 4자리', d.first4 || '—'], ['뒤 4자리', d.last4 || '—'],
       ...(d.cardType === 'credit' ? [['결제일', d.billingDay ? `매달 ${d.billingDay}일` : '정하지 않음'], ['이용기간', cycleText({ cycleStart: +d.cycleStart, cycleOffset: +d.cycleOffset })]] : []),
       ['통장', d.bankId ? bankName(d.bankId) : '—'], ['발급일', d.issueDate || '—'],
       ...(feat('cardPerf') ? [['실적 목표', toInt(d.perfGoal) ? `매달 ${won(toInt(d.perfGoal))}원${d.perfMemo ? ' · ' + d.perfMemo : ''}` : '없음'], ['실적 기간', perfCycleTxt({ perfCycle: d.perfCycle, perfStart: +d.perfStart })]] : []),
@@ -262,7 +271,8 @@ function viewCardDlg(D) {
     <label class="field"><span class="label">이름</span><input class="input" data-d="name" value="${esc(d.name)}" maxlength="20" autocomplete="off"></label>
     <div class="cols" style="gap:10px">
       <label class="field" style="flex:1 1 180px"><span class="label">카드사</span><input class="input" data-d="company" value="${esc(d.company)}" list="coNames" autocomplete="off"></label>
-      <label class="field" style="flex:1 1 120px"><span class="label">뒤 4자리</span><input class="input" data-d="last4" value="${esc(d.last4)}" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+      <label class="field" style="flex:1 1 100px"><span class="label">앞 4자리</span><input class="input" data-d="first4" value="${esc(d.first4 || '')}" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+      <label class="field" style="flex:1 1 100px"><span class="label">뒤 4자리</span><input class="input" data-d="last4" value="${esc(d.last4)}" inputmode="numeric" maxlength="4" autocomplete="off"></label>
     </div>
     <datalist id="coNames">${companies().map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
     <div class="field"><span class="label">종류</span><div class="seg"><button class="${d.cardType === 'credit' ? 'on' : ''}" data-act="cardTypeSet" data-v="credit">신용</button><button class="${d.cardType === 'check' ? 'on' : ''}" data-act="cardTypeSet" data-v="check">체크</button></div></div>
@@ -320,11 +330,11 @@ const CARD_ACT = {
     if (A.step === 0 && !A.company.trim()) return err('카드사를 골라 주세요.');
     if (A.step === 1 && !A.cardType) return err('신용인지 체크인지 골라 주세요.');
     if (A.step === 2 && !A.name.trim()) return err('이름을 적어 주세요.');
-    if (A.step === 3 && A.last4 && !/^\d{4}$/.test(A.last4)) return err('숫자 4자리로 적어 주세요.');
+    if (A.step === 3 && ((A.last4 && !/^\d{4}$/.test(A.last4)) || (A.first4 && !/^\d{4}$/.test(A.first4)))) return err('숫자 4자리로 적어 주세요.');
     if (A.step < 4) { if (A.step === 1 && !A.name) A.name = `${A.company.replace(/카드$/, '')} ${A.cardType === 'check' ? '체크' : '신용'}`; A.step++; render(); return; }
     const st = Store.get('meta', 'settings') || { id: 'settings' };
     if (!companies().includes(A.company.trim())) await Store.put('meta', { ...st, cardCompanies: [...(st.cardCompanies || []), A.company.trim()] });
-    const c = await Store.put('payMethods', { kind: 'card', name: A.name.trim(), company: A.company.trim(), cardType: A.cardType, last4: A.last4, billingDay: A.cardType === 'credit' ? A.billingDay : null, cycleStart: 1, cycleOffset: 1, bankId: A.bankId, issueDate: '', closed: false, closedDate: '', perfGoal: 0, perfMemo: '', hidden: false, order: Store.all('payMethods').length });
+    const c = await Store.put('payMethods', { kind: 'card', name: A.name.trim(), company: A.company.trim(), cardType: A.cardType, first4: A.first4 || '', last4: A.last4, billingDay: A.cardType === 'credit' ? A.billingDay : null, cycleStart: 1, cycleOffset: 1, bankId: A.bankId, issueDate: '', closed: false, closedDate: '', perfGoal: 0, perfMemo: '', hidden: false, order: Store.all('payMethods').length });
     S.cardSel = c.id; S.cardAdd = null;
     S.screen = '카드 대금'; S.hist = S.hist.filter((h) => h !== '카드 추가'); render();
     toast(`'${c.name}'을(를) 추가했어요`, { items: [{ col: 'payMethods', id: c.id, before: null }] });
@@ -335,7 +345,7 @@ const CARD_ACT = {
   cardBack: () => { S.dialog.step = 'form'; render(); },
   cardSave: async () => {
     const D = S.dialog, d = D.d, c = payOf(D.id), before = { ...c };
-    const obj = { ...c, name: d.name.trim(), company: d.company.trim(), cardType: d.cardType, last4: digits(d.last4).slice(0, 4), billingDay: d.cardType === 'credit' && d.billingDay ? +d.billingDay : null, cycleStart: +d.cycleStart || 1, cycleOffset: +d.cycleOffset, bankId: d.bankId || null, issueDate: d.issueDate, perfGoal: toInt(d.perfGoal), perfMemo: d.perfMemo.trim(), perfCycle: d.perfCycle || 'month', perfStart: d.perfCycle === 'custom' ? +d.perfStart || 2 : 1, closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '' };
+    const obj = { ...c, name: d.name.trim(), company: d.company.trim(), cardType: d.cardType, first4: digits(d.first4 || '').slice(0, 4), last4: digits(d.last4).slice(0, 4), billingDay: d.cardType === 'credit' && d.billingDay ? +d.billingDay : null, cycleStart: +d.cycleStart || 1, cycleOffset: +d.cycleOffset, bankId: d.bankId || null, issueDate: d.issueDate, perfGoal: toInt(d.perfGoal), perfMemo: d.perfMemo.trim(), perfCycle: d.perfCycle || 'month', perfStart: d.perfCycle === 'custom' ? +d.perfStart || 2 : 1, closed: !!d.closed, closedDate: d.closed ? (d.closedDate || todayStr()) : '' };
     await Store.put('payMethods', obj);
     S.dialog = null; render(); toast(obj.closed && !before.closed ? '해지했어요. 지난 내역은 그대로예요' : '카드를 고쳤어요', { items: [{ col: 'payMethods', id: c.id, before }] });
   },
