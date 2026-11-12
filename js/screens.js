@@ -4,9 +4,12 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정' };
+if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
+  if (S.screen === '보안·잠금') return viewSecurity(); // 모든 장부 공통 (switch.js)
+  if (Store.current().type === 'club' && typeof clubScreen === 'function') { const h = clubScreen(L); if (h != null) return h; } // 친구회 전용 화면 (club.js)
   switch (S.screen) {
     case '홈': return viewHome(L);
     case '달력': return viewCal(L);
@@ -467,7 +470,7 @@ function viewSettings() {
       ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + (feat('receipt') ? rowB('영수증 사진 붙이기', `${rcPhotoOn() ? '켜짐' : '꺼짐'} · ${photoStats().n}장 · ${mb(photoStats().bytes)}`, 'rcPhotoSet') : '') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}
       <input type="file" data-backup="merge" hidden>
       ${plansRows ? sec('계획 · 보안', plansRows) : ''}
-      ${sec('잠금', rowB('비밀번호 변경', '', 'dlgPw') + rowB('자동 잠금 시간', (st.autoLockMin || 5) + '분', 'dlgAutoLock') + rowB('지금 잠그기', '', 'lock'))}
+      ${sec('보안 · 잠금', settingsLockRows())}
       ${sec('앱 정보', rowB('저장 위치', '이 기기 안 · 암호화') + rowB('앱 버전', S.version || '확인 중'))}
       <section class="card" style="padding:16px 22px 20px;display:flex;flex-direction:column;gap:12px">
         <h2 class="h2" style="font-size:${px(17)}">화면</h2>
@@ -494,7 +497,8 @@ function viewSettings() {
 /* ───────── 사용할 기능 (4-27) ───────── */
 const BUILT_STEP = 8; // 지금까지 만든 단계 (단계가 끝날 때마다 올림)
 function viewFeatures() {
-  const rows = DATA.FEATURES.map((f) => {
+  const bt = Store.current().type;
+  const rows = DATA.FEATURES.filter((f) => !f.types || f.types.includes(bt)).map((f) => {
     const on = feat(f.key), soonTxt = f.step > BUILT_STEP ? (f.step === 9 ? ' · 2차 기능' : ` · ${f.step}단계에서 만들어요`) : '';
     return `<button class="row" style="min-height:64px" data-act="toggleFeat" data-k="${f.key}" role="switch" aria-checked="${on}">
       <span class="k" style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">${esc(f.name)}</span><span class="sub small">${esc(f.desc)}${soonTxt}</span></span>
@@ -559,6 +563,10 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (/^bw/.test(D.type)) {
+    body = viewBundleDlg(D); // 함께 열기 (switch.js)
+  } else if (/^club/.test(D.type) && typeof viewClubDlg === 'function') {
+    body = viewClubDlg(D); // 친구회 (club.js)
   } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {
     body = viewResetDlg(D); // 초기화 · 장부 지우기 · 가져오기 (reset.js)
   } else if (D.type === 'carry') {

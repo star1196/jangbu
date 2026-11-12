@@ -545,7 +545,7 @@ function viewMap(L) {
       <div class="seg" style="max-width:420px"><button class="${T.type === 'card' ? 'on' : ''}" data-act="impTarget" data-t="card">카드 명세서</button><button class="${T.type === 'bank' ? 'on' : ''}" data-act="impTarget" data-t="bank">통장 거래내역</button></div>
       ${T.type === 'card' ? `<span class="sub small">어느 카드인가요? (파일에 카드번호 칸이 있으면 뒤 4자리로 저절로 나눠요)</span>
         <div class="chips">${cardsOpen().map((c) => `<button class="chip ${T.cardId === c.id ? 'on' : ''}" data-act="impCard" data-id="${c.id}">${esc(cardLabel(c))}</button>`).join('')}<button class="chip" data-act="goAddCard">${ic('plus', 14)}카드 추가</button></div>` : ''}
-      ${T.type === 'bank' && feat('banks') ? `<span class="sub small">어느 통장인가요?</span>${bankChips(T.bankId, 'impBank')}` : ''}
+      ${T.type === 'bank' && feat('banks') ? `<span class="sub small">어느 통장인가요?</span>${bankChips(T.bankId, 'impBank', null, true)}` : ''}
     </section>
     <div class="chips">${status}</div>
     <section class="card" style="overflow:hidden">${rows}</section>
@@ -651,10 +651,13 @@ async function saveImport() {
     }
     const s = await Store.put('tx', o); undo.push({ col: 'tx', id: s.id, before: null }); savedN++;
   }
+  // 친구회: 입금자 이름(별칭) = 회원 + 월 회비 배수 → 회비 자동 배정 / 수동 회원은 보류 (club.js)
+  const club = typeof clubAfterImport === 'function' ? await clubAfterImport(impId) : null;
+  if (club) uncN = Math.max(0, uncN - club.auto);
   await Store.put('imports', { id: impId, name: I.name, saved: savedN, tplName: (Store.get('templates', I.tplId) || {}).name || '' });
   S.busy = false;
-  S.imp = { step: 'done', savedN, uncN, archN };
-  render(); toast(`${savedN}건을 저장했어요${archN ? ` · 시작점 이전 ${archN}건은 보관` : ''}`, { items: undo });
+  S.imp = { step: 'done', savedN, uncN, archN, club };
+  render(); toast(`${savedN}건을 저장했어요${club && club.auto ? ` · 회비 자동 ${club.auto}건` : ''}${club && club.hold ? ` · 보류 ${club.hold}건` : ''}${archN ? ` · 시작점 이전 ${archN}건은 보관` : ''}`, { items: undo });
 }
 
 async function saveTemplate() {

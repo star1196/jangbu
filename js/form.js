@@ -229,10 +229,11 @@ function viewSheet() {
 }
 
 // 통장 고르기 칩 (가계부 통장 먼저, 별도 통장은 '별도' 표시)
-function bankChips(cur, act, exclude) {
-  const list = banksOpen().filter((b) => b.id !== exclude);
+// withClosed: 해지한 통장도 (예전 통장 거래내역 파일을 올릴 때 · 예: iM뱅크)
+function bankChips(cur, act, exclude, withClosed) {
+  const list = (withClosed ? banksAll().filter((b) => b.type !== 'sep' || feat('sepBanks')) : banksOpen()).filter((b) => b.id !== exclude);
   if (!list.length) return `<span class="sub" style="font-size:${px(14)}">통장이 아직 없어요. 홈 → 통장에서 먼저 만들어 주세요.</span>`;
-  return `<div class="bankgrid">${list.map((b) => `<button class="bankopt ${b.id === cur ? 'on' : ''}" data-act="${act}" data-id="${b.id}"><span class="bn">${esc(b.name)}${b.type === 'sep' ? ' <span class="tag">별도</span>' : ''}</span><span class="bb">잔액 ${won(bankBalance(b.id))}원</span></button>`).join('')}</div>`;
+  return `<div class="bankgrid">${list.map((b) => `<button class="bankopt ${b.id === cur ? 'on' : ''}" data-act="${act}" data-id="${b.id}"><span class="bn">${esc(b.name)}${b.type === 'sep' ? ' <span class="tag">별도</span>' : ''}${b.closed ? ' <span class="tag">해지</span>' : ''}</span><span class="bb">잔액 ${won(bankBalance(b.id))}원</span></button>`).join('')}</div>`;
 }
 function viewTransferPart(f) {
   return `<div class="field" style="gap:10px"><span class="label">보내는 통장</span>${bankChips(f.fromId, 'fFrom')}</div>

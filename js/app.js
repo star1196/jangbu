@@ -47,9 +47,13 @@ const S = {
   imp: null, uncTotal: null, uncSkip: [], uncLast: null, uncAll: false, uncAuto: true,
   f: null,             // 입력 시트 (form.js)
   merOpen: false, merList: [], lastPay: null,
-  dialog: null, busy: false, version: ''
+  dialog: null, busy: false, version: '',
+  bundle: { on: false, openerId: null, items: {}, hasKey: false }, // 이 기기 함께 열기 (switch.js)
+  lockAll: true, lockMsg: ''
 };
 
+// 메뉴 5개: 장부 종류마다 (친구회: 홈 · 회원 · 목록 · 모임 · 설정)
+function navList() { const c = Store.current(); return c && c.type === 'club' && typeof CLUB_NAV !== 'undefined' ? CLUB_NAV : DATA.NAV; }
 function layout() {
   const w = window.innerWidth;
   return w < 600 ? 'phone' : w < 1024 ? 'compact' : 'wide';
@@ -140,10 +144,10 @@ function render() {
   let html = '';
   if (S.mode === 'boot') html = '<div class="boot">여는 중…</div>';
   else if (S.mode === 'create') html = viewCreate();
-  else if (S.mode === 'lock') html = viewLock();
+  else if (S.mode === 'lock') html = S.lockAll && bundleReady().length ? viewLockAll() : viewLock();
   else html = viewApp(L);
   if (S.mode === 'app' && S.f) html += viewSheet();
-  if (S.dialog) html += viewDialog();
+  if (S.dialog) html += S.dialog.type === 'switch' && S.mode === 'app' ? viewSwitchPop(L) : viewDialog();
   $app.innerHTML = html;
   if (toastEl) $app.appendChild(toastEl);
   const c = $app.querySelector('.content');
@@ -151,18 +155,20 @@ function render() {
   const sb2 = $app.querySelector('.sheet-body');
   if (sb2) sb2.scrollTop = keepSheet;
   if (S.f) fillSheet();
+  placeSwitchPop();
   const af = $app.querySelector('[data-autofocus]');
   if (af && (L !== 'phone' || S.mode === 'lock' || S.dialog)) af.focus();
 }
 
 /* 장부 만들기 */
 function viewCreate() {
-  const T = DATA.LEDGER_TYPES[0];
-  const name = S.createName || T.defaultName;
   const shown = DATA.LEDGER_TYPES.filter((t) => typeVisible(t.type));
-  const types = shown.map((t) => `<button type="button" class="chip ${t.ready ? 'on' : ''}" ${t.ready ? '' : 'disabled'}>${esc(t.label)}${t.ready ? '' : ' · 나중에'}</button>`).join('');
+  if (!shown.some((t) => t.ready && t.type === S.createType)) S.createType = (shown.find((t) => t.ready) || {}).type || 'home';
+  const T = DATA.LEDGER_TYPES.find((t) => t.type === S.createType);
+  const name = S.createName || T.defaultName;
+  const types = shown.map((t) => `<button type="button" class="chip ${t.type === S.createType ? 'on' : ''}" ${t.ready ? `data-act="createType" data-t="${t.type}"` : 'disabled'}>${esc(t.label)}${t.ready ? '' : ' · 나중에'}</button>`).join('');
   const preset = S.createPreset || 'simple';
-  if (!typeVisible('home')) {
+  if (!shown.some((t) => t.ready)) {
     return `<div class="gate"><div class="gate-box"><h1 class="gate-title">새 장부 만들기</h1><span class="sub">이 기기에서 보이게 한 장부 종류 중 지금 만들 수 있는 것이 없어요.</span>
       <button class="btn ink big" data-act="showAllTypes">모든 장부 종류 다시 보이기</button>${S.ledgers.length ? '<button class="btn ghost" data-act="toLock">취소</button>' : ''}</div></div>`;
   }
@@ -172,10 +178,10 @@ function viewCreate() {
     <span class="sub" style="text-align:center;font-size:${px(15)}">모든 내용은 이 기기 안에만, 암호화해서 저장해요.</span>
     <div class="field" style="margin-top:8px"><span class="label">장부 종류</span><div class="chips">${types}</div></div>
     <label class="field"><span class="label">장부 이름</span><input class="input" name="name" maxlength="20" value="${esc(name)}"></label>
-    <div class="field"><span class="label">어떻게 쓸까요?</span>
+    ${S.createType === 'club' ? `<span class="sub small">회원 × 월 회비 · 생일선물 · 모임 지출 · 대출 · 결산표. 시작점 2026년 1월, 월 회비 30,000원으로 시작해요 (설정에서 바꾸기).</span>` : `<div class="field"><span class="label">어떻게 쓸까요?</span>
       <div class="seg"><button type="button" class="${preset === 'simple' ? 'on' : ''}" data-act="createPreset" data-p="simple">간단하게</button><button type="button" class="${preset === 'all' ? 'on' : ''}" data-act="createPreset" data-p="all">전부 쓰기</button></div>
       <span class="sub small">${preset === 'simple' ? '입력·목록·달력·계정별·통장·카드·파일 올리기만 보여요.' : '별도 통장·여행·적금·고정 계획표·금고 등 모든 기능이 보여요.'} 나중에 설정 → 사용할 기능에서 언제든 바꿀 수 있어요.</span></div>
-    ${viewCreateCopy()}
+    ${viewCreateCopy()}`}
     <label class="field"><span class="label">비밀번호 <span style="font-weight:400">(4자 이상)</span></span><input class="pw left" type="password" name="pw1" autocomplete="new-password" data-autofocus></label>
     <label class="field"><span class="label">비밀번호 한 번 더</span><input class="pw left" type="password" name="pw2" autocomplete="new-password"></label>
     <div class="warnbox">${ic('circle-alert', 22)}<div><b>비밀번호를 잊으면 아무도 열 수 없어요.</b><br>되찾는 방법이 없어요. 앱을 만든 사람도 열어 줄 수 없어요. 종이에 적어 안전한 곳에 두세요.</div></div>
@@ -209,6 +215,7 @@ function viewLock() {
       <span class="sub small">장부 바꾸기</span>
       <div class="chips" style="justify-content:center;gap:6px">${books}<button class="chip" type="button" style="min-height:40px;font-size:${px(13)}" data-act="toCreate">${ic('plus', 14)}새 장부</button></div>
       <button class="btn ghost" type="button" style="font-size:${px(13)}" data-act="pickBackup" data-mode="new">${ic('file-up', 16)}백업 파일로 장부 만들기</button>
+      ${bundleReady().length ? `<button class="btn ghost" type="button" style="font-size:${px(13)}" data-act="lockAllBack">${ic('lock-open', 16)}함께 열기 비밀번호로 모두 열기</button>` : ''}
     </div>
   </form><input type="file" data-backup="new" hidden></div>`;
 }
@@ -218,34 +225,42 @@ const NO_FAB = ['처음 시작하기', '계정과목 편집', '휴지통', '카�
 function viewApp(L) {
   const phone = L === 'phone', compact = L !== 'wide';
   const navOn = PARENT[S.screen] || S.screen;
-  const nav = () => DATA.NAV.map(([n, i]) => `<button class="${n === navOn ? 'on' : ''}" data-act="go" data-to="${n}" ${n === navOn ? 'aria-current="page"' : ''}>${ic(i, 22)}${n}</button>`).join('');
+  const nav = () => navList().map(([n, i]) => `<button class="${n === navOn ? 'on' : ''}" data-act="go" data-to="${n}" ${n === navOn ? 'aria-current="page"' : ''}>${ic(i, 22)}${n}</button>`).join('');
   const book = Store.current().name;
+  const isClub = Store.current().type === 'club';
   const isHome = S.screen === '홈';
   const canBack = S.hist.length > 0 || !isHome;
-  const phoneHome = phone && isHome;
+  const phoneHome = phone && isHome && !isClub;
   const pickedN = Object.keys(S.picked).length;
   const showSel = S.selMode && pickedN > 0;
-  const showFab = !phoneHome && !S.selMode && !NO_FAB.includes(S.screen);
-  return `${compact ? '' : `<nav class="side" aria-label="메뉴">${nav()}</nav>`}
+  const showFab = isClub ? (phone && isHome && !S.selMode) : (!phoneHome && !S.selMode && !NO_FAB.includes(S.screen));
+  const swOpen = S.dialog && S.dialog.type === 'switch';
+  // 왼쪽 위: 앱 이름 없이 장부 이름 + ˅ (가로·노트북은 왼쪽 메뉴 맨 위)
+  const bookBtn = compact
+    ? `<button class="top-book" data-act="switchBook" data-swanchor aria-haspopup="dialog" aria-expanded="${!!swOpen}">${esc(book)}${ic(swOpen ? 'chevron-up' : 'chevron-down', 18)}</button>`
+    : '';
+  return `${compact ? '' : `<nav class="side" aria-label="메뉴">
+      <button class="sidebook" data-act="switchBook" data-swanchor aria-haspopup="dialog" aria-expanded="${!!swOpen}"><span class="sb-l"><span class="sub small">장부</span><b>${esc(book)}</b></span>${ic(swOpen ? 'chevron-up' : 'chevron-down', 20)}</button>
+      ${nav()}<span style="flex:1"></span>
+      <button data-act="lockAll" class="sidelock">${ic('lock', 22)}모두 잠그기</button></nav>`}
   <main>
-    <header class="top">
+    <header class="top ${compact ? '' : 'wide'}">
       <div class="top-nav">
         <button class="iconbtn" data-act="back" aria-label="뒤로" ${canBack ? '' : 'disabled'}>${ic('arrow-left', 22)}</button>
         <button class="iconbtn" data-act="home" aria-label="홈">${ic('house', 22)}</button>
         <button class="iconbtn" data-act="fwd" aria-label="앞으로" ${S.fwd.length ? '' : 'disabled'}>${ic('arrow-right', 22)}</button>
       </div>
       <div class="top-mid">
-        ${isHome
-          ? `<button class="top-book" data-act="switchBook">${esc(book)}${ic('chevron-down', 18)}</button>`
-          : `<button class="top-book small" data-act="switchBook">${esc(book)}${ic('chevron-down', 14)}</button><h1 class="top-title">${esc(S.screen)}</h1>`}
+        ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
+          : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right"><button class="iconbtn" data-act="lock" aria-label="잠그기">${ic('lock', 22)}</button></div>
+      <div class="top-right">${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
     ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
     ${compact ? `<nav class="tabbar" aria-label="메뉴">${nav()}</nav>` : ''}
   </main>
-  ${showFab ? `<button class="fab" data-act="${phone ? 'plus' : 'input'}" aria-label="입력">${ic('plus', 28)}</button>` : ''}
+  ${showFab ? `<button class="fab ${isClub ? 'club' : ''}" data-act="${isClub ? 'clubPlus' : phone ? 'plus' : 'input'}" aria-label="입력">${ic('plus', 28)}</button>` : ''}
   ${showSel ? `<div class="selbar"><span style="font-size:${px(15)};font-weight:700">${pickedN}건 선택됨</span><span style="flex:1"></span>
     ${[['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ...(feat('trips') ? [['trip', '묶음 붙이기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']].map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
 }
@@ -291,10 +306,11 @@ function setupBackButton() {
 /* ───────── 자동 잠금 ───────── */
 let lastAct = Date.now();
 ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => window.addEventListener(ev, () => { lastAct = Date.now(); }, { passive: true, capture: true }));
+// 앱 전체 하나 (이 기기): 마지막 누르기·키·스크롤 기준, 화면이 숨겨진 시간도 포함
 function checkAutoLock() {
   if (S.mode !== 'app') return;
-  const min = (Store.get('meta', 'settings') || {}).autoLockMin || 5;
-  if (Date.now() - lastAct > min * 60000) doLock('오래 손대지 않아서 잠갔어요');
+  const min = autoLockMin();
+  if (min && Date.now() - lastAct > min * 60000) doLock(`${min}분 동안 쓰지 않아서 열린 장부를 함께 잠갔어요.`);
 }
 setInterval(checkAutoLock, 10000);
 document.addEventListener('visibilitychange', () => {
@@ -303,16 +319,21 @@ document.addEventListener('visibilitychange', () => {
   if (S.mode === 'app') makeDueRepeats().then((n) => { if (n && !S.f && !S.dialog) render(); }).catch(() => {});
 });
 
-function doLock(msg) {
+// 모두 잠그기: 열린 장부 전부 (자동 잠금 · 🔒 · 작은 창 · 다른 탭)
+function doLock(msg, fromOther) {
   const cur = Store.current();
   vaultLock();
   Store.lock();
+  if (!fromOther) broadcastLock(msg);
   S.mode = 'lock'; S.dialog = null; S.busy = false; S.f = null; S.selMode = false; S.picked = {}; S.detail = null;
+  S.imp = null; S.xl = null; if (typeof clubReset === 'function') clubReset();
   if (cur) S.lockSel = cur.id;
   S.screen = '홈'; S.hist = []; S.fwd = []; S.listF = {};
+  for (const k of Object.keys(uiMem)) delete uiMem[k];
+  S.lockAll = true; S.lockMsg = msg || '';
   lastUndo = null;
   render();
-  if (msg) toast(msg);
+  refreshBundle().then(() => { if (S.mode === 'lock') render(); });
 }
 
 function afterOpen() {
@@ -361,7 +382,7 @@ const ACT = {
   back: () => back(),
   fwd: () => forward(),
   home: () => go('홈'),
-  lock: () => doLock('잠갔어요'),
+  lock: () => doLock('열린 장부를 모두 잠갔어요.'),
   undo: () => doUndo(),
   noop: () => {},
   period: (el) => { S.period = el.dataset.p; if (S.period === '직접') { S.dialog = { type: 'custom' }; } render(); },
@@ -474,7 +495,7 @@ const ACT = {
   setOut: (el) => { view.outC = el.dataset.v; saveView(); applyView(); render(); },
   dlgRename: () => { S.dialog = { type: 'rename' }; render(); },
   dlgPw: () => { S.dialog = { type: 'pw' }; render(); },
-  dlgAutoLock: () => { S.dialog = { type: 'autolock' }; render(); },
+  dlgAutoLock: () => SW_ACT.goSecurity(),
   dlgStart: () => { S.dialog = { type: 'start' }; render(); },
   setAutoLock: async (el) => {
     const st = Store.get('meta', 'settings') || { id: 'settings' };
@@ -525,18 +546,26 @@ const ACT = {
   dupFileView: () => { S.dialog = null; S.imp = { step: 'drop' }; go('목록'); },
   dimClose: (el, e) => { if (e.target === el && !S.busy) { S.dialog = null; render(); } },
   discardYes: () => { S.dialog = null; closeForm(true); },
-  switchBook: () => { S.dialog = { type: 'switch' }; render(); },
-  switchTo: (el) => { const id = el.dataset.id; doLock(); S.lockSel = id; render(); },
-  switchNew: () => { doLock(); S.mode = 'create'; S.createName = ''; render(); },
+  ...SW_ACT, // 장부 바꾸기 · 함께 열기 · 모두 잠그기 (switch.js)
+  ...CLUB_ACT, // 친구회 (club.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
-  toLock: () => { S.mode = 'lock'; render(); },
+  toLock: () => { S.mode = Store.isOpen() ? 'app' : 'lock'; render(); }, // 열린 장부가 있으면 그 장부로 돌아감
   // 다시 그리지 않고 바꿈 (적어 둔 비밀번호가 지워지지 않게)
   createPreset: (el) => {
     S.createPreset = el.dataset.p;
     el.parentNode.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
     const note = el.parentNode.nextElementSibling;
     if (note) note.textContent = (S.createPreset === 'simple' ? '입력·목록·달력·계정별·통장·카드·파일 올리기만 보여요.' : '별도 통장·여행·적금·고정 계획표·금고 등 모든 기능이 보여요.') + ' 나중에 설정 → 사용할 기능에서 언제든 바꿀 수 있어요.';
+  },
+  // 장부 종류 고르기 (다시 그리면 적은 비밀번호가 지워지니 이름 칸 기본값만 바꿔 다시 그림 — 아직 적기 전에 고르는 칸)
+  createType: (el) => {
+    const f = $app.querySelector('[data-form="create"]');
+    const nm = f ? f.elements.name.value.trim() : '';
+    const oldDef = (DATA.LEDGER_TYPES.find((t) => t.type === S.createType) || {}).defaultName;
+    S.createType = el.dataset.t;
+    S.createName = !nm || nm === oldDef ? '' : nm;
+    render();
   },
   showAllTypes: () => { view.types = {}; saveView(); render(); },
   toggleType: (el) => {
@@ -596,6 +625,7 @@ $app.addEventListener('keydown', (e) => {
 /* 입력 시트 글자 처리 */
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (onClubInput(el)) return; // 친구회 칸 (club.js)
   if (onStartInput(el)) return; // 처음 시작하기 · 카드 이월 칸 (start.js)
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
   if (el.matches && el.matches('[data-bulkdate]') && S.dialog) { S.dialog.val = el.value || null; render(); }
@@ -665,11 +695,12 @@ const FORM = {
     if (!f.elements.agree.checked) return showErr(f, '위 안내를 읽고 확인 칸을 눌러 주세요.');
     S.busy = true; render();
     try {
-      const id = await Store.createLedger({ type: 'home', name, password: pw1, preset: S.createPreset || 'simple' });
+      const type = S.createType || 'home';
+      const id = await Store.createLedger({ type, name, password: pw1, preset: S.createPreset || 'simple' });
       await Store.unlock(id, pw1);
       await Store.migrate();
       let copied = 0;
-      if (S.createImport) { copied = await applyCopy(S.createImport); S.createImport = null; } // 다른 장부의 카드·통장·사전·서식
+      if (S.createImport && type !== 'club') { copied =await applyCopy(S.createImport); S.createImport = null; } // 다른 장부의 카드·통장·사전·서식
       S.ledgers = await Store.listLedgers();
       view.lastLedger = id; saveView();
       S.busy = false; S.createName = '';
@@ -692,6 +723,8 @@ const FORM = {
       return showErr($app.querySelector('[data-form="unlock"]'), '비밀번호가 맞지 않아요.', 'pw');
     }
     await Store.migrate();
+    // 여는 비밀번호 장부를 따로 열었으면 묶음 열쇠도 메모리에 (나중에 다른 장부를 묶을 때 다시 안 물음)
+    if (S.bundle.on && S.bundle.openerId === id) Store.bundleUseOpenerPw(pw).catch(() => false);
     view.lastLedger = id; saveView();
     afterOpen();
     render();
@@ -712,7 +745,8 @@ const FORM = {
     const ok = await Store.changePassword(old, pw1).catch(() => false);
     S.busy = false;
     if (!ok) { render(); return showErr($app.querySelector('[data-form="pw"]'), '지금 비밀번호가 맞지 않아요.', 'old'); }
-    S.dialog = null; render(); toast('비밀번호를 바꿨어요');
+    await refreshBundle();
+    S.dialog = null; render(); toast(S.bundle.items[Store.current().id] ? '비밀번호를 바꿨어요. 함께 열기는 설정 › 보안·잠금에서 다시 한 번 확인해 주세요' : '비밀번호를 바꿨어요');
   },
   async start(f) {
     const v = digits(f.elements.sp.value);
@@ -744,6 +778,8 @@ const FORM = {
     S.editAccId = a.id; S.dialog = null; render(); toast(`'${name}' 계정을 만들었어요`, { items: [{ col: 'accounts', id: a.id, before: null }] });
   },
   ...BACKUP_FORM,
+  ...SW_FORM,
+  ...CLUB_FORM,
   ...PLAN_FORM,
   ...MORE_FORM
 };
@@ -793,6 +829,7 @@ async function boot() {
     $app.innerHTML = '<div class="gate"><div class="gate-box"><h1 class="gate-title">열 수 없어요</h1><span class="sub">이 브라우저에서는 기기 안 저장소를 쓸 수 없어요. 크롬이나 삼성 인터넷으로 열어 주세요. (비공개 창에서는 안 될 수 있어요)</span></div></div>';
     return;
   }
+  await refreshBundle();
   if (!S.ledgers.length) S.mode = 'create';
   else {
     S.mode = 'lock';

@@ -5,16 +5,19 @@
 
 const Store = (() => {
   const DB_NAME = 'jangbu';
-  const DB_VER = 1;
+  const DB_VER = 2; // 2: 이 기기 함께 열기 묶음(deviceBundle) 저장소 추가
   const ITER = 600000;
   const CHECK_TEXT = 'jangbu-ok';
   const enc = new TextEncoder();
   const dec = new TextDecoder();
 
   let dbp = null;
-  let key = null;        // 열린 장부의 열쇠 (잠그면 지움)
-  let ledger = null;     // 열린 장부 정보
+  let key = null;        // 지금 보는 장부의 열쇠 (잠그면 지움)
+  let ledger = null;     // 지금 보는 장부 정보
   let mem = {};          // 풀어 둔 내용 { 묶음이름: Map(id → 자료) }
+  // 열린 장부들 (메모리에만): id → { key, ledger, mem }. 잠그면 모두 지움. 열쇠·비밀번호는 기기 저장소에 절대 안 둠.
+  let opened = new Map();
+  let bundleKey = null;  // 함께 열기 묶음 열쇠 (메모리에만, 잠그면 지움)
   let chain = Promise.resolve();
   const LOCAL_IDS = ['idmap']; // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
 
@@ -29,6 +32,8 @@ const Store = (() => {
           const s = db.createObjectStore('recs', { keyPath: 'k' });
           s.createIndex('lid', 'lid');
         }
+        // 이 기기에서 함께 열기: 백업에 절대 안 들어감 (장부 내용 저장소와 따로)
+        if (!db.objectStoreNames.contains('deviceBundle')) db.createObjectStore('deviceBundle', { keyPath: 'id' });
       };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -49,6 +54,12 @@ const Store = (() => {
     const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   }
+  // 같은 열쇠를 날 값(32바이트)으로 (함께 열기 묶음에 감싸 넣을 때만 잠깐 쓰고 바로 0으로 지움)
+  async function deriveRaw(pw, salt, iter) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, 256));
+  }
+  function keyFromRaw(raw) { return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']); }
   async function encryptWith(k, obj) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, enc.encode(JSON.stringify(obj)));
@@ -69,8 +80,15 @@ const Store = (() => {
     const now = Date.now();
     const recs = [];
     const features = {};
-    DATA.FEATURES.forEach((f) => { features[f.key] = preset === 'simple' ? f.simple : true; });
-    recs.push(['meta', { id: 'settings', schema: 0, autoLockMin: 5, startPoint: '', alertDays: [30, 14, 7], features, createdAt: now, updatedAt: now }]);
+    DATA.FEATURES.forEach((f) => { features[f.key] = type === 'club' ? DATA.CLUB_FEATURES_ON.includes(f.key) : preset === 'simple' ? f.simple : true; });
+    recs.push(['meta', { id: 'settings', schema: 0, autoLockMin: 5, startPoint: type === 'club' ? '2601' : '', alertDays: [30, 14, 7], features, createdAt: now, updatedAt: now }]);
+    if (type === 'club') {
+      // 친구회: 회비 30,000원(2026-01부터) · 생일선물 50,000원 · 배정은 밀린 달부터
+      recs.push(['meta', { id: 'club', feeHist: [{ from: '2026-01', amount: 30000 }], giftHist: [{ from: '2026-01', amount: 50000 }], allocMode: 'arrears', rules: [], createdAt: now, updatedAt: now }]);
+      DATA.CLUB_ACCOUNTS.forEach(([name, kind, icon, color, flags], i) => {
+        recs.push(['accounts', { id: uid(), name, kind, icon, color, hidden: false, order: i, ...(flags || {}), createdAt: now, updatedAt: now }]);
+      });
+    }
     if (type === 'home') {
       DATA.HOME_ACCOUNTS.forEach(([name, kind, icon, color], i) => {
         recs.push(['accounts', { id: uid(), name, kind, icon, color, hidden: false, order: i, createdAt: now, updatedAt: now }]);
@@ -102,27 +120,58 @@ const Store = (() => {
   }
 
   // 비밀번호가 맞으면 내용을 풀어서 메모리에 올림. 틀리면 false.
-  async function unlock(id, password) {
+  // 장부를 열어 메모리에 올리고 '지금 장부'로 (다른 열린 장부는 그대로 둠)
+  async function loadLedger(meta, k) {
     const db = await openDB();
-    const meta = await reqP(db.transaction('ledgers').objectStore('ledgers').get(id));
-    if (!meta) return false;
-    const k = await deriveKey(password, meta.salt, meta.iter);
-    try {
-      if ((await decryptWith(k, meta.check)) !== CHECK_TEXT) return false;
-    } catch (e) { return false; }
-    const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(id));
+    const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(meta.id));
     const m = {};
     for (const r of rows) {
       const obj = await decryptWith(k, r);
       (m[r.col] = m[r.col] || new Map()).set(r.id, obj);
     }
-    key = k; mem = m;
-    ledger = { id: meta.id, type: meta.type, name: meta.name, salt: meta.salt, iter: meta.iter };
-    return true;
+    opened.set(meta.id, { key: k, mem: m, ledger: { id: meta.id, type: meta.type, name: meta.name, salt: meta.salt, iter: meta.iter } });
+    switchTo(meta.id);
+  }
+  async function getMeta(id) { const db = await openDB(); return reqP(db.transaction('ledgers').objectStore('ledgers').get(id)); }
+
+  // 비밀번호가 맞으면 내용을 풀어서 메모리에 올림. 틀리면 false.
+  // wantRaw: 함께 열기에 묶을 때 → 맞으면 열쇠 날 값(Uint8Array)을 돌려줌 (쓴 뒤 바로 fill(0))
+  async function unlock(id, password, wantRaw) {
+    const meta = await getMeta(id);
+    if (!meta) return false;
+    let k, raw = null;
+    if (wantRaw) { raw = await deriveRaw(password, meta.salt, meta.iter); k = await keyFromRaw(raw); }
+    else k = await deriveKey(password, meta.salt, meta.iter);
+    try {
+      if ((await decryptWith(k, meta.check)) !== CHECK_TEXT) { if (raw) raw.fill(0); return false; }
+    } catch (e) { if (raw) raw.fill(0); return false; }
+    await loadLedger(meta, k);
+    return raw || true;
+  }
+  // 비밀번호만 확인 (열지 않음). 맞으면 열쇠 날 값, 틀리면 null
+  async function checkPassword(id, password) {
+    const meta = await getMeta(id);
+    if (!meta) return null;
+    const raw = await deriveRaw(password, meta.salt, meta.iter);
+    try { if ((await decryptWith(await keyFromRaw(raw), meta.check)) === CHECK_TEXT) return raw; } catch (e) { /* 틀림 */ }
+    raw.fill(0); return null;
   }
 
-  function lock() { key = null; mem = {}; ledger = null; }
+  // 열린 장부 사이 바로 옮기기 (비밀번호 없이). 열려 있지 않으면 false
+  function switchTo(id) {
+    const o = opened.get(id);
+    if (!o) return false;
+    key = o.key; mem = o.mem; ledger = o.ledger;
+    return true;
+  }
+  // 모두 잠그기: 열린 모든 장부의 열쇠·내용을 메모리에서 지움
+  function lock() {
+    for (const o of opened.values()) { o.key = null; o.mem = null; }
+    opened = new Map(); key = null; mem = {}; ledger = null; bundleKey = null;
+  }
   function isOpen() { return !!key; }
+  function isOpened(id) { return opened.has(id); }
+  function openedIds() { return [...opened.keys()]; }
   function current() { return ledger; }
 
   function all(col) { return mem[col] ? [...mem[col].values()] : []; }
@@ -207,6 +256,7 @@ const Store = (() => {
       }
     }],
     [4, async () => { // 4-28: 카드 할부 수수료를 적을 지출 계정 '카드 수수료·이자' (없을 때만 더함)
+      if (ledger.type === 'club') return; // 친구회엔 카드 기능 없음
       if (!all('accounts').some((a) => a.kind === 'out' && a.name === '카드 수수료·이자')) {
         await put('accounts', { name: '카드 수수료·이자', kind: 'out', icon: 'credit-card', color: 3, hidden: false, order: all('accounts').length });
       }
@@ -259,8 +309,149 @@ const Store = (() => {
     await txDone(t);
     key = k;
     ledger.salt = salt; ledger.iter = ITER;
+    const o = opened.get(ledger.id); if (o) o.key = k;
+    // 함께 열기: 이 장부 묶음은 풀림 → 다시 '처음 한 번 확인'. 여는 비밀번호였던 장부면 묶음을 새 비밀번호로 다시 잠금.
+    try { await bundleAfterPwChange(ledger.id, oldPw, newPw); } catch (e) { /* 묶음 정리는 실패해도 비밀번호 변경은 그대로 */ }
     return true;
   }
+
+  /* ── 이 기기에서 함께 열기 (deviceBundle, 이 기기 전용 · 백업에 절대 안 넣음) ──
+     여는 비밀번호 → PBKDF2(SHA-256, 60만 번, 기기 소금) → 묶음 열쇠.
+     장부마다 열쇠 날 값을 묶음 열쇠로 AES-GCM 감싸 저장 (장부 id · 감싼 열쇠 · iv · 장부 비밀번호 판(소금)).
+     자료: { id:'cfg', on, salt, iter, check, openerId } / { id:'L:장부id', lid, pending } 또는 { …, iv, ct, pwVer } */
+  const bTx = async (mode) => (await openDB()).transaction('deviceBundle', mode).objectStore('deviceBundle');
+  async function bAll() { return reqP((await bTx()).getAll()); }
+  async function bPut(...objs) { const db = await openDB(); const t = db.transaction('deviceBundle', 'readwrite'); objs.forEach((o) => t.objectStore('deviceBundle').put(o)); await txDone(t); }
+  async function bDel(...ids) { const db = await openDB(); const t = db.transaction('deviceBundle', 'readwrite'); ids.forEach((i) => t.objectStore('deviceBundle').delete(i)); await txDone(t); }
+  const pwVerOf = (meta) => toB64(new Uint8Array(meta.salt));
+  async function bundleCfg() { return (await bAll()).find((o) => o.id === 'cfg') || null; }
+
+  // 화면용 상태: 켜짐 · 여는 비밀번호 장부 · 장부별 'bound'(묶임)/'pending'(처음 한 번 확인 필요)
+  async function bundleInfo() {
+    const list = await bAll(), cfg = list.find((o) => o.id === 'cfg') || null, items = {};
+    for (const o of list) {
+      if (o.id === 'cfg') continue;
+      const meta = await getMeta(o.lid);
+      if (!meta) { await bDel(o.id); continue; } // 지운 장부
+      items[o.lid] = o.ct && o.pwVer === pwVerOf(meta) ? 'bound' : 'pending';
+    }
+    return { on: !!(cfg && cfg.on), openerId: cfg && cfg.check ? cfg.openerId : null, items, hasKey: !!bundleKey };
+  }
+  async function bundleSetOn(on) { const cfg = (await bundleCfg()) || { id: 'cfg' }; await bPut({ ...cfg, on: !!on }); }
+  // 체크만 (아직 확인 전)
+  async function bundleCheck(lid) { const list = await bAll(); if (!list.some((o) => o.id === 'L:' + lid)) await bPut({ id: 'L:' + lid, lid, pending: true }); }
+  async function bundleUncheck(lid) { await bDel('L:' + lid); }
+  async function wrapInto(lid, raw) {
+    const meta = await getMeta(lid);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, bundleKey, raw);
+    await bPut({ id: 'L:' + lid, lid, iv, ct, pwVer: pwVerOf(meta), at: Date.now() });
+  }
+  async function deriveBundle(pw, cfg) { return deriveKey(pw, cfg.salt, cfg.iter); }
+  async function bundleKeyOk(k, cfg) { try { return (await decryptWith(k, cfg.check)) === CHECK_TEXT; } catch (e) { return false; } }
+  // 여는 비밀번호를 지금 메모리에 올림 (여는 비밀번호 장부를 따로 열었을 때 · 묶을 때 물어본 값)
+  async function bundleUseOpenerPw(pw) {
+    const cfg = await bundleCfg();
+    if (!cfg || !cfg.check) return false;
+    const k = await deriveBundle(pw, cfg);
+    if (!(await bundleKeyOk(k, cfg))) return false;
+    bundleKey = k; return true;
+  }
+  // 장부 하나를 묶기 ('확인하고 묶기'). 장부 비밀번호가 틀리면 'badPw', 묶음 열쇠가 없으면 'needOpener'
+  async function bundleBind(lid, pw, openerPw) {
+    const raw = await checkPassword(lid, pw);
+    if (!raw) return 'badPw';
+    try {
+      let cfg = await bundleCfg();
+      if (!cfg || !cfg.check) { // 처음 묶는 장부 = 여는 비밀번호
+        cfg = { ...(cfg || {}), id: 'cfg', on: true, salt: crypto.getRandomValues(new Uint8Array(16)), iter: ITER, openerId: lid };
+        bundleKey = await deriveBundle(pw, cfg);
+        cfg.check = await encryptWith(bundleKey, CHECK_TEXT);
+        await bPut(cfg);
+      } else if (!bundleKey) {
+        if (lid === cfg.openerId) { if (!(await bundleUseOpenerPw(pw))) return 'needOpener'; }
+        else if (!openerPw || !(await bundleUseOpenerPw(openerPw))) return 'needOpener';
+      }
+      await wrapInto(lid, raw);
+      return 'ok';
+    } finally { raw.fill(0); }
+  }
+  // 이미 열면서 받은 열쇠 날 값으로 묶기 (잠긴 장부를 비밀번호로 열면서 '함께 열기에도 넣기')
+  async function bundleBindRaw(lid, raw) {
+    try {
+      const cfg = await bundleCfg();
+      if (!cfg || !cfg.check || !bundleKey) { await bundleCheck(lid); return false; }
+      await wrapInto(lid, raw); return true;
+    } finally { raw.fill(0); }
+  }
+  // 여는 비밀번호 한 번으로 묶인 장부 모두 열기. ids: 열어도 되는 장부(숨긴 장부 빼고). 틀리면 null
+  async function bundleOpen(pw, ids) {
+    const cfg = await bundleCfg();
+    if (!cfg || !cfg.check) return null;
+    const k = await deriveBundle(pw, cfg);
+    if (!(await bundleKeyOk(k, cfg))) return null;
+    bundleKey = k;
+    const done = [];
+    for (const o of await bAll()) {
+      if (o.id === 'cfg' || !o.ct || !ids.includes(o.lid) || opened.has(o.lid)) continue;
+      const meta = await getMeta(o.lid);
+      if (!meta || o.pwVer !== pwVerOf(meta)) continue; // 비밀번호가 바뀐 장부는 열지 않음
+      let raw = null;
+      try {
+        raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: o.iv }, k, o.ct));
+        const lk = await keyFromRaw(raw);
+        if ((await decryptWith(lk, meta.check)) !== CHECK_TEXT) continue;
+        await loadLedger(meta, lk); done.push(o.lid);
+      } catch (e) { /* 그 장부만 건너뜀 */ } finally { if (raw) raw.fill(0); }
+    }
+    return done;
+  }
+  // 여는 비밀번호 바꾸기 → 다른 묶인 장부 비밀번호로. 모든 감싼 열쇠를 새 묶음 열쇠로 다시 감쌈
+  async function bundleChangeOpener(newLid, newPw, curOpenerPw) {
+    const cfg = await bundleCfg();
+    if (!cfg || !cfg.check) return 'none';
+    if (!bundleKey && !(curOpenerPw && await bundleUseOpenerPw(curOpenerPw))) return 'needOpener';
+    const raw = await checkPassword(newLid, newPw);
+    if (!raw) return 'badPw';
+    const ncfg = { ...cfg, salt: crypto.getRandomValues(new Uint8Array(16)), iter: ITER, openerId: newLid };
+    const nk = await deriveBundle(newPw, ncfg);
+    ncfg.check = await encryptWith(nk, CHECK_TEXT);
+    await rewrap(bundleKey, nk, ncfg);
+    bundleKey = nk;
+    await wrapInto(newLid, raw); raw.fill(0);
+    return 'ok';
+  }
+  async function rewrap(oldK, newK, ncfg) {
+    const out = [ncfg];
+    for (const o of await bAll()) {
+      if (o.id === 'cfg' || !o.ct) continue;
+      let raw = null;
+      try {
+        raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: o.iv }, oldK, o.ct));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        out.push({ ...o, iv, ct: await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, newK, raw) });
+      } catch (e) { out.push({ id: o.id, lid: o.lid, pending: true }); } finally { if (raw) raw.fill(0); }
+    }
+    await bPut(...out);
+  }
+  async function bundleAfterPwChange(lid, oldPw, newPw) {
+    const cfg = await bundleCfg();
+    const list = await bAll();
+    if (!list.some((o) => o.id === 'L:' + lid) && !(cfg && cfg.openerId === lid)) return;
+    if (cfg && cfg.check && cfg.openerId === lid) {
+      const oldK = bundleKey || await deriveBundle(oldPw, cfg);
+      if (await bundleKeyOk(oldK, cfg)) {
+        const ncfg = { ...cfg, salt: crypto.getRandomValues(new Uint8Array(16)), iter: ITER };
+        const nk = await deriveBundle(newPw, ncfg);
+        ncfg.check = await encryptWith(nk, CHECK_TEXT);
+        await rewrap(oldK, nk, ncfg);
+        bundleKey = nk;
+      }
+    }
+    if (list.some((o) => o.id === 'L:' + lid)) await bPut({ id: 'L:' + lid, lid, pending: true });
+  }
+  // 이 기기 묶음 모두 풀기 (장부 자료는 그대로)
+  async function bundleClear() { const db = await openDB(); const t = db.transaction('deviceBundle', 'readwrite'); t.objectStore('deviceBundle').clear(); await txDone(t); bundleKey = null; }
 
   /* ── 백업 (4-10): 장부와 같은 방식(비밀번호 → PBKDF2 → AES-GCM)으로 잠근 파일 ──
      지금 장부의 열쇠로 잠그고, 열쇠를 만든 소금(salt)을 파일에 같이 적음.
@@ -323,7 +514,8 @@ const Store = (() => {
       await txDone(t);
     }
     const t = db.transaction('ledgers', 'readwrite'); t.objectStore('ledgers').delete(id); await txDone(t);
-    if (ledger && ledger.id === id) lock();
+    try { await bDel('L:' + id); } catch (e) { /* 그대로 */ }
+    if (ledger && ledger.id === id) lock(); else opened.delete(id);
   }
   // 다른 장부를 열지 않고 내용만 읽기 (새 장부에 카드·통장 등을 가져올 때). 비밀번호가 틀리면 null
   async function readLedger(id, password, cols) {
@@ -338,5 +530,8 @@ const Store = (() => {
     return out;
   }
 
-  return { removeMany, deleteLedger, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+  return { switchTo, isOpened, openedIds, checkPassword,
+    bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
+    hasBundleKey: () => !!bundleKey,
+    removeMany, deleteLedger, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

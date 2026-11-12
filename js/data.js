@@ -47,11 +47,22 @@ const DATA = (() => {
   // 장부 종류. 친구회·회계장부는 나중 단계에서 기능을 붙임 (지금은 만들기만 막아 둠)
   const LEDGER_TYPES = [
     { type: 'home', label: '집 가계부', defaultName: '주민가계부', ready: true },
-    { type: 'club', label: '계모임', defaultName: '친구회', ready: false },
+    { type: 'club', label: '계모임', defaultName: '친구회', ready: true },
     { type: 'hospital', label: '병원 통장 정리', defaultName: '회계장부', ready: false }
   ];
 
   const NAV = [['홈', 'house'], ['달력', 'calendar-days'], ['목록', 'list'], ['계정별', 'chart-pie'], ['설정', 'settings']];
+
+  // 친구회(계모임) 기본 계정 (편집 가능). meet: 모임 지출(모임별 보기) · nonStat: 수입·지출 통계에서 빼는 것(대출 원금 오감)
+  const CLUB_ACCOUNTS = [
+    ['정기모임', 'out', 'coffee', 0, { meet: true }], ['임시모임', 'out', 'utensils', 1, { meet: true }], ['우정맞춤', 'out', 'shirt', 2, { meet: true }],
+    ['생일선물', 'out', 'gift', 6], ['명절선물', 'out', 'package', 3], ['경조사', 'out', 'heart', 5], ['수수료', 'out', 'receipt', 4], ['기타지출', 'out', 'ellipsis', 7],
+    ['대출 지급', 'out', 'hand-coins', 4, { nonStat: true, loanOut: true }],
+    ['회비', 'in', 'hand-coins', 0, { fee: true }], ['이자', 'in', 'trending-up', 3], ['기타수입', 'in', 'coins', 7],
+    ['대출 상환', 'in', 'rotate-ccw', 4, { nonStat: true, loanRepay: true }]
+  ];
+  // 친구회 장부를 만들 때 켜 둘 기능 (나머지는 꺼 둠 · 설정에서 바꾸기)
+  const CLUB_FEATURES_ON = ['banks', 'files', 'receipt', 'loans', 'savings', 'interest', 'excel'];
 
   const PERIODS = ['오늘', '3일', '7일', '14일', '1개월', '3개월', '직접'];
 
@@ -88,8 +99,12 @@ const DATA = (() => {
     { key: 'trips', name: '여행 묶음', desc: '여행·행사 묶음 · 예산 · 여행 모아보기', step: 6, simple: false },
     { key: 'reminders', name: '기억할 것', desc: '계약·만료일 메모와 알림', step: 6, simple: false },
     { key: 'vault', name: '보안 금고', desc: '계좌번호·중요 메모 · 숨김 통장 (따로 비밀번호)', step: 7, simple: false },
-    { key: 'excel', name: '엑셀 옮기기·내보내기', desc: '예전 엑셀 시트 옮기기 · 통장별 시트 내보내기', step: 7, simple: false }
+    { key: 'excel', name: '엑셀 옮기기·내보내기', desc: '예전 엑셀 시트 옮기기 · 통장별 시트 내보내기', step: 7, simple: false },
+    { key: 'loans', name: '대출', desc: '회원별 대출 원금 · 상환 · 남은 원금', step: 8, simple: true, types: ['club'] },
+    { key: 'interest', name: '이자로 모임비 맞추기', desc: '매월 저축 · 이율 · 기간 → 예상 이자 계산', step: 8, simple: false, types: ['club'] }
   ];
+  // 계모임 장부에는 안 맞는 집 가계부 기능 (사용할 기능 목록에서 안 보임)
+  ['cards', 'cardBill', 'cardPerf', 'discount', 'repeat', 'plan', 'trips'].forEach((k) => { const f = FEATURES.find((x) => x.key === k); if (f) f.types = ['home', 'hospital']; });
 
   // 카드사 기본 목록 (설정에서 직접 추가 가능)
   const CARD_COMPANIES = ['신한카드', 'KB국민카드', '삼성카드', '현대카드', '롯데카드', '하나카드', '우리카드', 'BC카드', 'NH농협카드', 'IBK기업카드'];
@@ -125,5 +140,5 @@ const DATA = (() => {
   // 온라인몰: 여러 물건을 한 번에 사므로 자동 분류하지 않고 늘 미확인 → [나누기]로 나눠 적기
   const MALLS = ['쿠팡', '네이버페이', '네이버 페이', '스마트스토어', '11번가', 'G마켓', '지마켓', '옥션', 'SSG', '쓱닷컴', '컬리', '마켓컬리', '무신사', '위메프', '티몬', '인터파크', '알리익스프레스', '테무', 'TEMU', '롯데온', '카카오페이', '토스페이', '페이코', 'PAYCO', '오늘의집', '에이블리', '지그재그'];
 
-  return { DICT, MALLS, CARD_COMPANIES, BILL_DAYS, INSTALLMENTS, FEATURES, OWNERS, BANK_NAMES, THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, RED_OPTS, BLUE_OPTS, DEFAULT_IN, DEFAULT_OUT, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
+  return { CLUB_ACCOUNTS, CLUB_FEATURES_ON, DICT, MALLS, CARD_COMPANIES, BILL_DAYS, INSTALLMENTS, FEATURES, OWNERS, BANK_NAMES, THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, RED_OPTS, BLUE_OPTS, DEFAULT_IN, DEFAULT_OUT, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
 })();
