@@ -83,7 +83,69 @@ async function onBackupFile(file, mode) {
   S.dialog = D; render();
 }
 
+/* ── 같은 카드 하나로 합치기 (탭·휴대폰에서 같은 카드를 따로 등록한 경우) ──
+   같은 카드 = 이름(띄어쓰기 무시) · 앞 4자리 · 뒤 4자리가 모두 같음.
+   남길 카드 = 먼저 만든 것(두 기기에서 똑같이 고르도록). 빈 칸은 다른 쪽 값으로 채움.
+   그 카드를 가리키던 내역·서식 등은 모두 남길 카드로 바꾸고, 지운 카드 번호는 idmap에 적어 둠
+   → 나중에 예전 백업을 합쳐도 그 카드가 다시 생기지 않음. */
+const cardKey = (c) => [norm(c.name), digits(c.first4 || ''), digits(c.last4 || '')].join('|');
+const isCardPM = (p) => p && p.kind === 'card';
+function deepRemap(v, map) {
+  if (typeof v === 'string') return map[v] || v;
+  if (Array.isArray(v)) return v.map((x) => deepRemap(x, map));
+  if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = k === 'id' ? v[k] : deepRemap(v[k], map); return o; }
+  return v;
+}
+const older = (a, b) => ((a.createdAt || 0) - (b.createdAt || 0)) || (a.id < b.id ? -1 : 1);
+async function mergeCardInto(keep, dup) {
+  const filled = { ...keep };
+  for (const k of Object.keys(dup)) if ((filled[k] === '' || filled[k] == null) && dup[k] !== '' && dup[k] != null) filled[k] = dup[k];
+  filled.closed = !!(keep.closed && dup.closed);
+  if (!filled.closed) filled.closedDate = '';
+  await Store.put('payMethods', filled);
+  const map = { [dup.id]: keep.id }, puts = [];
+  for (const col of Object.keys(Store.snapshot())) {
+    if (col === 'gone') continue;
+    for (const o of Store.all(col)) {
+      if (o.id === dup.id || o.id === keep.id || !JSON.stringify(o).includes(dup.id)) continue;
+      puts.push([col, deepRemap(o, map)]);
+    }
+  }
+  for (const [col, o] of puts) await Store.put(col, o);
+  await Store.remove('payMethods', dup.id);
+  const im = Store.get('meta', 'idmap') || { id: 'idmap' }, m = { ...(im.map || {}) };
+  for (const k of Object.keys(m)) if (m[k] === dup.id) m[k] = keep.id;
+  m[dup.id] = keep.id;
+  await Store.put('meta', { ...im, map: m });
+  return puts.length;
+}
+// 이 장부 안의 같은 카드를 모두 하나로. 합친 카드 수를 돌려줌
+async function dedupeCards() {
+  if (!Store.isOpen()) return 0;
+  const groups = {};
+  Store.all('payMethods').filter(isCardPM).forEach((c) => { (groups[cardKey(c)] = groups[cardKey(c)] || []).push(c); });
+  let n = 0;
+  for (const g of Object.values(groups)) {
+    if (g.length < 2) continue;
+    g.sort(older);
+    for (const dup of g.slice(1)) { await mergeCardInto(Store.get('payMethods', g[0].id), dup); n++; }
+  }
+  return n;
+}
+// 이름은 같은데 한쪽만 번호가 비어 있는 카드 (같은 카드일 수 있음 → 사람에게 물어봄)
+function maybeSameCards() {
+  const cs = Store.all('payMethods').filter(isCardPM), out = [];
+  const ok = (a, b) => !a || !b || a === b;
+  for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+    const a = cs[i], b = cs[j];
+    if (norm(a.name) !== norm(b.name) || cardKey(a) === cardKey(b)) continue;
+    if (ok(digits(a.first4 || ''), digits(b.first4 || '')) && ok(digits(a.last4 || ''), digits(b.last4 || ''))) out.push([a, b].sort(older));
+  }
+  return out;
+}
+
 // 다른 기기에서 따로 만든 장부라면: 같은 이름의 계정과목·결제수단은 하나로 봄 (기본 목록이 두 벌 생기지 않게)
+// 카드는 이름 + 앞·뒤 4자리가 같을 때만 같은 카드로 봄
 function buildIdMap(cols) {
   const saved = (Store.get('meta', 'idmap') || {}).map || {};
   const map = { ...saved };
@@ -91,7 +153,7 @@ function buildIdMap(cols) {
     const inc = cols[col] || [], incIds = new Set(inc.map((o) => o.id));
     for (const o of inc) {
       if (map[o.id] || Store.get(col, o.id)) continue;
-      const same = Store.all(col).find((l) => l.name === o.name && l.kind === o.kind && !incIds.has(l.id) && !Object.values(map).includes(l.id));
+      const same = Store.all(col).find((l) => (isCardPM(o) ? isCardPM(l) && cardKey(l) === cardKey(o) : l.name === o.name && l.kind === o.kind) && !incIds.has(l.id) && !Object.values(map).includes(l.id));
       if (same) map[o.id] = same.id;
     }
   }
@@ -112,7 +174,7 @@ function planMerge(p) {
   const cur = Store.current();
   const same = p.ledger && p.ledger.id === cur.id;
   const cols = p.cols || {};
-  const map = same ? {} : buildIdMap(cols);
+  const map = same ? { ...((Store.get('meta', 'idmap') || {}).map || {}) } : buildIdMap(cols); // 같은 장부라도 예전에 합친 카드 번호는 바꿔 읽음
   const goneHere = new Set(Store.all('gone').map((g) => g.id));
   const puts = [], dels = [], cnt = { add: 0, chg: 0, del: 0, by: {} };
   const bump = (col, k) => { if (col === 'meta' || col === 'gone') return; cnt[k]++; const b = cnt.by[col] = cnt.by[col] || { add: 0, chg: 0, del: 0 }; b[k]++; };
@@ -132,6 +194,8 @@ function planMerge(p) {
     }
   }
   for (const g of cols.gone || []) {
+    // 하나로 합친 카드(지운 쪽)의 '지움' 기록은 남긴 카드를 지우라는 뜻이 아님 → 건너뜀
+    if (g.col === 'payMethods' && map[g.rid] && (Store.get('payMethods', map[g.rid]) || {}).kind === 'card') { if (!goneHere.has(g.col + '|' + g.rid)) puts.push(['gone', { ...g }]); continue; }
     const rid = map[g.rid] || g.rid;
     if (Store.get(g.col, rid)) { dels.push([g.col, rid]); bump(g.col, 'del'); }
     if (!goneHere.has(g.col + '|' + rid)) puts.push(['gone', { ...g, id: g.col + '|' + rid, rid }]);
@@ -144,13 +208,17 @@ async function applyMerge() {
   const D = S.dialog, P = D.plan, p = D.payload, items = [];
   S.busy = true; render();
   for (const [col, o] of P.puts) { items.push({ col, id: o.id, before: Store.get(col, o.id) ? { ...Store.get(col, o.id) } : null }); await Store.put(col, o, true); }
-  for (const [col, id] of P.dels) { items.push({ col, id, before: { ...Store.get(col, id) } }); await Store.remove(col, id); }
-  if (P.newMap) await Store.put('meta', { ...(Store.get('meta', 'idmap') || { id: 'idmap' }), map: P.newMap });
+  if (P.newMap) await Store.put('meta', { ...(Store.get('meta', 'idmap') || { id: 'idmap' }), map: { ...((Store.get('meta', 'idmap') || {}).map || {}), ...P.newMap } });
+  // 같은 카드가 두 장이 됐으면 하나로 (지우기 전에: 이 기기 내역이 지워질 카드를 가리키지 않게 먼저 옮김)
+  const cardsBefore = new Map(Store.all('payMethods').filter(isCardPM).map((c) => [c.id, { ...c }]));
+  const dupN = await dedupeCards();
+  if (dupN) cardsBefore.forEach((c, id) => { if (!items.some((i) => i.col === 'payMethods' && i.id === id)) items.push({ col: 'payMethods', id, before: c }); });
+  for (const [col, id] of P.dels) { if (!Store.get(col, id)) continue; items.push({ col, id, before: { ...Store.get(col, id) } }); await Store.remove(col, id); }
   await Store.migrate(); // 예전 버전 앱에서 만든 백업이면 새 구조로 옮김
   setSync(Store.current().id, { lastMerge: { at: p.createdAt, device: p.device, mergedAt: Date.now() } });
   S.busy = false; S.dialog = null; render();
   const c = P.cnt;
-  toast(c.add + c.chg + c.del ? `합쳤어요 · 새로 ${c.add} · 바뀜 ${c.chg} · 지움 ${c.del}` : '합쳤어요 · 바뀐 것이 없어요', { items, keepTime: true });
+  toast((c.add + c.chg + c.del ? `합쳤어요 · 새로 ${c.add} · 바뀜 ${c.chg} · 지움 ${c.del}` : '합쳤어요 · 바뀐 것이 없어요') + (dupN ? ` · 같은 카드 ${dupN}장을 하나로` : ''), { items, keepTime: true });
 }
 
 /* 백업 파일로 새 장부 만들기 (새 기기에서 처음) */
@@ -167,6 +235,7 @@ async function createFromBackup(form) {
     const id = await Store.createLedger({ type: p.ledger.type, name: p.ledger.name, password: pw, records, id: p.ledger.id });
     await Store.unlock(id, pw);
     await Store.migrate();
+    await dedupeCards();
     S.ledgers = await Store.listLedgers();
     view.lastLedger = id; saveView();
     setSync(id, { lastMerge: { at: p.createdAt, device: p.device, mergedAt: Date.now() } });

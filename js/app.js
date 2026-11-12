@@ -214,7 +214,7 @@ function viewLock() {
 }
 
 /* 앱 뼈대: 왼쪽 메뉴(가로) 또는 아래 메뉴(세로·휴대폰) + 위 이동 버튼 */
-const NO_FAB = ['계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '미확인 정리', '사용할 기능', '금고', '엑셀 옮기기'];
+const NO_FAB = ['처음 시작하기', '계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '미확인 정리', '사용할 기능', '금고', '엑셀 옮기기'];
 function viewApp(L) {
   const phone = L === 'phone', compact = L !== 'wide';
   const navOn = PARENT[S.screen] || S.screen;
@@ -323,6 +323,8 @@ function afterOpen() {
   // 그날이 된 반복 입력을 '확인 대기'로 (다 만들면 다시 그림)
   setTimeout(() => makeDueRepeats().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}), 0);
   setTimeout(() => cleanPhotos().catch(() => {}), 0); // 내역이 완전히 지워진 영수증 사진 정리
+  // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
+  setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
 }
 
 async function saveBankDraft() {
@@ -568,6 +570,7 @@ const ACT = {
   ...XL_ACT,
   ...RC_ACT,
   ...RESET_ACT,
+  ...START_ACT,
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
@@ -593,6 +596,7 @@ $app.addEventListener('keydown', (e) => {
 /* 입력 시트 글자 처리 */
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (onStartInput(el)) return; // 처음 시작하기 · 카드 이월 칸 (start.js)
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
   if (el.matches && el.matches('[data-bulkdate]') && S.dialog) { S.dialog.val = el.value || null; render(); }
   if (el.matches && el.matches('[data-recurdate]') && S.recur) { S.recur.date = el.value; render(); }
@@ -713,9 +717,8 @@ const FORM = {
   async start(f) {
     const v = digits(f.elements.sp.value);
     if (v && !(v.length === 4 && +v.slice(2) >= 1 && +v.slice(2) <= 12)) return showErr(f, '2606처럼 연도 2자리 + 월 2자리로 적어 주세요.', 'sp');
-    const st = Store.get('meta', 'settings') || { id: 'settings' };
-    await Store.put('meta', { ...st, startPoint: v });
-    S.dialog = null; render(); toast(v ? `${v.slice(0, 2)}년 ${+v.slice(2)}월부터 합계를 셈해요` : '모든 내역을 셈해요');
+    const items = await setStartPoint(v); // 시작점 이전 파일 내역은 '보관', 뒤로 간 것은 보관 풀기
+    S.dialog = null; render(); toast(v ? `${v.slice(0, 2)}년 ${+v.slice(2)}월부터 합계를 셈해요` : '모든 내역을 셈해요', { items });
   },
   custom(f) {
     const from = f.elements.from.value, to = f.elements.to.value;

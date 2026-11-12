@@ -36,45 +36,66 @@ function billParts(x) {
   const base = Math.trunc(x.amount / n), rest = x.amount - base * n, ym0 = payYMOf(c, x.date);
   return Array.from({ length: n }, (_, i) => ({ ym: ymAdd(ym0, i), amount: base + (i === 0 ? rest : 0), idx: i + 1, n }));
 }
-// 카드 한 장의 달별 대금 {ym: {amount, items:[{x, part}], date, paid}}
+// 시작할 때 남은 대금(이월) · 남은 할부 → 대금 조각들 (명세서가 없을 때 카드마다 직접 넣은 것)
+//   card.carry = { ym: 'YYYY-MM'(시작점 달), amount: 시작점 달 대금, inst: [{ memo, per(매달), left(남은 횟수, 다음 달부터) }] }
+function carryParts(c) {
+  const K = c && c.carry; if (!K || !K.ym) return [];
+  const out = [];
+  if (K.amount) out.push({ ym: K.ym, amount: K.amount, idx: 1, n: 1, carry: true, memo: '시작할 때 남은 대금' });
+  (K.inst || []).forEach((r) => { for (let i = 0; i < (r.left || 0); i++) out.push({ ym: ymAdd(K.ym, i + 1), amount: r.per || 0, idx: i + 1, n: Math.max(2, r.left), carry: true, memo: r.memo ? `${r.memo} 남은 할부` : '남은 할부' }); });
+  return out.filter((p) => p.amount);
+}
+// 카드 한 장의 달별 대금 {ym: {amount, items:[{x, part}], date, paid, pre}}
+// - 시작점 이전 '보관' 내역(지난달 명세서)도 넣음 → 시작점 뒤 첫 대금·남은 할부가 맞게 나옴 (지출 합계에는 안 들어감)
+// - 결제일이 시작점보다 앞인 대금은 pre(시작 전에 이미 끝난 대금) → 할 일·남은 대금에서 뺌
 function cardBills(cardId) {
   const c = payOf(cardId); const out = {};
   if (!c || c.cardType === 'check' || !c.billingDay) return out;
-  liveTx().filter((x) => x.kind === 'out' && x.payMethodId === cardId && !x.archived).forEach((x) => {
-    billParts(x).forEach((p) => { const b = out[p.ym] || (out[p.ym] = { ym: p.ym, amount: 0, items: [], date: billDateOf(c, p.ym), paid: null }); b.amount += p.amount; b.items.push({ x, p }); });
+  const sd = startDate();
+  const slot = (ym) => out[ym] || (out[ym] = { ym, amount: 0, items: [], date: billDateOf(c, ym), paid: null, pre: !!sd && billDateOf(c, ym) < sd });
+  liveTx().filter((x) => x.kind === 'out' && x.payMethodId === cardId).forEach((x) => {
+    billParts(x).forEach((p) => { const b = slot(p.ym); b.amount += p.amount; b.items.push({ x, p }); });
   });
-  liveTx().filter((x) => x.kind === 'bill' && x.cardId === cardId).forEach((x) => {
-    const b = out[x.billYM] || (out[x.billYM] = { ym: x.billYM, amount: 0, items: [], date: billDateOf(c, x.billYM), paid: null }); b.paid = x;
-  });
+  carryParts(c).forEach((p) => { const b = slot(p.ym); b.amount += p.amount; b.items.push({ x: { id: null, merchant: p.memo, amount: p.amount, carry: true }, p }); });
+  liveTx().filter((x) => x.kind === 'bill' && x.cardId === cardId).forEach((x) => { slot(x.billYM).paid = x; });
   return out;
+}
+// 시작점 달 첫 대금 (처음 시작하기 · 확인에 보여 줌): 보관(지난달 명세서)으로 계산한 몫 · 직접 넣은 이월 몫
+function firstBillOf(cardId) {
+  const c = payOf(cardId), sd = startDate();
+  if (!c || c.cardType === 'check' || !c.billingDay || !sd) return null;
+  const b = cardBills(cardId)[sd.slice(0, 7)];
+  if (!b) return { ym: sd.slice(0, 7), amount: 0, fromStmt: 0, fromCarry: 0, n: 0, date: billDateOf(c, sd.slice(0, 7)) };
+  const fromCarry = b.items.filter((i) => i.p.carry).reduce((s, i) => s + i.p.amount, 0);
+  return { ym: b.ym, amount: b.amount, fromStmt: b.amount - fromCarry, fromCarry, n: b.items.filter((i) => !i.p.carry).length, date: b.date, paid: b.paid };
 }
 // 다가오는 대금 (오늘 이후 가장 가까운 것) · 지난 대금 중 아직 확인 안 한 것
 function upcomingBills() {
   const t = todayStr(), list = [];
   cardsAll().filter((c) => c.cardType !== 'check').forEach((c) => {
-    const bills = Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date >= t).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const bills = Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && !b.pre && b.date >= t).sort((a, b) => (a.date < b.date ? -1 : 1));
     if (bills[0]) list.push({ card: c, bill: bills[0] });
   });
   return list.sort((a, b) => (a.bill.date < b.bill.date ? -1 : 1));
 }
 function dueBills() {
-  const t = todayStr(), list = [];
+  const t = todayStr(), list = [], sd = startDate();
   cardsAll().filter((c) => c.cardType !== 'check').forEach((c) => {
-    // 엑셀에서 옮겨 온 지난 내역으로만 된 대금은 이미 지난 일이라 묻지 않음
-    Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && b.date <= t && !b.items.every((i) => String(i.x.source || '').startsWith('엑셀'))).forEach((b) => list.push({ card: c, bill: b }));
+    // 시작점 전에 끝난 대금 · (시작점이 없을 때) 엑셀에서 옮겨 온 지난 내역으로만 된 대금은 묻지 않음
+    Object.values(cardBills(c.id)).filter((b) => b.amount > 0 && !b.paid && !b.pre && b.date <= t && (sd || !b.items.every((i) => String(i.x.source || '').startsWith('엑셀')))).forEach((b) => list.push({ card: c, bill: b }));
   });
   return list.sort((a, b) => (a.bill.date < b.bill.date ? -1 : 1));
 }
 // 남은 할부: 아직 안 나간 대금 중 할부 몫 (4-28 카드별 '남은 할부 ○회 · ○○원')
 function instLeftOf(cardId) {
   const t = todayStr(); let n = 0, amt = 0;
-  Object.values(cardBills(cardId)).filter((b) => !b.paid && b.date >= t).forEach((b) => { const s = b.items.filter((i) => i.p.n > 1).reduce((a, i) => a + i.p.amount, 0); if (s) { n++; amt += s; } });
+  Object.values(cardBills(cardId)).filter((b) => !b.paid && !b.pre && b.date >= t).forEach((b) => { const s = b.items.filter((i) => i.p.n > 1).reduce((a, i) => a + i.p.amount, 0); if (s) { n++; amt += s; } });
   return { n, amt };
 }
 // 남은 할부·대금 (해지 경고용)
 function remainingOf(cardId) {
   const t = todayStr();
-  return Object.values(cardBills(cardId)).filter((b) => !b.paid && b.amount > 0 && b.date >= t.slice(0, 8) + '01').reduce((s, b) => s + b.amount, 0);
+  return Object.values(cardBills(cardId)).filter((b) => !b.paid && !b.pre && b.amount > 0 && b.date >= t.slice(0, 8) + '01').reduce((s, b) => s + b.amount, 0);
 }
 
 /* ── 실적 (4-14) ── 카드마다 실적 기간: 이번 달 1일~말일(기본) / 전월 1일~말일(지난달 쓴 돈으로 이번 달 혜택) / 직접(○일부터 한 달)
@@ -160,8 +181,13 @@ function viewCards(L) {
     </button>`;
   }).join('');
   const sel = payOf(S.cardSel);
+  // 이름은 같은데 한쪽만 카드 번호가 비어 있는 두 장 → 같은 카드인지 물어봄
+  const pairs = maybeSameCards().filter(([a, b]) => !((Store.get('meta', 'settings') || {}).notSameCards || []).includes(a.id + b.id));
+  const pairHtml = pairs.slice(0, 2).map(([a, b]) => `<div class="warnbox">${ic('circle-alert', 22)}<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><span><b>같은 카드인가요?</b> 이름이 같은 카드가 두 장 있어요.<br>${[a, b].map((c) => `${esc(c.name)} (앞 ${esc(c.first4 || '—')} · 뒤 ${esc(c.last4 || '—')})`).join(' / ')}</span>
+    <div class="chips"><button class="btn ink" data-act="cardMergePair" data-a="${a.id}" data-b="${b.id}">하나로 합치기</button><button class="btn" data-act="cardNotSame" data-k="${a.id + b.id}">다른 카드예요</button></div></div></div>`).join('');
   return `<div class="cols">
     <div class="stack" style="flex:3 1 440px;min-width:0;gap:12px">
+      ${pairHtml}
       ${feat('cardBill') ? `<section class="card card-pad" style="display:flex;flex-direction:column;gap:6px">
         <span class="sub" style="font-size:${px(14)}">다가오는 카드 대금</span>
         ${next ? `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 16px"><span style="font-size:${px(24)};font-weight:700">${+next.bill.date.slice(5, 7)}월 ${+next.bill.date.slice(8)}일</span><span class="amt neg" style="font-size:${px(24)}">−${won(nextTotal)}원</span></div>` : `<span style="font-size:${px(18)};font-weight:700">다가오는 대금이 없어요</span>`}
@@ -199,7 +225,7 @@ function viewCardDetail(c) {
   const mk = Object.keys(months).sort().slice(-12), mmax = Math.max(1, ...mk.map((k) => Math.abs(months[k])));
   const periods = ['이번 달', '지난달', '1년', '전체', '직접'].map((p) => `<button class="chip ${p === S.cardPeriod ? 'on' : ''}" style="min-height:40px;padding:0 12px;font-size:${px(13)}" data-act="cardPeriod" data-p="${p}">${p}</button>`).join('');
   return `<section class="card" style="flex:2 1 340px;min-width:0;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 class="h2" style="flex:1">${esc(c.name)} 보기${c.closed ? ' <span class="tag">해지</span>' : ''}</h2><button class="btn" data-act="editCard" data-id="${c.id}">카드 고치기</button></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 class="h2" style="flex:1">${esc(c.name)} 보기${c.closed ? ' <span class="tag">해지</span>' : ''}</h2>${c.cardType !== 'check' && startDate() ? `<button class="btn" data-act="carryEdit" data-id="${c.id}">시작 이월${c.carry ? ' ✓' : ''}</button>` : ''}<button class="btn" data-act="editCard" data-id="${c.id}">카드 고치기</button></div>
     <div class="chips" style="gap:6px">${periods}</div>
     ${c.company ? `<div class="seg">${['이 카드', '카드사 전체'].map((s) => `<button class="${s === S.cardScope ? 'on' : ''}" data-act="cardScope" data-s="${s}">${s === '카드사 전체' ? esc(c.company) + ' 모두' : '이 카드'}</button>`).join('')}</div>` : ''}
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span class="sub" style="font-size:${px(14)}">사용 합계</span><span class="amt ${clsOf(-total)}" style="font-size:${px(24)}">${moneyTxt(-total)}</span></div>
@@ -351,6 +377,12 @@ const CARD_ACT = {
   },
   reviveCard: async (el) => { const c = payOf(el.dataset.id), before = { ...c }; await Store.put('payMethods', { ...c, closed: false, closedDate: '' }); render(); toast('다시 살렸어요', { items: [{ col: 'payMethods', id: c.id, before }] }); },
   dlgBillPaid: (el) => { S.dialog = { type: 'bill', card: el.dataset.card, ym: el.dataset.ym }; render(); },
+  cardMergePair: async (el) => {
+    const a = payOf(el.dataset.a), b = payOf(el.dataset.b); if (!a || !b) return;
+    const n = await mergeCardInto(a, b);
+    S.cardSel = a.id; render(); toast(`'${a.name}' 한 장으로 합쳤어요${n ? ` · 내역 ${n}건을 옮겼어요` : ''}`);
+  },
+  cardNotSame: async (el) => { const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, notSameCards: [...(st.notSameCards || []), el.dataset.k] }); render(); toast('다른 카드로 둘게요'); },
   billPaidYes: async () => {
     const D = S.dialog, c = payOf(D.card), b = cardBills(c.id)[D.ym];
     const saved = await Store.put('tx', { kind: 'bill', cardId: c.id, bankId: c.bankId || null, billYM: D.ym, amount: b.amount, date: b.date, memo: '', source: '직접', status: '확인', deleted: false });

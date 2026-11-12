@@ -236,7 +236,7 @@ async function readFile(file) {
 /* ── 파일 올리기 시작 ── */
 async function startImport(file) {
   if (!/\.(xlsx|xls|csv|pdf)$/i.test(file.name || '')) { S.imp = { step: 'drop' }; render(); showError(new Error(`「${file.name}」은(는) 읽을 수 없는 파일이에요. 엑셀(xlsx · xls) · CSV · PDF 파일만 올릴 수 있어요.`)); return; }
-  S.imp = { step: 'loading', name: file.name };
+  S.imp = { step: 'loading', name: file.name, wantCard: S.imp && S.imp.wantCard };
   render();
   try {
     const rf = await readFile(file), { name, sheets } = rf;
@@ -257,9 +257,11 @@ function setImpHeader(o) {
   const tpls = Store.all('templates');
   const exact = tpls.find((t) => t.sig === sig);
   const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
-  const type0 = !o.pdf && looksCard(hdr) ? 'card' : '';
-  const card0 = type0 === 'card' && cardsOpen().length === 1 ? cardsOpen()[0].id : '';
-  S.imp = { step: 'map', name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: type0, cardId: card0, bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
+  const type00 = !o.pdf && looksCard(hdr) ? 'card' : '';
+  const want = S.imp && S.imp.wantCard; // 처음 시작하기에서 '이 카드 지난달 명세서'로 들어온 경우
+  const type0 = want && !type00 ? 'card' : type00;
+  const card0 = type0 === 'card' && want ? want : type0 === 'card' && cardsOpen().length === 1 ? cardsOpen()[0].id : '';
+  S.imp = { step: 'map', wantCard: want, name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: type0, cardId: card0, bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
   S.imp.map = mapFor(hdr, type0); // 카드 명세서면 표준 칸 사전으로 미리 채움 (모르는 칸은 필요없음)
   if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; checkAllDup(); }
   else if (near) { S.imp.ask = near[0].id; }
@@ -472,7 +474,7 @@ function checkAllDup() {
 }
 function impStats() {
   const its = S.imp.items || [];
-  return { read: its.length, auto: its.filter((x) => x.use && (x.accId || x.bill)).length, unc: its.filter((x) => x.use && !x.accId && !x.bill).length, dup: its.filter((x) => x.dup).length, same: its.filter((x) => x.same && x.same.yes).length, use: its.filter((x) => x.use).length };
+  return { read: its.length, auto: its.filter((x) => x.use && (x.accId || x.bill)).length, unc: its.filter((x) => x.use && !x.accId && !x.bill && !isPreStart(x.date)).length, arch: its.filter((x) => x.use && !x.bill && isPreStart(x.date)).length, dup: its.filter((x) => x.dup).length, same: its.filter((x) => x.same && x.same.yes).length, use: its.filter((x) => x.use).length };
 }
 
 /* ── 화면 ── */
@@ -502,8 +504,9 @@ function viewFile(L) {
     return `<div class="donebox">
       <span class="donecheck">${ic('check', 36)}</span>
       <span style="font-size:${px(24)};font-weight:700">${I.savedN}건을 장부에 저장했어요</span>
-      ${I.uncN ? `<span class="sub" style="font-size:${px(15)}">미확인 <b style="color:var(--warn)">${I.uncN}건</b>이 남았어요. 지금 정리할까요?</span>` : `<span class="sub" style="font-size:${px(15)}">모두 분류됐어요.</span>`}
-      <div class="chips" style="justify-content:center;margin-top:12px">${I.uncN ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button><button class="btn big" data-act="impReset">다른 파일 올리기</button></div>
+      ${I.archN ? `<span class="sub" style="font-size:${px(15)}">시작점 이전 ${I.archN}건은 <b>보관</b>으로 넣었어요. 지출 합계에는 안 들어가고, 카드 대금·남은 할부 계산에만 써요.</span>` : ''}
+      ${I.uncN ? `<span class="sub" style="font-size:${px(15)}">미확인 <b style="color:var(--warn)">${I.uncN}건</b>이 남았어요. 지금 정리할까요?</span>` : I.archN && I.archN === I.savedN ? '' : `<span class="sub" style="font-size:${px(15)}">모두 분류됐어요.</span>`}
+      <div class="chips" style="justify-content:center;margin-top:12px">${S.sw ? '<button class="btn ink big" data-act="swBack">처음 시작하기로 돌아가기</button>' : ''}${I.uncN && !S.sw ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button><button class="btn big" data-act="impReset">다른 파일 올리기</button></div>
     </div>`;
   }
   return '';
@@ -564,7 +567,8 @@ function viewPreview(L) {
         : it.pend ? `<span class="pnote ok">${ic('repeat', 12)}반복 입력 확인 대기와 같은 건 · 새로 만들지 않고 확인으로 바꿔요</span>`
         : it.cancelOf ? `<span class="pnote">취소 · ${dateLabel(it.cancelOf.date)} 결제와 짝</span>`
         : it.disc && T.type !== 'card' ? `<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 반영 (원래 ${won(it.amount + it.disc)}원)</span>`
-          : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>' : '';
+          : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>'
+            : isPreStart(it.date) && !it.bill ? `<span class="pnote">${ic('clock', 12)}시작점 이전 · 보관 (지출 합계엔 안 넣고 ${T.type === 'card' ? '카드 대금·남은 할부 계산에만 써요' : '기록으로만 둬요'})</span>` : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
   const row = (it) => {
     const dot = `<span class="pdot ${!it.accId && !it.bill ? 'warn' : ''}"></span>`;
@@ -584,7 +588,7 @@ function viewPreview(L) {
   return `<div class="stack" style="gap:12px">
     <section class="card card-pad" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">${ic('file-spreadsheet', 28, 'var(--sub)')}
       <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:${px(15)};font-weight:700">${esc(I.name)}</span>
-      <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}</span>${totalLine(I)}</div></section>
+      <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}${st.arch ? ` · 시작점 이전 보관 ${st.arch}건` : ''}</span>${totalLine(I)}</div></section>
     <span class="sub" style="font-size:${px(14)}">칸을 눌러 바로 고칠 수 있어요. 왼쪽 네모를 끄면 그 줄은 저장하지 않아요. [확인하고 저장]을 누르기 전에는 장부에 들어가지 않아요.</span>
     <section class="card" style="overflow:hidden">
       ${phone ? '' : `<div class="ptr head"><span></span><span style="padding-left:16px">날짜</span><span>가맹점</span><span class="r">금액</span><span>분류</span><span>${T.type === 'card' ? '카드' : '통장'}</span></div>`}
@@ -599,7 +603,7 @@ function viewPreview(L) {
 /* ── 저장 ── */
 async function saveImport() {
   const I = S.imp, T = I.target, impId = Store.uid(), undo = [];
-  let savedN = 0, uncN = 0;
+  let savedN = 0, uncN = 0, archN = 0;
   S.busy = true;
   const feeAcc = Store.all('accounts').find((a) => a.kind === 'out' && a.name === '카드 수수료·이자');
   for (const it of I.items) {
@@ -641,14 +645,16 @@ async function saveImport() {
         installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst, index: it.idx || 1 } : null, approval: it.approval || '', feeSaved: it.feeWaived || 0,
         status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
       if (it.discMemo) o.memo = [o.memo, '할인: ' + it.discMemo].filter(Boolean).join(' · ');
-      if (!it.accId) uncN++;
+      // 시작점 이전(예: 지난달 카드 명세서) → '보관': 지출 합계·미확인에는 안 들어가고, 카드 대금 짝짓기·남은 할부 계산에만 씀
+      if (isPreStart(it.date)) { Object.assign(o, { archived: true, archivedBy: 'start', status: '보관' }); archN++; }
+      else if (!it.accId) uncN++;
     }
     const s = await Store.put('tx', o); undo.push({ col: 'tx', id: s.id, before: null }); savedN++;
   }
   await Store.put('imports', { id: impId, name: I.name, saved: savedN, tplName: (Store.get('templates', I.tplId) || {}).name || '' });
   S.busy = false;
-  S.imp = { step: 'done', savedN, uncN };
-  render(); toast(`${savedN}건을 저장했어요`, { items: undo });
+  S.imp = { step: 'done', savedN, uncN, archN };
+  render(); toast(`${savedN}건을 저장했어요${archN ? ` · 시작점 이전 ${archN}건은 보관` : ''}`, { items: undo });
 }
 
 async function saveTemplate() {

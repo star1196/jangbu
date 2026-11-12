@@ -242,7 +242,7 @@ function parseReceipt(raw) {
   if (/체크/.test(head.replace(/\s+/g, '')) || /체크승인|체크카드|직불/.test(sq.replace(/키스-?체크/g, ''))) r.cardType = 'check';
   else if (/신용카드|\(신용\)/.test(sq)) r.cardType = 'credit';
   // 현금영수증: '현금(소득공제)·현금영수증·자진발급' → 현금 (휴대폰 번호를 카드번호로 보지 않음)
-  if (/현금\(?소득공제|현금영수증|현금승인|현금\(지출증빙|자진발급|지출증빙/.test(sq) || (!r.first4 && !r.last4 && !r.company && /현금/.test(sq) && !/카드/.test(sq))) { r.cash = true; r.first4 = ''; r.last4 = ''; r.company = ''; r.cardType = ''; r.issuer = ''; }
+  if (/현금\(?소득공제|현금영수증|현금승인|현금\(지출증빙|자진발급|지출증빙/.test(sq) || (!r.first4 && !r.last4 && !r.company && /현금/.test(sq) && !/카드/.test(sq))) { r.cash = true; r.cashProof = /지출증빙/.test(sq) && !/소득공제/.test(sq); r.first4 = ''; r.last4 = ''; r.company = ''; r.cardType = ''; r.issuer = ''; }
   // 일시불 / 할부: "일시불", "할부 03개월", "할부개월 00(=일시불)", "할부: 3"
   m = sq.match(/할부(?:개월|기간)?[:：]?(\d{1,2})(?:개월)?/) || sq.match(/(\d{1,2})개월할부/);
   if (m) { const n = +m[1]; r.inst = n > 1 && n <= 36 ? n : 1; r.instRead = true; }
@@ -359,6 +359,8 @@ async function readReceipt(file, force) {
   if (p.date) { [f.y, f.mo, f.d] = p.date.split('-'); } else { f.y = ''; f.mo = ''; f.d = ''; }
   f.amount = p.amount || 0; f.merchant = p.merchant || '';
   f.payId = pay ? pay.id : null;
+  // 현금영수증: 기본은 현금 · 소득공제용 표시 (확인 화면에서 [계좌이체 + 통장]으로 바꿀 수 있음)
+  if (p.cash && !fc) f.cr = { on: true, deduct: !p.cashProof };
   if (pay && pay.kind === 'card' && pay.cardType !== 'check' && p.inst > 1) f.inst = p.inst;
   // 분류 추천: 가맹점으로 먼저, 안 되면 영수증 전체 글자로 (병원 영수증 → 병원·약국)
   const byMer = f.merchant ? classify(f.merchant, 'out') : null, byText = byMer ? null : suggestAccFromText(data.text || '', 'out');
@@ -493,3 +495,28 @@ const RC_ACT = {
     render();
   }
 };
+
+/* ── 현금영수증 모아 보기 (설정 → 현금영수증): 연도별 · 소득공제용 / 지출증빙 · 달별 합계 ── */
+const cashRcList = (y) => liveTx().filter((x) => x.kind === 'out' && x.cashReceipt && (!y || x.date.slice(0, 4) === String(y))).sort(sortTx);
+function viewCashRc(L) {
+  const all = liveTx().filter((x) => x.kind === 'out' && x.cashReceipt);
+  const years = [...new Set([todayStr().slice(0, 4), ...all.map((x) => x.date.slice(0, 4))])].sort().reverse();
+  const y = S.crYear && years.includes(S.crYear) ? S.crYear : years[0];
+  const xs = cashRcList(y), ded = xs.filter((x) => x.cashReceipt.deduct !== false), prf = xs.filter((x) => x.cashReceipt.deduct === false);
+  const sum = (l) => l.reduce((s, x) => s + x.amount, 0);
+  const months = {}; ded.forEach((x) => { const m = +x.date.slice(5, 7); months[m] = (months[m] || 0) + x.amount; });
+  const how = (x) => { const p = payOf(x.payMethodId); return p && p.kind === 'bank' ? `계좌이체${x.bankId ? ' · ' + bankName(x.bankId) : ''}` : '현금'; };
+  return `<div class="stack">
+    <div class="chips">${years.map((v) => `<button class="chip ${v === y ? 'on' : ''}" data-act="crYear" data-v="${v}">${v}년</button>`).join('')}</div>
+    <section class="card card-pad" style="display:flex;flex-direction:column;gap:6px">
+      <span class="sub" style="font-size:${px(14)}">${y}년 현금영수증 · 소득공제용</span>
+      <span class="amt neg" style="font-size:${px(30)};letter-spacing:-0.03em">${won(sum(ded))}원</span>
+      <span class="sub small">${ded.length}건${prf.length ? ` · 지출증빙 ${prf.length}건 ${won(sum(prf))}원은 따로` : ''} · 연말정산 때 국세청 자료와 비교해 보세요.</span>
+      ${Object.keys(months).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">${Object.keys(months).sort((a, b) => a - b).map((m) => `<span class="small"><span class="sub">${m}월</span> ${won(months[m])}원</span>`).join('')}</div>` : ''}
+    </section>
+    <section class="card" style="overflow:hidden">${xs.length ? xs.map((x) => txRow(x, { act: 'openTx', sub: `${dateLabel(x.date)} · ${how(x)} · ${x.cashReceipt.deduct === false ? '지출증빙' : '소득공제용'}` })).join('')
+      : `<div class="empty">${ic('receipt', 32, 'var(--sub)')}<span>${y}년 현금영수증이 없어요.<br><span class="small sub">영수증 찍기로 현금영수증을 넣거나, 현금·계좌이체 내역을 고칠 때 [현금영수증 받았어요]를 켜면 여기 모여요.</span></span></div>`}</section>
+  </div>`;
+}
+RC_ACT.crYear = (el) => { S.crYear = el.dataset.v; render(); };
+RC_ACT.goCashRc = () => go('현금영수증');

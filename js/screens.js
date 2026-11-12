@@ -4,7 +4,7 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정' };
 
 function screenBody(L) {
   switch (S.screen) {
@@ -36,6 +36,8 @@ function screenBody(L) {
     case '기억할 것': return viewReminders();
     case '금고': return viewVault();
     case '엑셀 옮기기': return viewXl(L);
+    case '처음 시작하기': return viewStart();
+    case '현금영수증': return viewCashRc(L);
     default: return '';
   }
 }
@@ -91,7 +93,7 @@ function viewHome(L) {
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + pendingTodos() + cardTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + startTodo() + pendingTodos() + cardTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
   const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
   return `<div class="stack">
     <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·여행·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
@@ -456,8 +458,8 @@ function viewSettings() {
   const plansRows = (feat('plan') ? rowB('고정 수입·지출 계획표', (curPlan() || {}).name || '아직 없음', 'goPlan') : '') + (feat('vault') ? rowB('금고', vaultRec() ? (vaultIsOpen() ? '열려 있음' : '비밀번호 따로') : '아직 없음', 'goVault') : '') + (feat('excel') ? rowB('엑셀 시트 옮기기', '예전 가계부 엑셀', 'goXl') : '');
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
-      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
-      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
+      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
+      ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -559,6 +561,8 @@ function viewDialog() {
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
   } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {
     body = viewResetDlg(D); // 초기화 · 장부 지우기 · 가져오기 (reset.js)
+  } else if (D.type === 'carry') {
+    body = viewCarryDlg(D); // 카드 이월 대금 (start.js)
   } else if (/^rc/.test(D.type)) {
     body = viewRcDlg(D); // 영수증 찍기 (receipt.js)
   } else if (D.type === 'plus') {

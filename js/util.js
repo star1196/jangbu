@@ -91,6 +91,8 @@ function startDate() {
   const sp = ((Store.get('meta', 'settings') || {}).startPoint || '').trim();
   return /^\d{4}$/.test(sp) ? `20${sp.slice(0, 2)}-${sp.slice(2)}-01` : '';
 }
+// 시작점 이전 날짜인가 (그 전 내역은 '보관')
+const isPreStart = (date) => { const s = startDate(); return !!s && !!date && date < s; };
 const isSep = (bankId) => { const b = bankOf(bankId); return !!b && b.type === 'sep'; };
 // 합계에 넣는 내역인지: 시작점 이전은 보관만, 별도 통장 안의 입출금은 가계부 밖
 function counted(x) { const s = startDate(); return !x.deleted && (!s || x.date >= s) && !(isMoney(x) && isSep(x.bankId)); }

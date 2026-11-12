@@ -21,7 +21,7 @@ function newForm(keep) {
     y: String(t.getFullYear()), mo: pad2(t.getMonth() + 1), d: pad2(t.getDate()),
     amount: 0, merchant: '', accId: null, accTouched: false, payId: lastPayId(), bankId: lastBankId(), memo: '',
     fromId: null, toId: null, inst: 1, perfEx: false, savingId: null, tripId: null, tripTouched: false,
-    more: false, orig: 0, disc: 0, point: 0, catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
+    more: false, orig: 0, disc: 0, point: 0, catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1, cr: null
   };
   if (keep) Object.assign(f, { kind: keep.kind, y: keep.y, mo: keep.mo, d: keep.d, payId: keep.payId, bankId: keep.bankId || f.bankId, fromId: keep.fromId || null, toId: keep.toId || null });
   if (f.kind === 'tr') { f.fromId = f.fromId || lastBankId(); f.toId = f.toId || defaultTo(f.fromId); }
@@ -37,11 +37,28 @@ function editForm(x) {
     payId: x.payMethodId || lastPayId(), bankId: x.bankId || (x.kind === 'tr' ? null : lastBankId()), memo: x.memo || '',
     fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx, savingId: x.savingId || null, tripId: x.tripId || null, tripTouched: true,
     more: !!(x.originalPrice || x.discount || x.pointUsed), orig: x.originalPrice || 0, disc: x.discount || 0, point: x.pointUsed || 0,
-    catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1
+    catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1,
+    cr: x.cashReceipt ? { on: true, deduct: x.cashReceipt.deduct !== false } : null
   };
 }
 const needsBank = (f) => feat('banks') && f.kind !== 'tr' && (payOf(f.payId) || {}).kind === 'bank';
 const bankName = (id) => (bankOf(id) || {}).name || '—';
+// 현금영수증은 현금·계좌이체 지출에만
+const crAble = (f) => f.kind === 'out' && ['cash', 'bank'].includes((payOf(f.payId) || {}).kind);
+const payByKind = (k) => Store.all('payMethods').filter((p) => p.kind === k && !p.hidden).sort((a, b) => (a.order || 0) - (b.order || 0))[0];
+function crBox(f, confirm) {
+  if (!crAble(f)) return '';
+  const on = !!(f.cr && f.cr.on), kind = (payOf(f.payId) || {}).kind;
+  if (!confirm) return `<label class="check" style="min-height:40px;font-size:${px(14)}"><input type="checkbox" data-act="crOn" ${on ? 'checked' : ''}>현금영수증 받았어요${on ? '' : ' (소득공제용이면 켜 두세요)'}</label>
+    ${on ? `<label class="check" style="min-height:40px;font-size:${px(14)};padding-left:28px"><input type="checkbox" data-act="crDeduct" ${f.cr.deduct ? 'checked' : ''}>소득공제용 (끄면 지출증빙)</label>` : ''}`;
+  if (!on) return '';
+  return `<section class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <span style="display:flex;align-items:center;gap:8px;font-weight:700">${ic('receipt', 18)}현금영수증 · 어떻게 냈나요?</span>
+    <div class="seg"><button class="${kind === 'cash' ? 'on' : ''}" data-act="crPay" data-v="cash">현금</button><button class="${kind === 'bank' ? 'on' : ''}" data-act="crPay" data-v="bank">계좌이체</button></div>
+    ${kind === 'bank' && feat('banks') ? `<span class="small sub">어느 통장에서 나갔나요?</span>${bankChips(f.bankId, 'fBank')}` : ''}
+    <label class="check" style="min-height:40px;font-size:${px(15)}"><input type="checkbox" data-act="crDeduct" ${f.cr.deduct ? 'checked' : ''}><b>소득공제용</b>&nbsp;<span class="sub small">(연말정산에 모아 봐요 · 끄면 지출증빙)</span></label>
+  </section>`;
+}
 const formCard = (f) => { const p = payOf(f.payId); return p && p.kind === 'card' ? p : null; };
 // 결제수단 목록: 현금 · 계좌이체 · 쓰는 카드들 (해지 카드는 숨김, 고칠 때 원래 카드는 보임)
 function payList(cur) {
@@ -121,6 +138,7 @@ function viewSheet() {
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),
       ...(f.perfEx ? [['실적', '카드 실적에서 빼요']] : []),
+      ...(crAble(f) && f.cr && f.cr.on ? [['현금영수증', f.cr.deduct ? '받음 · 소득공제용' : '받음 · 지출증빙']] : []),
       ...(f.tripId && Store.get('trips', f.tripId) ? [['여행', Store.get('trips', f.tripId).name]] : []),
       ...(f.savingId && Store.get('savings', f.savingId) ?[['적금', `${Store.get('savings', f.savingId).name}에 넣은 돈으로 더해요`]] : []),
       ...(needsBank(f) ? [['통장', f.bankId ? bankName(f.bankId) + (isSep(f.bankId) ? ' (별도 통장 · 가계부 합계에서 빠져요)' : '') : '정하지 않음']] : []),
@@ -136,6 +154,7 @@ function viewSheet() {
           <span style="font-size:${px(16)};font-weight:600">${esc(f.merchant || (acc ? acc.name : '가맹점 없음'))}</span>
           <span class="amt ${clsOf(n)}" style="font-size:${px(38)};letter-spacing:-0.03em">${moneyTxt(n)}</span>
         </div>
+        ${crBox(f, true)}
         <div>${rows.map(([k, v]) => `<div class="conf-row"><span class="k">${k}</span><span class="v">${esc(v)}</span><button class="linkbtn" data-act="fBack">고치기</button></div>`).join('')}</div>
       </div>
       <div class="sheet-foot"><button class="btn big" style="flex:1" data-act="fBack">고치기</button><button class="btn ink big" style="flex:1.3" data-act="fFinal" ${S.busy ? 'disabled' : ''}>${f.again ? '확인하고 저장, 하나 더' : '확인하고 저장'}</button></div>`;
@@ -184,7 +203,7 @@ function viewSheet() {
           <div class="chips" data-part="cats"></div>
           <div data-part="sav"></div>
         </div>
-        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}</div>
+        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}${crBox(f)}</div>
         <div data-part="trip"></div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
         <label class="field"><span class="label">메모</span><input class="input" data-f="memo" value="${esc(f.memo)}" placeholder="필요할 때만 적어요" autocomplete="off"></label>
@@ -444,7 +463,8 @@ async function formFinal() {
       savingId: f.kind === 'out' && isSavAcc(f.accId) ? f.savingId || null : null,
       tripId: feat('trips') ? f.tripId || null : (before && before.tripId) || null,
       status: f.accId ? '확인' : '미확인',
-      originalPrice: f.orig || 0, discount: f.disc || 0, pointUsed: f.point || 0
+      originalPrice: f.orig || 0, discount: f.disc || 0, pointUsed: f.point || 0,
+      cashReceipt: crAble(f) && f.cr && f.cr.on ? { deduct: !!f.cr.deduct } : null
     };
   // 영수증 사진 붙이기: 작게 줄인 사진을 'photos' 묶음에 (장부 비밀번호로 암호화) · 내역엔 사진 번호만
   const th = f.rc && f.rc.thumb && rcPhotoOn() && !(before && before.photoId) ? f.rc.thumb : null;
@@ -516,6 +536,14 @@ const FORM_ACT = {
     render();
   },
   fInst: (el) => { S.f.inst = +el.dataset.v; render(); },
+  crOn: () => { const f = S.f; f.cr = f.cr && f.cr.on ? { ...f.cr, on: false } : { on: true, deduct: f.cr ? f.cr.deduct !== false : true }; render(); },
+  crDeduct: () => { const f = S.f; if (f.cr) f.cr.deduct = !f.cr.deduct; render(); },
+  crPay: (el) => {
+    const f = S.f, p = payByKind(el.dataset.v); if (!p) { toast(el.dataset.v === 'bank' ? '결제수단에 계좌이체가 없어요. 설정 → 결제수단에서 더해 주세요' : '결제수단에 현금이 없어요'); return; }
+    f.payId = p.id; if (needsBank(f) && !f.bankId) f.bankId = lastBankId();
+    if (f.rc) f.rc.missing = f.rc.missing.filter((x) => x !== 'pay');
+    render();
+  },
   fMore: () => { S.f.more = !S.f.more; render(); },
   fCal: () => { const c = fld('cal'); if (!c) return; const f = S.f; if (validDate(f.y, f.mo, f.d)) c.value = `${f.y}-${pad2(+f.mo)}-${pad2(+f.d)}`; try { c.showPicker(); } catch (e) { c.click(); } },
   fDateChoice: (el) => { const c = S.f.dateChoices[+el.dataset.i]; setDateParts(c.y, c.m, c.d); focusField('amount'); },
