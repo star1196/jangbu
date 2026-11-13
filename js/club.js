@@ -115,7 +115,7 @@ async function clubAfterImport(impId) {
   const outs = clubTx().filter((x) => x.source === '파일:' + impId && x.kind === 'out' && !x.club && isUnc(x));
   let cls = 0;
   for (const x of outs) {
-    const m = feat('advance') ? matchMember(x) : null;
+    const m = false ? matchMember(x) : null;
     if (m && owedOf(m.id) > 0) { await Store.put('tx', { ...x, accountId: null, status: '미확인', club: { memberId: m.id, type: 'advAsk' } }, true); ask++; continue; }
     const a = lastAccFor(x.merchant, x.id) || clubDictAcc(x.merchant);
     if (a) { await Store.put('tx', { ...x, accountId: a.id, status: '확인', autoAcc: true }, true); cls++; }
@@ -144,7 +144,7 @@ function clubTxName(x) {
 /* ───────── 목록 ───────── */
 function clubRow(x) {
   const a = accOf(x.accountId);
-  const sub = [mmdd(x.date), x.internal ? '' : bankName(x.bankId), a && !isUnc(x) ? a.name : '', x.meet && x.meet.people ? x.meet.people + '명' : '', x.memo || ''].filter(Boolean).join(' · ');
+  const sub = [mmdd(x.date), x.internal ? '' : x.bankId ? bankName(x.bankId) : '현금', a && !isUnc(x) ? a.name : '', x.meet && x.meet.people ? x.meet.people + '명' : '', x.memo || ''].filter(Boolean).join(' · ');
   const title = x.club && x.club.memberId ? `${clubTxName(x)}${x.merchant && normName(x.merchant) !== normName(clubTxName(x)) ? ' · ' + x.merchant : ''}` : txTitle(x);
   return `<button class="lrow" data-act="clubTx" data-id="${x.id}">${txIcon(x, 20, 40)}<span class="lmid"><span class="lt">${esc(title)} ${clubTags(x)}</span><span class="ls">${esc(sub)}</span></span>${txAmt(x, 16)}</button>`;
 }

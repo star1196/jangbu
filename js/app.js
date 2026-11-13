@@ -140,6 +140,9 @@ function render() {
   const keep = prev && prev.dataset.screen === S.screen ? prev.scrollTop : 0;
   const sb = $app.querySelector('.sheet-body');
   const keepSheet = sb ? sb.scrollTop : 0;
+  // 대화 상자를 다시 그려도 보던 자리 · 치던 칸 그대로 (휴대폰에서 칸 하나 넣을 때마다 맨 위로 튀던 것 고침, v25)
+  const dl = $app.querySelector('.dlg'), keepDlg = dl && S.dialog === lastDlg ? dl.scrollTop : null;
+  const fk = focusKeyOf(document.activeElement);
   const toastEl = document.getElementById('toast');
   let html = '';
   if (S.mode === 'boot') html = '<div class="boot">여는 중…</div>';
@@ -156,9 +159,39 @@ function render() {
   if (sb2) sb2.scrollTop = keepSheet;
   if (S.f) fillSheet();
   enhanceDates($app); // 날짜 칸을 [연][월][일] 자동 이동 칸으로 (datebox.js)
+  if (sb2) sb2.scrollTop = keepSheet; // 입력 시트 내용을 다 채운 뒤 다시 맞춤 (채우기 전엔 짧아서 위로 잘렸음)
   placeSwitchPop();
-  const af = $app.querySelector('[data-autofocus]');
-  if (af && (L !== 'phone' || S.mode === 'lock' || S.dialog)) af.focus();
+  const dl2 = $app.querySelector('.dlg');
+  const sameDlg = !!S.dialog && S.dialog === lastDlg;
+  if (dl2 && keepDlg != null && sameDlg) dl2.scrollTop = keepDlg;
+  // 처음 열 때만 자동으로 칸에 들어감. 같은 창을 다시 그릴 때는 치던 칸으로 돌아가고, 그 칸이 가려지지 않게만 살짝 맞춤
+  let back = sameDlg && fk ? $app.querySelector(fk.sel) : null;
+  if (back && fk.seg) back = back.previousElementSibling && back.previousElementSibling.querySelector(`.dseg.${fk.seg}`); // 날짜 칸은 그 [연][월][일] 칸으로
+  if (back) { back.focus({ preventScroll: true }); try { if (fk.pos != null && back.setSelectionRange) back.setSelectionRange(fk.pos, fk.pos); } catch (e) { /* 그대로 */ } if (fk.seen) keepInView(back); }
+  else if (!sameDlg || !S.dialog) {
+    const af = $app.querySelector('[data-autofocus]');
+    if (af && (L !== 'phone' || S.mode === 'lock' || S.dialog)) af.focus();
+  }
+  lastDlg = S.dialog;
+}
+let lastDlg = null;
+// 지금 치고 있는 칸을 다시 찾을 수 있는 이름표 (data-* · name)
+function focusKeyOf(el) {
+  if (!el || !$app.contains(el) || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.type === 'hidden') return null;
+  if (el.classList.contains('dseg')) { const hid = el.closest('.dbx') && el.closest('.dbx').nextElementSibling; const k = hid && focusKeyOf(hid); return k ? { sel: k.sel, seg: el.dataset.dseg, pos: null, seen: true } : null; }
+  const attrs = [...el.attributes].filter((a) => /^data-(?!autofocus|prev|dbx)/.test(a.name) || a.name === 'name').map((a) => `[${a.name}="${CSS.escape(a.value)}"]`).join('');
+  if (!attrs) return null;
+  let pos = null; try { pos = el.selectionStart; } catch (e) { pos = null; }
+  // 보이던 칸만 다시 그린 뒤 보이게 맞춤 (내려서 다른 곳을 보고 있으면 그 자리 그대로)
+  const box = el.closest('.dlg, .sheet-body, .content'), r = el.getBoundingClientRect(), b = box ? box.getBoundingClientRect() : null;
+  const seen = !b || (r.bottom > b.top && r.top < b.bottom);
+  return { sel: `${el.tagName.toLowerCase()}${attrs}`, pos, seen };
+}
+function keepInView(el) {
+  const box = el.closest('.dlg, .sheet-body, .content'); if (!box) return;
+  const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (r.top < b.top + 8) box.scrollTop -= (b.top + 8 - r.top);
+  else if (r.bottom > b.bottom - 8) box.scrollTop += (r.bottom - b.bottom + 8);
 }
 
 /* 장부 만들기 */

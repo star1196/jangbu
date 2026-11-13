@@ -295,6 +295,15 @@ const Store = (() => {
         const a = get('accounts', x.accountId);
         if (a && a.legacyMeet && x.kind === 'out' && !(x.meet && x.meet.type)) await put('tx', { ...x, meet: { name: (x.meet && x.meet.name) || x.merchant || a.name, people: (x.meet && x.meet.people) || 0, type: a.name } }, true);
       }
+    }],
+    [6, async () => { // 2026-11 v25 친구회: 「회원이 대신 냄 → 돌려줄 돈」을 없애고 메모로 (예: "나○○ 대신 냄 25,000"). 내역은 지우지 않음.
+      if (ledger.type !== 'club') return;
+      for (const x of all('tx')) {
+        if (x.advBy) {
+          const m = get('members', x.advBy), note = `${m ? m.name : '회원'} 대신 냄 ${Math.round(x.amount).toLocaleString('ko-KR')}`;
+          await put('tx', { ...x, advBy: null, advByOld: x.advBy, memo: x.memo && x.memo.includes(note) ? x.memo : [note, x.memo].filter(Boolean).join(' · ') }, true);
+        } else if (x.club && x.club.type === 'advAsk') await put('tx', { ...x, club: null }, true);
+      }
     }]
   ];
   const LATEST = MIGRATIONS[MIGRATIONS.length - 1][0];

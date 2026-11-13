@@ -80,7 +80,7 @@ const DATA = (() => {
     ['우정맞춤', '맞춤 단체복 티셔츠 커플']
   ].flatMap(([acc, words]) => words.split(' ').map((w) => [w, acc]));
   // 친구회 장부를 만들 때 켜 둘 기능 (나머지는 꺼 둠 · 설정에서 바꾸기)
-  const CLUB_FEATURES_ON = ['banks', 'files', 'receipt', 'loans', 'savings', 'interest', 'excel', 'clubAuto', 'advance', 'instView'];
+  const CLUB_FEATURES_ON = ['banks', 'files', 'receipt', 'loans', 'savings', 'interest', 'excel', 'clubAuto', 'instView'];
 
   const PERIODS = ['오늘', '3일', '7일', '14일', '1개월', '3개월', '직접'];
 
@@ -121,7 +121,6 @@ const DATA = (() => {
     { key: 'loans', name: '대출', desc: '회원별 대출 원금 · 상환 · 남은 원금', step: 8, simple: true, types: ['club'] },
     { key: 'interest', name: '이자로 모임비 맞추기', desc: '매월 저축 · 이율 · 기간 → 예상 이자 계산', step: 8, simple: false, types: ['club'] },
     { key: 'clubAuto', name: '회칙 자동 판정', desc: '생일선물 대상(생일날 미수금 0) · 만 45세 미혼 결혼축의금 선지급 알림', step: 8, simple: true, types: ['club'] },
-    { key: 'advance', name: '회원이 대신 낸 돈', desc: '회원이 먼저 낸 지출 · 돌려줄 돈 · 돌려준 이체 짝 맞추기', step: 8, simple: true, types: ['club'] },
     { key: 'instView', name: '할부 모아보기', desc: '카드 · 가맹점 · 회차 · 이번 달 청구 · 남은 금액 한눈에', step: 8, simple: true },
     { key: 'cardPlan', name: '카드 메모 · 사용 계획 · 해지일', desc: '혜택용 사용 계획 달성 · 해지 가능일 7일 전 알림', step: 8, simple: false }
   ];

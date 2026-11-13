@@ -138,7 +138,7 @@ function formTripPart(f) {
 function parseQuery(q) {
   const toks = String(q || '').trim().split(/\s+/).filter(Boolean), conds = [], terms = [];
   const Y = new Date().getFullYear();
-  const accs = Store.all('accounts'), cards = cardsAll(), banks = banksAll(), trips = tripsAll();
+  const accs = Store.all('accounts').filter((a) => !a.sys), cards = cardsAll(), banks = banksAll(), trips = tripsAll();
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i], nt = norm(t);
     let m;
@@ -219,7 +219,9 @@ function searchResults(L) {
   }
   const R = searchRun(), tab = S.qTab || '통합';
   const chips = R.P.conds.length ? `<div class="chips" style="gap:6px"><span class="sub small" style="margin-right:2px">알아들은 조건</span>${R.P.conds.map((c) => `<button class="chip on" style="min-height:36px" data-act="qRm" data-tok="${esc(c.tok)}">${esc(c.label)}${ic('x', 14)}</button>`).join('')}</div>` : '';
-  const counts = { 통합: R.tx.length + R.trips.length + R.memos.length + R.places.length, 내역: R.tx.length, 여행: R.trips.length, 메모: R.memos.length, '통장·카드': R.places.length };
+  // 메모 탭: 기억할 것 + 메모 칸에 찾는 말이 있는 내역 (2026-11 v25)
+  const txMemo = R.P.terms.length ? R.tx.filter((x) => x.memo && R.P.terms.every((t) => textHit(x.memo, t))) : [];
+  const counts = { 통합: R.tx.length + R.trips.length + R.memos.length + R.places.length, 내역: R.tx.length, 여행: R.trips.length, 메모: R.memos.length + txMemo.length, '통장·카드': R.places.length };
   const tabs = `<div class="stabs">${Object.keys(counts).filter((k) => k === '통합' || k === '내역' || counts[k]).map((k) => `<button class="${tab === k ? 'on' : ''}" data-act="qTab" data-t="${k}">${k} <span class="sub">${counts[k]}</span></button>`).join('')}</div>`;
   if (!counts.통합) return chips + tabs + `<p class="sub" style="margin:0;padding:28px 0;text-align:center;font-size:${px(15)}">맞는 결과가 없어요. 기간이나 낱말을 바꿔 보세요.${!R.hasDate && S.qPeriod !== '전체' ? ' <button class="linkbtn" data-act="qPeriod" data-p="전체">기간 전체로 찾기</button>' : ''}</p>`;
   const sm = sumTx(R.tx.filter(counted));
@@ -246,7 +248,7 @@ function searchResults(L) {
       + (relChips.length ? `<div class="chips" style="gap:6px"><b style="font-size:${px(14)};margin-right:4px">연관</b>${relChips.map((k) => `<button class="chip" data-act="qSet" data-q="${esc(k)}">${esc(k)}</button>`).join('')}</div>` : '');
   } else if (tab === '내역') body = sec(`내역 ${R.tx.length}건`, R.tx.slice(0, S.qShown || 60).map(rowTx).join('') || '<p class="sub" style="margin:0;padding:14px 0">없어요.</p>', R.tx.length > (S.qShown || 60) ? `<button class="morerows" data-act="qMore">더 보기</button>` : '');
   else if (tab === '여행') body = sec('여행', R.trips.map(tripRow).join(''));
-  else if (tab === '메모') body = sec('메모', R.memos.map(memoRow).join(''));
+  else if (tab === '메모') body = (txMemo.length ? sec(`메모가 맞는 내역 ${txMemo.length}건`, txMemo.slice(0, S.qShown || 60).map((x) => txRow(x, { act: 'openTx', sub: `메모: ${x.memo} · ${dateLabel(x.date, true)}` })).join('')) : '') + (R.memos.length ? sec('기억할 것', R.memos.map(memoRow).join('')) : '');
   else body = sec('통장·카드', R.places.map(placeRow).join(''));
   return chips + tabs + `<div class="stack" style="gap:12px">${body}</div>`;
 }
@@ -280,7 +282,7 @@ function viewYearly(L) {
     if (kind === 'trip') return x.tripId === id && isMoney(x) ? (x.kind === 'out' ? x.amount : -x.amount) : 0;
     return 0;
   };
-  const items = kind === 'acc' ? Store.all('accounts').sort((a, b) => (a.kind === b.kind ? ko(a.name, b.name) : a.kind === 'out' ? -1 : 1)).map((a) => ({ id: a.id, name: a.name, sub: a.kind === 'in' ? '수입' : '지출', a }))
+  const items = kind === 'acc' ? Store.all('accounts').filter((a) => !a.sys).sort((a, b) => (a.kind === b.kind ? ko(a.name, b.name) : a.kind === 'out' ? -1 : 1)).map((a) => ({ id: a.id, name: a.name, sub: a.kind === 'in' ? '수입' : '지출', a }))
     : kind === 'card' ? cardsAll().map((c) => ({ id: c.id, name: cardLabel(c), sub: c.closed ? '해지' : cardTypeTxt(c) }))
       : kind === 'bank' ? banksAll().map((b) => ({ id: b.id, name: b.name, sub: b.type === 'sep' ? '별도' : '' }))
         : tripsAll().map((t) => ({ id: t.id, name: t.name, sub: tripPeriod(t) }));

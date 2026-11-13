@@ -9,7 +9,7 @@
 'use strict';
 
 Object.assign(CLUB_PARENT, { '대출': '홈', '지출 옮기기': '설정' });
-const MEET_TYPES = ['정기모임', '임시모임', '여행'];
+
 
 /* ───────── 음력 → 양력 (브라우저 달력 'dangi' = 한국 음력) ───────── */
 const LUNAR = {};
@@ -208,7 +208,7 @@ function clubTodo() {
       const a = ageOn(m, t); if (a != null && a >= 45 && !m.wed) R.wed.push({ m, age: a });
     });
   }
-  if (feat('advance')) membersAll().forEach((m) => { const o = owedOf(m.id); if (o > 0) R.adv.push({ m, owed: o }); });
+  if (false) membersAll().forEach((m) => { const o = owedOf(m.id); if (o > 0) R.adv.push({ m, owed: o }); });
   return R;
 }
 // 할 일 줄들 (홈 · 휴대폰/탭/노트북 공통)
@@ -250,7 +250,7 @@ function viewClubHome(L) {
       <div class="mtop"><button class="mname" data-act="clubOpenMember" data-id="${m.id}">${esc(m.name)}</button><span class="sub small">${esc(s.lastTxt)}</span><span style="flex:1"></span>${s.due ? `<span class="sub small">미수금</span>` : ''}${dueHtml(s)}</div>
       <div class="pdots">${yms.map((ym) => dotHtml(cellOf(m, ym, s.calc))).join('')}</div></div>`).join('');
     return `<div class="stack" style="gap:12px">
-      ${homeTopAlerts()}${startCard}
+      ${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
       <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="bigamt">${balance(bankSum())}</div>
         <span class="sub small">올해 수입 <b class="pos">+${won(st.inc)}</b>&nbsp;&nbsp; 지출 <b class="neg">−${won(st.out)}</b></span></section>
       <section class="card" style="padding:14px 18px;display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">전체 미수금</span><b class="${dueAll ? 'duered' : ''}" style="font-size:${px(18)}">${won(dueAll)}원</b><span class="sub small">${dueN}명</span></section>
@@ -271,12 +271,12 @@ function viewClubHome(L) {
   const recent = clubTx().filter((x) => x.kind === 'in' && !nonStat(x)).sort(sortTx).slice(0, 5);
   const side = `<div class="stack" style="flex:0 0 300px;min-width:290px">
     ${todoCard}
-    ${feat('loans') ? `<button class="card card-pad trow" style="border:1px solid var(--line)" data-act="go" data-to="대출">${ic('hand-coins', 18)}<span style="flex:1">대출 남은 원금</span><b>${won(loanLeft)}원</b>${ic('chevron-right', 16)}</button>` : ''}
+    ${feat('loans') ? `<button class="card sumrow" data-act="go" data-to="대출">${ic('hand-coins', 18)}<span class="sk">대출 남은 원금</span><b class="sv">${won(loanLeft)}원</b>${ic('chevron-right', 16)}</button>` : ''}
     <section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">최근 입금</h2>
       ${recent.length ? recent.map((x) => `<button class="trow" data-act="clubTx" data-id="${x.id}"><span class="sub small" style="width:42px">${mmdd(x.date)}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(clubTxName(x))}${isUncClub(x) ? ' <span class="tag unc">미확인</span>' : isHold(x) ? ' <span class="tag hold">보류</span>' : ''}</span><b class="pos">+${won(x.amount)}</b></button>`).join('') : '<span class="sub small">아직 입금이 없어요.</span>'}
     </section></div>`;
   return `<div class="stack">
-    ${homeTopAlerts()}${startCard}
+    ${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
     <div class="chips" style="justify-content:space-between"><span class="chip" style="pointer-events:none">${y}년</span><button class="btn" data-act="go" data-to="결산표">${ic('printer', 18)}결산표</button></div>
     <div class="statgrid">
       <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="statv">${balance(bankSum())}</div></section>
@@ -304,7 +304,7 @@ function viewClubMembers() {
     <label class="pfq">${ic('search', 18, 'var(--sub)')}<input class="input" data-pfq="mlist" value="${esc(q)}" placeholder="이름 · 별칭 찾기 (초성도 돼요)"></label>
     ${T.bday.length ? `<div class="infoline" style="color:var(--ink)">${ic('gift', 18)}생일 · ${T.bday.map((b) => `${esc(b.m.name)} ${b.date.slice(5).replace('-', '.')}${b.m.birth.lunar ? `(음 ${b.m.birth.m}.${b.m.birth.d})` : ''}`).join(' · ')}</div>` : ''}
     <section class="card" style="overflow:hidden">${list.length ? list.map((m) => {
-      const s = memberState(m), ow = feat('advance') ? owedOf(m.id) : 0;
+      const s = memberState(m), ow = false ? owedOf(m.id) : 0;
       return `<button class="lrow" data-act="clubOpenMember" data-id="${m.id}">
         <span class="circ" style="width:${px(40)};height:${px(40)};font-weight:700">${esc(m.name.slice(0, 1))}</span>
         <span class="lmid"><span class="lt">${esc(m.name)} <span class="tag">${stTxt[m.status || 'active']}</span>${m.mode === 'manual' ? ' <span class="tag hold">수동 보류</span>' : ''}${s.gaps.length ? ` <span class="tag gapt">빠짐 ${s.gaps.length}</span>` : ''}</span>
@@ -338,8 +338,8 @@ function viewClubMember() {
   const wedCard = m.married === 'single' || m.wed ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">결혼축의금</h2>
     ${m.wed ? `<span>받음 · ${m.wed.date.replace(/-/g, '.')} · ${won(m.wed.amount)}원 (${m.wed.how === 'fee' ? '회비로 대신' : '현금·이체'})</span>${m.married === 'married' ? '<div class="warnbox" style="margin-top:8px">' + ic('circle-alert', 20) + '<div>이미 받았어요. 결혼해도 다시 주지 않아요.</div></div>' : ''}`
       : !m.birth || !m.birth.y ? '<span class="warnt">태어난 연도를 넣어 주세요 (만 45세 판정)</span>' : age >= 45 ? `<span>만 ${age}세 미혼 · <b>선지급 대상</b></span><div class="chips" style="margin-top:8px"><button class="btn" data-act="clubWedCash" data-id="${m.id}">현금·이체로 지급</button><button class="btn" data-act="clubWedFee" data-id="${m.id}">회비로 대신</button></div>` : `<span class="sub">만 ${age}세 · 만 45세가 되면 알려 드려요</span>`}</section>` : '';
-  const ow = feat('advance') ? owedOf(m.id) : 0;
-  const advX = feat('advance') ? clubTx().filter((x) => x.advBy === m.id || (x.club && x.club.type === 'advRepay' && x.club.memberId === m.id)).sort(sortTx) : [];
+  const ow = false ? owedOf(m.id) : 0;
+  const advX = false ? clubTx().filter((x) => x.advBy === m.id || (x.club && x.club.type === 'advRepay' && x.club.memberId === m.id)).sort(sortTx) : [];
   const left = `<div class="stack" style="flex:1 1 380px;min-width:0">
     <div class="mhead"><h2 style="font-size:${px(24)}">${esc(m.name)}</h2><span class="tag">${stTxt[m.status || 'active']}</span><span style="flex:1"></span><button class="btn" data-act="clubMemberEdit" data-id="${m.id}">고치기</button></div>
     ${info ? `<span class="sub small">${esc(info)}</span>` : ''}
@@ -366,7 +366,7 @@ function viewClubMember() {
       <div class="seg"><button class="${m.mode !== 'manual' ? 'on' : ''}" data-act="clubMode" data-v="auto">자동</button><button class="${m.mode === 'manual' ? 'on' : ''}" data-act="clubMode" data-v="manual">수동 보류</button></div>
       <span class="sub small" style="display:block;margin-top:8px">${m.mode === 'manual' ? '이 회원 입금은 자동 배정하지 않고 「보류」로 들어가요. 목록에서 직접 나눠요.' : '이름(별칭)이 맞고 회비 배수면 저절로 회비로 채워요.'}</span></section>
     ${(m.exempt || []).length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">면제 기간</h2>${m.exempt.map((e, i) => `<div class="drow"><span>${ymTxt(e.from)} ~ ${e.to ? ymTxt(e.to) : '끝 없음'}<br><span class="sub small">결의 ${esc(e.decided || '-')}${e.memo ? ' · ' + esc(e.memo) : ''}</span></span><button class="btn" data-act="clubExemptDel" data-i="${i}">빼기</button></div>`).join('')}</section>` : ''}
-    ${feat('advance') && (ow || advX.length) ? `<section class="card card-pad"><div class="secrow"><h2 class="h2">돌려줄 돈</h2><b class="${ow > 0 ? 'duered' : ''}" style="font-size:${px(20)}">${won(Math.max(0, ow))}원</b></div>
+    ${false && (ow || advX.length) ? `<section class="card card-pad"><div class="secrow"><h2 class="h2">돌려줄 돈</h2><b class="${ow > 0 ? 'duered' : ''}" style="font-size:${px(20)}">${won(Math.max(0, ow))}원</b></div>
       ${advX.slice(0, 8).map((x) => `<button class="drow" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0" data-act="clubTx" data-id="${x.id}"><span>${mmdd(x.date)} ${x.advBy === m.id ? '대신 냄 · ' + esc(x.merchant || (accOf(x.accountId) || {}).name || '') : '돌려줌'}</span><b class="${x.advBy === m.id ? '' : 'pos'}">${x.advBy === m.id ? '+' : '−'}${won(x.amount)}</b></button>`).join('')}
       ${ow > 0 ? `<button class="btn" style="margin-top:8px" data-act="clubAdvPair" data-id="${m.id}">돌려준 이체와 짝 맞추기</button>` : ''}</section>` : ''}
     ${loans.map((l) => { const c = loanCalc(l); const pct = l.principal ? Math.round((l.principal - c.left) / l.principal * 100) : 100; return `<button class="card card-pad loanlink" data-act="clubLoanOpen" data-id="${l.id}"><div class="secrow"><h2 class="h2">대출${c.left <= 0 ? ' <span class="tag ok">완료</span>' : ''}</h2><span><span class="sub small">남은 원금</span> <b style="font-size:${px(20)}">${won(c.left)}원</b></span></div>
@@ -436,7 +436,7 @@ function clubDictAcc(mer) {
 function recentAccs(n) { const seen = []; for (const x of clubTx().filter((y) => y.kind === 'out' && !isUnc(y) && !y.internal).sort(sortTx)) { const a = accOf(x.accountId); if (a && !a.sys && !a.loanOut && !a.legacyMeet && !seen.includes(a)) seen.push(a); if (seen.length >= n) break; } return seen; }
 function accPicker(d, act) {
   const all = outAccs(), q = d.accQ || '';
-  const rec = [lastAccFor(d.merchant, d.txId), clubDictAcc(d.merchant), ...recentAccs(3)].filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 4);
+  const key = d.merchant || d.memo || ''; const rec = [lastAccFor(key, d.txId), clubDictAcc(key), ...recentAccs(3)].filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 4);
   const list = q ? searchSort(all, q, (a) => a.name) : all;
   const chip = (a, star) => `<button type="button" class="chip accchip ${a.id === d.accountId ? 'on' : ''}" data-act="${act}" data-id="${a.id}">${catGlyph(a, 16)}${esc(a.name)}${star ? ' <span class="sub small">추천</span>' : ''}</button>`;
   return `<div class="field"><span class="label">계정 (무엇에 썼나요?)</span>
@@ -446,8 +446,9 @@ function accPicker(d, act) {
 }
 
 /* ───────── 모임 (모임별 · 계정별) ───────── */
+// 모임 = 날짜 + 모임 종류 (이름은 저절로 「2026.05 정기모임」 · 따로 적고 싶은 것은 메모)
 function meetOf(x) {
-  if (x.meet && (x.meet.id || x.meet.type)) return x.meet;
+  if (x.meet && x.meet.type) return x.meet;
   const a = accOf(x.accountId);
   if (a && a.legacyMeet) return { name: (x.meet && x.meet.name) || x.merchant || a.name, people: (x.meet && x.meet.people) || 0, type: a.name };
   return null;
@@ -458,9 +459,9 @@ function meetingsAll(year) {
     if (x.kind !== 'out' || isUnc(x) || nonStat(x)) continue;
     const mt = meetOf(x); if (!mt) continue;
     if (year && x.date.slice(0, 4) !== String(year)) continue;
-    const k = mt.id || `${x.date}|${mt.type || ''}|${mt.name || ''}`;
-    if (!g.has(k)) g.set(k, { key: k, id: mt.id || null, date: x.date, name: mt.name || '모임', type: mt.type || '', people: 0, total: 0, items: [], memo: '', accs: {} });
-    const G = g.get(k); G.items.push(x); G.total += x.amount; G.people = Math.max(G.people, mt.people || 0); if (x.date < G.date) G.date = x.date; if (x.memo) G.memo = x.memo;
+    const k = `${x.date}|${mt.type}`;
+    if (!g.has(k)) g.set(k, { key: k, id: null, date: x.date, name: autoMeetName(x.date, mt.type), type: mt.type, people: 0, total: 0, items: [], memo: '', accs: {} });
+    const G = g.get(k); G.items.push(x); G.total += x.amount; G.people = Math.max(G.people, mt.people || 0); if (x.memo) G.memo = x.memo;
     const an = (accOf(x.accountId) || {}).name || '?'; G.accs[an] = (G.accs[an] || 0) + x.amount;
   }
   return [...g.values()].sort((p, q) => (p.date < q.date ? -1 : 1));
@@ -508,7 +509,7 @@ function viewMeetList(seg) {
     return `<button class="mtcard" data-act="clubMeet" data-k="${esc(g.key)}"><span class="mtl"><span class="sub small">${mmdd(g.date)} <span class="tag">${esc(g.type || '모임')}</span></span><b>${esc(g.name)}</b><span class="sub small">${g.people ? `${g.people}명 · 1인 ${won(pp)}` : '인원 안 적음'} · ${Object.keys(g.accs).map(esc).join('·')}</span></span><b class="neg" style="font-size:${px(19)}">−${won(g.total)}</b></button>`;
   }).join('');
   const types = [...new Set(meetingsAll().map((g) => g.type).filter(Boolean))];
-  const tl = [...MEET_TYPES, ...types.filter((t) => !MEET_TYPES.includes(t))];
+  const tl = [...meetTypes(), ...types.filter((t) => !meetTypes().includes(t))];
   return `<div class="stack">
     <div class="secrow">${seg}<button class="btn" data-act="clubOutNew" data-meet="1">${ic('plus', 18)}모임 지출</button></div>
     ${pfBar('meet', '1년', null, '모임 이름 · 가맹점 찾기')}
@@ -568,18 +569,21 @@ function viewClubLoans() {
 }
 
 /* ───────── 계정 · 모임 옮기기 (예전 지출을 새 계정·모임으로 한꺼번에) ───────── */
+// 모임 종류로 정리 필요: 목록에 없는 종류 · 예전 모임 계정 · 손으로 적은 제각각 모임 이름
+const meetNeedsFix = (x) => { const mt = meetOf(x); if (!mt) return false; const a = accOf(x.accountId); return !meetTypes().includes(mt.type) || !!(a && a.legacyMeet) || !!(x.meet && x.meet.name && x.meet.name !== mt.type && x.meet.name !== autoMeetName(x.date, mt.type)); };
 function viewClubMove() {
-  const P = pfOf('move', '전체'), [from, to] = pfRange('move', '전체'), af = S.moveAcc || '';
-  const base = clubTx().filter((x) => x.kind === 'out' && !nonStat(x) && !x.internal);
+  const P = pfOf('move', '전체'), [from, to] = pfRange('move', '전체'), af = S.moveAcc || '', meetMode = S.moveMode === 'meet';
+  const base = clubTx().filter((x) => x.kind === 'out' && !nonStat(x) && !x.internal && (!meetMode || meetNeedsFix(x)));
   const accIds = [...new Set(base.map((x) => x.accountId || ''))];
   const list = base.filter((x) => (af === '' ? true : af === 'unc' ? isUnc(x) : x.accountId === af) && x.date >= from && x.date <= to && (!P.q || txHit(x, P.q))).sort(sortTx);
   const pick = S.movePick || (S.movePick = {}), n = Object.keys(pick).filter((id) => list.some((x) => x.id === id)).length;
   return `<div class="stack">
-    <div class="infoline" style="color:var(--ink)">${ic('info', 18)}예전 「정기모임 · 임시모임」 계정으로 적은 지출을 「식사 · 숙소 …」 계정과 모임 종류로 나눠 옮겨요. 금액·날짜는 그대로예요.</div>
+    <div class="seg" style="max-width:420px"><button class="${meetMode ? '' : 'on'}" data-act="moveMode" data-v="">계정 · 모임 옮기기</button><button class="${meetMode ? 'on' : ''}" data-act="moveMode" data-v="meet">모임 종류로 정리하기</button></div>
+    <div class="infoline" style="color:var(--ink)">${ic('info', 18)}${meetMode ? `모임 이름이 제각각이거나 목록(${meetTypes().map(esc).join(' · ')})에 없는 모임 종류인 지출만 보여요. 골라서 모임 종류를 정하면 이름은 「2026.05 정기모임」처럼 저절로, 예전 이름은 메모로 옮겨요.` : '예전 「정기모임 · 임시모임」 계정으로 적은 지출을 「식사 · 숙소 …」 계정과 모임 종류로 나눠 옮겨요. 금액·날짜는 그대로예요.'}</div>
     ${pfBar('move', '전체', null, '가맹점 · 메모 찾기')}
     <div class="chips"><button class="chip ${af === '' ? 'on' : ''}" data-act="moveAcc" data-id="">모든 계정</button>${accIds.map((id) => { const a = accOf(id); return `<button class="chip ${af === (id || 'unc') ? 'on' : ''}" data-act="moveAcc" data-id="${id || 'unc'}">${a ? esc(a.name) + (a.legacyMeet ? ' (예전)' : '') : '미확인'}</button>`; }).join('')}</div>
-    <div class="secrow"><span class="chips" style="gap:6px"><button class="btn" data-act="movePickAll">보이는 ${list.length}건 모두 고르기</button>${n ? '<button class="btn" data-act="movePickNone">고른 것 풀기</button>' : ''}</span><button class="btn ink" data-act="moveGo" ${n ? '' : 'disabled'}>고른 ${n}건 옮기기</button></div>
-    <section class="card" style="overflow:hidden">${list.slice(0, 300).map((x) => `<button class="lrow" data-act="movePick" data-id="${x.id}"><span class="chk ${pick[x.id] ? 'on' : ''}">${pick[x.id] ? ic('check', 16) : ''}</span>${txIcon(x, 20, 40)}<span class="lmid"><span class="lt">${esc(x.merchant || '')} ${clubTags(x)}</span><span class="ls">${x.date.replace(/-/g, '.')} · ${esc((accOf(x.accountId) || {}).name || '미확인')}${meetOf(x) ? ' · ' + esc(meetOf(x).type || '') + ' ' + esc(meetOf(x).name || '') : ''}</span></span>${txAmt(x, 16)}</button>`).join('') || `<div class="empty">옮길 지출이 없어요.</div>`}</section>
+    <div class="secrow"><span class="chips" style="gap:6px"><button class="btn" data-act="movePickAll">보이는 ${list.length}건 모두 고르기</button>${n ? '<button class="btn" data-act="movePickNone">고른 것 풀기</button>' : ''}</span><button class="btn ink" data-act="moveGo" ${n ? '' : 'disabled'}>고른 ${n}건 ${meetMode ? '모임 종류 정하기' : '옮기기'}</button></div>
+    <section class="card" style="overflow:hidden">${list.slice(0, 300).map((x) => `<button class="lrow" data-act="movePick" data-id="${x.id}"><span class="chk ${pick[x.id] ? 'on' : ''}">${pick[x.id] ? ic('check', 16) : ''}</span>${txIcon(x, 20, 40)}<span class="lmid"><span class="lt">${esc(x.merchant || (accOf(x.accountId) || {}).name || '')} ${clubTags(x)}</span><span class="ls">${x.date.replace(/-/g, '.')} · ${esc((accOf(x.accountId) || {}).name || '미확인')}${meetOf(x) ? ' · ' + esc(meetOf(x).type || '') + (meetOf(x).name && meetOf(x).name !== meetOf(x).type ? ` 「${esc(meetOf(x).name)}」` : '') : ''}${x.memo ? ' · ' + esc(x.memo) : ''}</span></span>${txAmt(x, 16)}</button>`).join('') || `<div class="empty">${ic('check', 32, 'var(--sub)')}${meetMode ? '정리할 모임이 없어요.' : '옮길 지출이 없어요.'}</div>`}</section>
   </div>`;
 }
 
@@ -599,7 +603,7 @@ function viewClubSettings() {
         + row('결혼 축의금', wedAmount() ? won(wedAmount()) + '원 (만 45세 미혼 선지급)' : '정하지 않음', 'clubWedAmt')
         + segRow('회비 배정 기본 방식', modes, cfg.allocMode, 'clubAllocMode')
         + segRow('생일선물 대상 판정 (미수금 0 기준일)', [['day', '생일 당일까지 낸 돈'], ['prev', '생일 전날까지 낸 돈']], giftBasis(), 'clubGiftBasis'))}
-      ${sec('분류 · 기능', row('계정과목 편집', `${Store.all('accounts').filter((a) => !a.hidden && !a.sys).length}개`, 'goAcctEdit') + row('계정 · 모임 옮기기', '예전 지출을 새 계정으로', 'go', 'data-to="지출 옮기기"') + row('사용할 기능', '이 장부만', 'goFeatures') + row('결산표', '인쇄 · PDF', 'go', 'data-to="결산표"') + (feat('loans') ? row('대출', `${loansAll().filter((l) => loanCalc(l).left > 0).length}건 진행 중`, 'go', 'data-to="대출"') : '') + (feat('instView') ? row('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('interest') ? row('이자로 모임비 맞추기', '간단 계산', 'clubInterest') : '') + (feat('savings') ? row('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
+      ${sec('분류 · 기능', row('계정과목 편집', `${Store.all('accounts').filter((a) => !a.hidden && !a.sys).length}개`, 'goAcctEdit') + row('모임 종류', meetTypes().join(' · '), 'clubMeetTypes') + row('계정 · 모임 옮기기', '예전 지출을 새 계정으로', 'moveOpen', 'data-v=""') + row('모임 종류로 정리하기', `제각각인 모임 ${clubTx().filter((x) => x.kind === 'out' && !x.internal && !nonStat(x) && meetNeedsFix(x)).length}건`, 'moveOpen', 'data-v="meet"') + row('사용할 기능', '이 장부만', 'goFeatures') + row('결산표', '인쇄 · PDF', 'go', 'data-to="결산표"') + (feat('loans') ? row('대출', `${loansAll().filter((l) => loanCalc(l).left > 0).length}건 진행 중`, 'go', 'data-to="대출"') : '') + (feat('instView') ? row('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('interest') ? row('이자로 모임비 맞추기', '간단 계산', 'clubInterest') : '') + (feat('savings') ? row('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${sec('자료', row('저장 공간', storageLine(), 'goStorage') + row('통장 파일 올리기', '국민은행 · iM뱅크 거래내역', 'clubFile') + row('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + row('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + row('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + row('휴지통', `${Store.all('tx').filter((x) => x.deleted).length}건`, 'goTrash') + row('초기화', '골라서 지우기', 'dlgReset') + row('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}

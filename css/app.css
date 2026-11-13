@@ -831,3 +831,9 @@ button.lrow:first-of-type { border-top-color: transparent; }
 .chkrow.tot { border-top: 1px solid var(--ink); font-weight: 800; }
 
 .lhrow .pbar, .lhrow .lbar { display: block; }
+
+/* v25: 노트북 홈 오른쪽 「대출 남은 원금」 한 줄 (금액 줄바꿈 없음 · 좁으면 글자 줄임 · > 같은 줄 끝) */
+.sumrow { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; width: 100%; padding: 14px 16px; border: 1px solid var(--line); text-align: left; color: var(--ink); cursor: pointer; container-type: inline-size; }
+.sumrow .sk { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(15px * var(--fs)); }
+.sumrow .sv { flex: 0 1 auto; min-width: 0; white-space: nowrap; font-size: clamp(12px, 7cqi, calc(17px * var(--fs))); }
+.sumrow > .ic { flex: none; }
