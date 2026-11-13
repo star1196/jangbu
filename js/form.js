@@ -76,6 +76,8 @@ function openEdit(id) {
 }
 
 function focusField(name) {
+  // 날짜 연→월→일은 바로 옮김 (빨리 이어 쳐도 다음 글자가 다음 칸에 들어가게)
+  if (name === 'mo' || name === 'd') { const el = $app.querySelector(`.sheet [data-f="${name}"]`); if (el) { el.focus(); if (el.select) el.select(); return; } }
   setTimeout(() => {
     const el = $app.querySelector(`.sheet [data-f="${name}"]`);
     if (el) { el.focus(); if (el.select) el.select(); }
@@ -335,7 +337,13 @@ function recompute(from) {
 
 /* ── 글자 칠 때 ── */
 function onFormInput(el) {
-  const f = S.f, name = el.dataset.f, v = el.value;
+  const f = S.f, name = el.dataset.f;
+  let v = el.value;
+  // 날짜 칸 공통 규칙(datebox.js와 같음): 이미 다 찬 칸(2026 · 11)에 한 글자를 더 치면 새로 쓰기
+  if (['y', 'mo', 'd'].includes(name)) {
+    const prev = String(f[name] || ''), full = name === 'y' ? /^(19|20)\d\d$/.test(prev) : prev.length === 2;
+    if (full && v.length === prev.length + 1) { let i = 0; while (i < prev.length && v[i] === prev[i]) i++; v = v[i]; el.value = v; }
+  }
   if (f.rc) { if (['y', 'mo', 'd'].includes(name)) unMiss('date'); else if (name === 'amount' || name === 'merchant') unMiss(name); }
   if (name === 'y') {
     const dg = digits(v);

@@ -361,10 +361,17 @@ function buildItems() {
   items.forEach((it) => { const k = keyOf(it); seen[k] = (seen[k] || 0) + 1; it.dupKey = k + '#' + seen[k]; if (seen[k] <= (have[k] || 0)) { it.dup = true; it.use = false; } });
   // 직접 입력한 것과 같은 건? (금액 같음 + 날짜 ±1일 + 같은 카드 또는 승인번호)
   const near1 = (a, b) => Math.abs(parseYmd(a) - parseYmd(b)) <= 86400000;
+  // 이름도 봄(손으로 넣은 가맹점 · 친구회는 회원 이름과 입금자 별칭). 한 건은 한 번만 짝지음. 이미 짝지은 손 입력은 같은 파일 줄하고만.
+  const usedSame = new Set();
+  const namesOf = (x) => { const out = [x.merchant]; const mid = (x.club && x.club.memberId) || x.advBy; if (mid && typeof memberOf === 'function') { const mm = memberOf(mid); if (mm) out.push(mm.name, ...(mm.aliases || [])); } return out.map(norm).filter(Boolean); };
+  const nameHit = (x, it) => { const t = norm(it.merchant) + '|' + norm(it.memo); return namesOf(x).some((n) => n.length >= 2 && (t.includes(n) || n.includes(norm(it.merchant)))); };
+  const club = typeof isClubBook === 'function' && isClubBook();
   items.filter((it) => !it.dup).forEach((it) => {
-    const m = liveTx().find((x) => x.kind === it.kind && x.amount === it.amount && ['직접', '영수증'].includes(x.source || '직접') && near1(x.date, it.date)
+    const cands = liveTx().filter((x) => !usedSame.has(x.id) && x.kind === it.kind && x.amount === it.amount && ['직접', '영수증'].includes(x.source || '직접') && near1(x.date, it.date)
+      && (!x.dupKey || x.dupKey === it.dupKey)
       && ((it.payId && x.payMethodId === it.payId) || (it.approval && x.approval === it.approval) || (it.bankId && x.bankId === it.bankId)));
-    if (m) { it.same = { id: m.id, yes: true }; it.use = false; }
+    const m = cands.find((x) => x.dupKey === it.dupKey) || cands.find((x) => nameHit(x, it)) || (!club && cands.length === 1 ? cands[0] : null);
+    if (m) { usedSame.add(m.id); it.same = { id: m.id, yes: true }; it.use = false; }
   });
   // 반복 입력 '확인 대기'와 같은 건이면 새로 만들지 않고 그 건을 확인으로 (4-9)
   const pend = pendingTx();

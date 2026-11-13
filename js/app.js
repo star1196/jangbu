@@ -155,6 +155,7 @@ function render() {
   const sb2 = $app.querySelector('.sheet-body');
   if (sb2) sb2.scrollTop = keepSheet;
   if (S.f) fillSheet();
+  enhanceDates($app); // 날짜 칸을 [연][월][일] 자동 이동 칸으로 (datebox.js)
   placeSwitchPop();
   const af = $app.querySelector('[data-autofocus]');
   if (af && (L !== 'phone' || S.mode === 'lock' || S.dialog)) af.focus();

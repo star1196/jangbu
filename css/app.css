@@ -779,3 +779,55 @@ button.lrow:first-of-type { border-top-color: transparent; }
 .accchip .ic { margin-right: 2px; }
 .lgwrap { overflow-x: auto; }
 .lgwrap .lg-row { min-width: 640px; }
+
+/* ───────── 2026-11 v24: 날짜 칸 부품 · 납부 칸 색 · 대출 현황 · 손으로 넣기 버튼 ───────── */
+.dhide { display: none !important; }
+.dbx { position: relative; display: inline-flex; align-items: center; gap: 2px; min-height: 48px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--sf); max-width: 100%; box-sizing: border-box; }
+.field .dbx, .csin .dbx, .pfdates .dbx, .stack > .dbx { display: flex; width: 100%; }
+.pfdates .dbx { flex: 1 1 150px; width: auto; }
+.dbx:focus-within { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.dbx.bad { border-color: var(--warn); background: var(--warn-soft); }
+.dseg { border: 0; background: transparent; padding: 0; min-height: 44px; font: inherit; font-size: calc(16px * var(--fs)); color: var(--ink); text-align: center; min-width: 0; outline: none; }
+.dseg.y { width: 4.4ch; }
+.dseg.m, .dseg.d { width: 2.6ch; }
+.dseg::placeholder { color: #BDBDB8; }
+.dsep { color: var(--sub); }
+.dbx.sm { min-height: 36px; padding: 0 6px; }
+.dbx.sm .dseg { min-height: 32px; font-size: calc(14px * var(--fs)); }
+.dbxch { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; display: flex; gap: 6px; padding: 8px; background: var(--sf); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.12); white-space: nowrap; }
+.dbxch[hidden] { display: none; }
+/* 납부 칸: 납부 초록 · 부분 초록 절반 · 미납/빠짐 주황 · 면제 회색 · 보류 주황 점선 (금액 색 규칙과 따로) */
+.pc.ok { background: #E3EDE6; color: #3F6A4D; border: 0; }
+.pc.part { background: linear-gradient(90deg, #CDE0D3 50%, #fff 50%); color: #3F6A4D; border: 1px solid #A9C7B2; }
+.pc.miss { background: #fff; border: 1.5px solid #C27A2C; color: #A3621F; }
+.pc.gap { background: #FBF2E7; border: 2px solid #C27A2C; color: #A3621F; }
+.pc.ex { background: #EEEEEB; color: #8A8A85; border: 0; }
+.pc.hold { background: #fff; border: 1.5px dashed #C27A2C; color: #A3621F; }
+.pd.ok { background: #7FA38A; border: 0; }
+.pd.part { background: linear-gradient(90deg, #7FA38A 50%, #fff 50%); border: 1.5px solid #7FA38A; }
+.pd.miss { background: #fff; border: 1.5px solid #C27A2C; }
+.pd.gap { background: #FBF2E7; border: 2px solid #C27A2C; }
+.pd.ex { background: #DDDDD8; border: 0; }
+.pd.hold { background: #fff; border: 1.5px dashed #C27A2C; }
+.duered { color: #A3621F; }
+.bd.due { background: #FBF2E7; color: #A3621F; }
+.bd.part { background: #E3EDE6; color: #3F6A4D; }
+/* 대출 현황 (홈) */
+.lhrow { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) minmax(0, 1fr) minmax(90px, 1.2fr); gap: 10px; align-items: center; width: 100%; padding: 10px 4px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; color: var(--ink); font-size: calc(14px * var(--fs)); cursor: pointer; }
+.lhrow.head { color: var(--sub); font-size: calc(12px * var(--fs)); cursor: default; border-top: 0; border-bottom: 1px solid var(--ink); }
+.lhrow.foot { font-weight: 800; cursor: default; border-top: 1px solid var(--ink); }
+.lhrow .r { text-align: right; white-space: nowrap; }
+.lhrow .lbar { margin: 0; height: 8px; }
+.lhrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.phone .lhrow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+.phone .lhrow.head { display: none; }
+.phone .lhrow > .ph { display: none; }
+.phone .lhrow .pbar { grid-column: 1 / -1; }
+.lhrow .psub { display: none; }
+.phone .lhrow .psub { display: block; grid-column: 1 / -1; color: var(--sub); font-size: calc(12px * var(--fs)); }
+.quickbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.quickbar .btn { flex: 1 1 140px; min-height: 48px; }
+.chkrow { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--soft); font-size: calc(14px * var(--fs)); }
+.chkrow.tot { border-top: 1px solid var(--ink); font-weight: 800; }
+
+.lhrow .pbar, .lhrow .lbar { display: block; }

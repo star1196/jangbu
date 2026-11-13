@@ -22,6 +22,18 @@ function outDraft(x, extra) {
   }
   return { date: todayStr(), amount: '', accountId: null, src: 'bank', bankId: mb ? mb.id : '', advBy: null, merchant: '', memo: '', meetMode: 'none', meetId: null, meetName: '', meetType: '정기모임', people: '', memberId: null, wed: false, accQ: '', fromFile: false, ...(extra || {}) };
 }
+// 손으로 넣기 메뉴 (휴대폰 ＋ · 탭/노트북 홈 버튼): [action, 아이콘, 색, 이름, 설명]
+function clubQuickList() {
+  return [['clubFeeNew', 'hand-coins', '#7FA38A', '회비 넣기', '회원 고르기 → 날짜·금액·통장 → 밀린 달부터 채우기'],
+    ['clubInNew', 'coins', '#B5473F', '수입 넣기', '이자 · 찬조금 · 기타 수입'],
+    ['clubOutNew', 'arrow-down', '#3B5F8F', '지출 넣기', '계정 · 모임 · 돈 나간 곳'],
+    ...(feat('loans') ? [['clubRepayAny', 'rotate-ccw', '#8A7F6A', '대출 상환 넣기', '대출 고르기 → 날짜·금액·통장']] : []),
+    ...(feat('files') ? [['clubFile', 'upload', '#5E8C8C', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []),
+    ...(feat('receipt') ? [['receipt', 'camera', '#CDB38B', '영수증 찍기', '사진으로 지출 넣기']] : [])];
+}
+function clubQuickBar() {
+  return `<div class="quickbar">${clubQuickList().map(([a, i, , t]) => `<button class="btn" data-act="${a}">${ic(i, 18)}${t}</button>`).join('')}</div>`;
+}
 const mainBankTxt = () => { const b = mainBank(); return b ? `${b.name.replace(/\s*통장$/, '')} 통장` : '통장'; };
 
 /* ───────── 대화 상자 (친구회 새 것 · 바뀐 것) ───────── */
@@ -30,6 +42,22 @@ function viewClubDlgX(D) {
   const btns = (ok, attr) => `<div class="dlg-btns"><button class="btn" type="button" data-act="closeDlg">취소</button><button class="btn ink" ${attr || 'type="submit"'}>${ok}</button></div>`;
   const memChips = (sel, act, list) => (list || membersOn()).map((m) => `<button type="button" class="chip ${m.id === sel ? 'on' : ''}" data-act="${act}" data-id="${m.id}">${esc(m.name)}</button>`).join('');
 
+  if (D.type === 'clubPlus') {
+    return `<div class="dlg"><span class="sub small">무엇을 넣을까요? (통장 파일 없이 손으로도 돼요)</span><div class="stack" style="gap:6px">${clubQuickList().map(([a, i, c, t, s]) => `<button class="plusrow" data-act="${a}"><span class="circ" style="width:${px(48)};height:${px(48)};background:${c};color:#fff">${ic(i, 24)}</span><span style="display:flex;flex-direction:column;gap:2px;text-align:left"><b style="font-size:${px(17)}">${t}</b><span class="sub small">${s}</span></span></button>`).join('')}</div><div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
+  }
+  if (D.type === 'clubIn') {
+    const ins = Store.all('accounts').filter((a) => a.kind === 'in' && !a.hidden && !a.fee && !a.loanRepay && !a.nonStat && !a.sys).sort((a, b) => ko(a.name, b.name));
+    return `<form class="dlg" data-form="clubIn" autocomplete="off" style="max-width:540px"><h2 class="dlg-title">수입 넣기</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 150px"><span class="label">날짜</span><input class="input" type="date" data-co="date" value="${esc(d.date)}"></label><label class="field" style="flex:1 1 150px"><span class="label">금액</span><input class="input r" data-co="amount" inputmode="numeric" value="${esc(d.amount)}" placeholder="0" data-autofocus></label></div>
+      <div class="field"><span class="label">무슨 수입?</span><div class="chips">${ins.map((a) => `<button type="button" class="chip accchip ${a.id === d.accountId ? 'on' : ''}" data-act="ciAcc" data-id="${a.id}">${catGlyph(a, 16)}${esc(a.name)}</button>`).join('')}</div><span class="sub small">회비는 [회비 넣기], 대출 갚은 돈은 [대출 상환 넣기]로 넣어요.</span></div>
+      <div class="field"><span class="label">누가? <span style="font-weight:400">(선택)</span></span><div class="chips"><button type="button" class="chip ${!d.memberId ? 'on' : ''}" data-act="ciMember" data-id="">회원 아님 · 은행</button>${memChips(d.memberId, 'ciMember', membersAll().filter((m) => m.status !== 'left'))}</div></div>
+      <label class="field"><span class="label">내용 <span style="font-weight:400">(선택)</span></span><input class="input" data-co="merchant" value="${esc(d.merchant)}" placeholder="예: 결산이자, ○○ 찬조"></label>
+      <div class="field"><span class="label">들어온 곳</span><div class="seg"><button type="button" class="${d.src !== 'cash' ? 'on' : ''}" data-act="ciSrc" data-v="bank">${mainBankTxt()}(기본)</button><button type="button" class="${d.src === 'cash' ? 'on' : ''}" data-act="ciSrc" data-v="cash">현금</button></div>
+        ${d.src !== 'cash' && banksOpen().length > 1 ? `<select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>` : ''}</div>
+      <label class="field"><span class="label">메모</span><input class="input" data-co="memo" value="${esc(d.memo)}"></label>
+      <span class="sub small">나중에 통장 파일을 올려도 날짜(±1일)·금액·이름이 맞으면 같은 건으로 짝지어 두 번 들어가지 않아요.</span>
+      <div class="err" data-err></div>${btns('저장')}</form>`;
+  }
   if (D.type === 'clubMember') {
     const before = D.id ? memberOf(D.id) : null, tmp = { ...(before || {}), joinDate: d.joinDate };
     const autoDue = autoStartDue(tmp, d.lastPaid, toInt(d.lastPart));
@@ -62,8 +90,12 @@ function viewClubDlgX(D) {
     return `<form class="dlg" data-form="clubLoan" autocomplete="off" style="max-width:520px"><h2 class="dlg-title">${D.id ? '대출 고치기' : '대출 추가'}</h2><span class="sub small">이자 없음. 상환은 [상환 넣기]나 미확인 입금을 [대출 상환]으로 정하면 줄어요.</span>
       <div class="field"><span class="label">누구에게?</span><div class="chips">${memChips(d.memberId, 'clLoanWho', membersAll().filter((m) => m.status !== 'left' || m.id === d.memberId))}<button type="button" class="chip ${!d.memberId ? 'on' : ''}" data-act="clLoanWho" data-id="">회원 아님</button></div></div>
       ${!d.memberId ? `<label class="field"><span class="label">이름 (회원 아님)</span><input class="input" data-co="name" value="${esc(d.name)}" maxlength="20" placeholder="예: ○○ 동생"></label>` : ''}
+      ${D.id ? '' : `<div class="field"><span class="label">빌려준 돈은 언제 통장에서 나갔나요?</span><div class="seg wrap"><button type="button" class="${d.out !== 'now' ? 'on' : ''}" data-act="clLoanOut" data-v="before">시작 전에 이미 나감 — 통장 변화 없음</button><button type="button" class="${d.out === 'now' ? 'on' : ''}" data-act="clLoanOut" data-v="now">이번에 통장에서 나감 (대출 지급)</button></div>
+        <span class="sub small">${d.out === 'now' ? '통장 잔액에서 원금만큼 빠지고 「대출 지급」으로 적혀요(수입·지출 통계에는 안 들어감).' : '원금(또는 시작할 때 남은 원금)만 기록해요. 통장 잔액은 그대로예요.'} 갚는 돈(입금)은 통장 잔액에 더해지고 남은 원금이 줄어요.</span></div>`}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 150px"><span class="label">대출일</span><input class="input" type="date" data-co="date" value="${esc(d.date)}"></label>
-      <label class="field" style="flex:1 1 150px"><span class="label">원금</span><input class="input r" data-co="principal" inputmode="numeric" value="${esc(d.principal)}" placeholder="0"></label></div>
+      <label class="field" style="flex:1 1 150px"><span class="label">원금</span><input class="input r" data-co="principal" inputmode="numeric" value="${esc(d.principal)}" placeholder="0"></label>
+      ${d.out !== 'now' ? `<label class="field" style="flex:1 1 150px"><span class="label">시작할 때 남은 원금 <span style="font-weight:400">(선택)</span></span><input class="input r" data-co="startLeft" inputmode="numeric" value="${esc(d.startLeft || '')}" placeholder="원금과 같으면 비움"></label>` : ''}</div>
+      ${d.out === 'now' && !D.id ? `<label class="field"><span class="label">나간 통장</span><select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>` : ''}
       <label class="field"><span class="label">메모</span><input class="input" data-co="memo" value="${esc(d.memo)}"></label>
       <div class="err" data-err></div>
       ${D.id ? `<button class="btn ghost" type="button" style="color:var(--out);align-self:flex-start" data-act="clLoanDel">이 대출 지우기</button>` : ''}
@@ -77,14 +109,15 @@ function viewClubDlgX(D) {
     const fixed = D.txId && D.fixedTx ? Store.get('tx', D.txId) : null;
     const who = normName(loanWho(L0));
     const cands = fixed ? [] : clubTx().filter((x) => x.kind === 'in' && isUnc(x)).sort((a, b) => ((normName(b.merchant).includes(who)) - (normName(a.merchant).includes(who))) || sortTx(a, b)).slice(0, 12);
-    return `<form class="dlg" data-form="clubRepay" style="max-width:520px"><h2 class="dlg-title">대출 상환 넣기</h2>
-      ${ls.length > 1 ? `<div class="chips">${ls.map((l) => `<button type="button" class="chip ${l.id === lsel ? 'on' : ''}" data-act="crLoan" data-id="${l.id}">${esc(loanWho(l))} · ${l.date ? l.date.slice(2).replace(/-/g, '.') : ''} · 남은 ${won(loanCalc(l).left)}</button>`).join('')}</div>` : `<span>${esc(loanWho(L0))} · 남은 원금 <b>${won(loanCalc(L0).left)}원</b></span>`}
-      ${fixed ? `<div class="drow"><span>${mmdd(fixed.date)} ${esc(fixed.merchant || '')}</span><b class="pos">+${won(fixed.amount)}</b></div>` : `
-      <span class="label">통장에 들어온 미확인 입금에서 고르기</span>
-      <div class="stack" style="gap:6px">${cands.map((x) => `<button type="button" class="opt ${D.txId === x.id ? 'on' : ''}" style="justify-content:space-between" data-act="crTx" data-id="${x.id}"><span>${mmdd(x.date)} ${esc(x.merchant || '')}</span><b class="pos">+${won(x.amount)}</b></button>`).join('') || '<span class="sub small">미확인 입금이 없어요.</span>'}</div>
-      <details ${D.txId ? '' : 'open'}><summary class="sub">통장 파일 없이 직접 넣기</summary><div class="stack" style="gap:8px;margin-top:8px">
-        <input class="input" type="date" data-co="date" value="${esc(d.date)}"><input class="input r" data-co="amount" inputmode="numeric" value="${esc(d.amount)}" placeholder="금액">
-        <select class="input" data-co="bankId"><option value="">현금 (통장 기록 없이)</option>${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div></details>`}
+    const direct = `<div class="stack" style="gap:8px;margin-top:8px"><label class="field"><span class="label">날짜</span><input class="input" type="date" data-co="date" value="${esc(d.date)}"></label><label class="field"><span class="label">금액</span><input class="input r" data-co="amount" inputmode="numeric" value="${esc(d.amount)}" placeholder="금액"></label>
+        <label class="field"><span class="label">들어온 통장</span><select class="input" data-co="bankId"><option value="">현금 (통장 기록 없이)</option>${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+        <span class="sub small">나중에 통장 파일을 올려도 날짜(±1일)·금액·이름이 맞으면 같은 건으로 짝지어 두 번 들어가지 않아요.</span></div>`;
+    const candHtml = `<div class="stack" style="gap:6px">${cands.map((x) => `<button type="button" class="opt ${D.txId === x.id ? 'on' : ''}" style="justify-content:space-between" data-act="crTx" data-id="${x.id}"><span>${mmdd(x.date)} ${esc(x.merchant || '')}</span><b class="pos">+${won(x.amount)}</b></button>`).join('') || '<span class="sub small">미확인 입금이 없어요.</span>'}</div>`;
+    return `<form class="dlg" data-form="clubRepay" autocomplete="off" style="max-width:520px"><h2 class="dlg-title">대출 상환 넣기</h2>
+      ${ls.length > 1 ? `<span class="label">어느 대출?</span><div class="chips">${ls.map((l) => `<button type="button" class="chip ${l.id === lsel ? 'on' : ''}" data-act="crLoan" data-id="${l.id}">${esc(loanWho(l))} · ${l.date ? l.date.slice(2).replace(/-/g, '.') : ''} · 남은 ${won(loanCalc(l).left)}</button>`).join('')}</div>` : `<span>${esc(loanWho(L0))} · 남은 원금 <b>${won(loanCalc(L0).left)}원</b></span>`}
+      ${fixed ? `<div class="drow"><span>${mmdd(fixed.date)} ${esc(fixed.merchant || '')}</span><b class="pos">+${won(fixed.amount)}</b></div>`
+        : D.manual ? `<span class="label">손으로 넣기</span>${direct}<details><summary class="sub">통장에 이미 들어온 미확인 입금에서 고르기</summary>${candHtml}</details>`
+          : `<span class="label">통장에 들어온 미확인 입금에서 고르기</span>${candHtml}<details ${D.txId ? '' : 'open'}><summary class="sub">통장 파일 없이 직접 넣기</summary>${direct}</details>`}
       <div class="err" data-err></div>${btns('상환으로 저장')}</form>`;
   }
 
@@ -266,13 +299,22 @@ Object.assign(CLUB_ACT, {
   cmMarried: (el) => { S.dialog.d.married = el.dataset.v; render(); },
   cmDueAuto: () => { S.dialog.d.dueEdited = false; render(); },
   // 대출
-  clubLoanNew: (el) => { const id = (el && el.dataset && el.dataset.id) || null; S.dialog = { type: 'clubLoan', id: null, d: { memberId: id, name: '', date: todayStr(), principal: '', memo: '' } }; render(); },
-  clubLoanEdit: (el) => { const l = loansAll().find((v) => v.id === el.dataset.id); S.dialog = { type: 'clubLoan', id: l.id, d: { memberId: l.memberId || null, name: l.name || '', date: l.date || '', principal: comma(l.principal), memo: l.memo || '' } }; render(); },
+  clubLoanNew: (el) => { const id = (el && el.dataset && el.dataset.id) || null, mb = mainBank(); S.dialog = { type: 'clubLoan', id: null, d: { memberId: id, name: '', date: todayStr(), principal: '', startLeft: '', memo: '', out: 'before', bankId: mb ? mb.id : '' } }; render(); },
+  clubLoanEdit: (el) => { const l = loansAll().find((v) => v.id === el.dataset.id); S.dialog = { type: 'clubLoan', id: l.id, d: { memberId: l.memberId || null, name: l.name || '', date: l.date || '', principal: comma(l.principal), startLeft: l.startLeft ? comma(l.startLeft) : '', memo: l.memo || '', out: l.outTxId ? 'now' : 'before' } }; render(); },
+  clLoanOut: (el) => { S.dialog.d.out = el.dataset.v; render(); },
+  // 손으로 넣기: 수입 · 대출 상환
+  clubInNew: () => { const mb = mainBank(), a = clubAcc('기타수입', 'in'); S.dialog = { type: 'clubIn', d: { date: todayStr(), amount: '', accountId: a ? a.id : null, memberId: null, merchant: '', memo: '', src: 'bank', bankId: mb ? mb.id : '' } }; render(); },
+  ciAcc: (el) => { S.dialog.d.accountId = el.dataset.id; render(); },
+  ciMember: (el) => { S.dialog.d.memberId = el.dataset.id || null; render(); },
+  ciSrc: (el) => { S.dialog.d.src = el.dataset.v; render(); },
+  clubRepayAny: () => { const mb = mainBank(); S.dialog = { type: 'clubRepay', memberId: undefined, txId: null, manual: true, d: { date: todayStr(), amount: '', bankId: mb ? mb.id : '' } }; render(); },
   clLoanWho: (el) => { S.dialog.d.memberId = el.dataset.id || null; render(); },
   clLoanDel: async () => {
     const D = S.dialog, l = loansAll().find((v) => v.id === D.id);
     if (loanTx(l).length) { showErr($app.querySelector('[data-form="clubLoan"]'), '상환 기록이 있어서 지울 수 없어요. 상환을 먼저 미확인으로 돌려 주세요.'); return; }
-    const before = { ...l }; await Store.put('loans', { ...l, deleted: true }); S.dialog = null; render(); toast('대출을 지웠어요', { items: [{ col: 'loans', id: l.id, before }] });
+    const before = { ...l }, items = [{ col: 'loans', id: l.id, before }]; await Store.put('loans', { ...l, deleted: true });
+    const ox = l.outTxId && Store.get('tx', l.outTxId); if (ox && !ox.deleted) { items.push({ col: 'tx', id: ox.id, before: { ...ox } }); await Store.put('tx', { ...ox, deleted: true, deletedAt: Date.now() }); }
+    S.dialog = null; render(); toast('대출을 지웠어요', { items });
   },
   clubLoanOpen: (el) => { S.loanOpen = S.screen === '대출' && S.loanOpen === el.dataset.id ? null : el.dataset.id; S.dialog = null; if (S.screen !== '대출') go('대출'); else render(); },
   loanShowDone: () => { S.loanShowDone = !S.loanShowDone; render(); },
@@ -418,9 +460,20 @@ Object.assign(CLUB_FORM, {
     const D = S.dialog, d = D.d, p = toInt(d.principal);
     if (!d.memberId && !d.name.trim()) return showErr(f, '회원을 고르거나 이름을 적어 주세요.');
     if (!p) return showErr(f, '원금을 넣어 주세요.');
+    const sl = d.out === 'now' ? 0 : toInt(d.startLeft);
+    if (sl > p) return showErr(f, '시작할 때 남은 원금이 원금보다 커요.');
+    if (!D.id && d.out === 'now' && !d.bankId) return showErr(f, '나간 통장을 골라 주세요 (설정 › 통장).');
     const before = D.id ? { ...loansAll().find((l) => l.id === D.id) } : null;
-    const l = await Store.put('loans', { ...(before || {}), memberId: d.memberId || null, name: d.memberId ? '' : d.name.trim(), date: d.date, principal: p, memo: d.memo.trim() });
-    S.dialog = null; S.loanOpen = l.id; render(); toast(before ? '대출을 고쳤어요' : `${loanWho(l)}에게 대출 ${won(p)}원을 기록했어요`, { items: [{ col: 'loans', id: l.id, before }] });
+    const l = await Store.put('loans', { ...(before || {}), memberId: d.memberId || null, name: d.memberId ? '' : d.name.trim(), date: d.date, principal: p, startLeft: sl || 0, memo: d.memo.trim(), out: before ? before.out || 'before' : d.out || 'before' });
+    const items = [{ col: 'loans', id: l.id, before }];
+    // 이번에 통장에서 나감 → 「대출 지급」 출금 한 줄 (통장 잔액 −, 수입·지출 통계에는 안 들어감)
+    if (!before && d.out === 'now') {
+      const a = loanOutAcc();
+      const x = await Store.put('tx', { kind: 'out', date: d.date || todayStr(), amount: p, merchant: loanWho(l), memo: '대출 지급', accountId: a ? a.id : null, bankId: d.bankId, payMethodId: bankPayId(), status: '확인', source: '직접', club: { memberId: l.memberId || null, type: 'loanOut', loanId: l.id }, deleted: false });
+      await Store.put('loans', { ...Store.get('loans', l.id), outTxId: x.id });
+      items.push({ col: 'tx', id: x.id, before: null });
+    }
+    S.dialog = null; S.loanOpen = l.id; render(); toast(before ? '대출을 고쳤어요' : `${loanWho(l)}에게 대출 ${won(p)}원을 기록했어요${d.out === 'now' ? ' · 통장에서 나감' : ' · 통장 변화 없음'}`, { items });
   },
   async clubRepay(f) {
     const D = S.dialog, d = D.d;
@@ -467,6 +520,16 @@ Object.assign(CLUB_FORM, {
     if (D.move) S.movePick = {};
     S.dialog = null; render(); toast(`${items.length}건을 ${a ? a.name : ''}${a && d.meet !== 'keep' ? ' · ' : ''}${d.meet !== 'keep' ? (d.meet === 'none' ? '모임 아님' : d.meet) : ''}(으)로 정했어요`, { items });
   },
+  async clubIn(f) {
+    const d = S.dialog.d, a = accOf(d.accountId), amt = toInt(d.amount);
+    if (!a) return showErr(f, '무슨 수입인지 골라 주세요.');
+    if (!amt) return showErr(f, '금액을 넣어 주세요.');
+    if (!d.date) return showErr(f, '날짜를 넣어 주세요.');
+    if (d.src !== 'cash' && !d.bankId) return showErr(f, '통장을 먼저 만들어 주세요 (설정 › 통장).');
+    const m = d.memberId ? memberOf(d.memberId) : null;
+    const s = await Store.put('tx', { kind: 'in', date: d.date, amount: amt, merchant: d.merchant.trim() || (m ? m.name : a.name), memo: d.memo.trim(), accountId: a.id, bankId: d.src === 'cash' ? null : d.bankId, payMethodId: d.src === 'cash' ? cashPayId() : bankPayId(), status: '확인', source: '직접', club: m ? { memberId: m.id, type: 'other' } : null, deleted: false });
+    S.dialog = null; render(); toast(`${a.name} ${won(amt)}원을 넣었어요`, { items: [{ col: 'tx', id: s.id, before: null }] });
+  },
   async clubWedAmt(f) {
     const D = S.dialog, amt = toInt(D.d.amount);
     if (!amt) return showErr(f, '금액을 넣어 주세요.');
@@ -479,8 +542,25 @@ Object.assign(CLUB_FORM, {
 });
 
 /* ───────── 칸에 글자 넣기 (친구회) ───────── */
-const CO_NUM = ['amount', 'principal', 'startDue', 'startCredit', 'lastPart', 'monthly', 'months'];
-const CO_RERENDER = ['accQ', 'merchant', 'lastPaid', 'lastPart', 'startDue', 'by', 'bm', 'bd', 'joinDate'];
+const CO_NUM = ['amount', 'principal', 'startDue', 'startCredit', 'lastPart', 'monthly', 'months', 'startLeft'];
+const CO_RERENDER = ['accQ', 'merchant', 'lastPaid', 'lastPart', 'startDue', 'joinDate'];
+// 생일 [연도][월][일] 칸도 날짜 칸과 같은 규칙: 이어 치면 다음 칸 · 지우기 키로 앞 칸 (연도는 선택이라 따로 둠)
+const BIRTH_NEXT = { by: 'bm', bm: 'bd' }, BIRTH_PREV = { bm: 'by', bd: 'bm' };
+function birthAdvance(el, k) {
+  const d = S.dialog.d, f = (n) => $app.querySelector(`[data-co="${n}"]`);
+  const prev = String(d[k] || ''), full = k === 'by' ? /^(19|20)\d\d$/.test(prev) : prev.length === 2;
+  if (full && el.value.length === prev.length + 1) { let i = 0; while (i < prev.length && el.value[i] === prev[i]) i++; el.value = el.value[i]; } // 다 찬 칸에 더 치면 새로 쓰기
+  let v = digits(el.value);
+  if (k === 'by' && v.length > 4 && /^(19|20)/.test(v)) { d.by = v.slice(0, 4); d.bm = v.slice(4, 6).replace(/^(\d)$/, '$1'); d.bd = v.slice(6, 8); el.value = d.by; f('bm').value = d.bm; f('bd').value = d.bd; dbxFocus(v.length >= 8 ? f('bd') : f(v.length > 6 ? 'bd' : 'bm')); return; }
+  if (k === 'bm' && v.length === 1 && +v > 1) v = '0' + v;
+  if (k === 'bd' && v.length === 1 && +v > 3) v = '0' + v;
+  d[k] = v.slice(0, k === 'by' ? 4 : 2); el.value = d[k];
+  if ((k === 'by' && d[k].length === 4) || (k === 'bm' && d[k].length === 2)) dbxFocus(f(BIRTH_NEXT[k]));
+}
+document.addEventListener('keydown', (e) => {
+  const el = e.target, k = el.dataset && el.dataset.co;
+  if (e.key === 'Backspace' && BIRTH_PREV[k] && el.value === '') { e.preventDefault(); dbxFocus($app.querySelector(`[data-co="${BIRTH_PREV[k]}"]`)); }
+});
 function onClubInput(el) {
   if (el.dataset.cs && S.cs) {
     const W = S.cs, k = el.dataset.cs, id = el.dataset.id;
@@ -507,7 +587,8 @@ function onClubInput(el) {
   if (el.dataset.co && S.dialog && S.dialog.d) {
     const k = el.dataset.co, d = S.dialog.d;
     if (CO_NUM.includes(k)) { const v = toInt(el.value); d[k] = comma(v); el.value = d[k]; }
-    else if (k === 'people' || k === 'by' || k === 'bm' || k === 'bd') { d[k] = digits(el.value).slice(0, k === 'by' ? 4 : 3); el.value = d[k]; }
+    else if (k === 'by' || k === 'bm' || k === 'bd') birthAdvance(el, k);
+    else if (k === 'people') { d[k] = digits(el.value).slice(0, 3); el.value = d[k]; }
     else d[k] = el.type === 'checkbox' ? el.checked : el.value;
     if (k === 'startDue') d.dueEdited = true;
     if (S.dialog.type === 'clubInt') updInterest();
@@ -519,3 +600,54 @@ function onClubInput(el) {
   }
   return false;
 }
+
+/* ───────── 홈: 대출 현황 표 (회원 납부 표 아래) ───────── */
+function loanHomeTable() {
+  if (!feat('loans')) return '';
+  const rows = loansAll().map((l) => ({ l, c: loanCalc(l) })).sort((a, b) => (b.c.left > 0) - (a.c.left > 0) || b.c.left - a.c.left);
+  if (!rows.length) return '';
+  const T = rows.reduce((s, r) => ({ p: s.p + (r.l.principal || 0), r: s.r + r.c.repaid + r.c.paidBefore, left: s.left + r.c.left }), { p: 0, r: 0, left: 0 });
+  const pctOf = (r) => (r.l.principal ? Math.round((r.l.principal - r.c.left) / r.l.principal * 100) : 100);
+  const line = (r) => `<button class="lhrow" data-act="clubLoanOpen" data-id="${r.l.id}">
+      <span class="nm">${esc(loanWho(r.l))}${r.l.memberId ? '' : ' <span class="tag">회원 아님</span>'}${r.c.left <= 0 ? ' <span class="tag ok">완료</span>' : ''}</span>
+      <span class="r ph">${won(r.l.principal)}</span><span class="r ph">${won(r.c.repaid + r.c.paidBefore)}</span><b class="r">${won(r.c.left)}</b><span class="r ph">${r.c.last ? r.c.last.slice(2).replace(/-/g, '.') : '—'}</span>
+      <span class="pbar"><span class="lbar"><i style="width:${pctOf(r)}%"></i></span></span>
+      <span class="psub">원금 ${won(r.l.principal)} · 갚은 돈 ${won(r.c.repaid + r.c.paidBefore)} · 마지막 상환 ${r.c.last ? r.c.last.replace(/-/g, '.') : '없음'} · ${pctOf(r)}%</span></button>`;
+  return `<section class="card card-pad"><div class="secrow"><h2 class="h2">대출 현황</h2><button class="btn" data-act="go" data-to="대출">대출 화면</button></div>
+    <div class="lhrow head"><span>대출자</span><span class="r">원금</span><span class="r">갚은 돈</span><span class="r">남은 원금</span><span class="r">마지막 상환일</span><span>진행</span></div>
+    ${rows.map(line).join('')}
+    <div class="lhrow foot"><span>합계 ${rows.length}건</span><span class="r ph">${won(T.p)}</span><span class="r ph">${won(T.r)}</span><span class="r">${won(T.left)}</span><span class="ph"></span><span class="ph"></span></div></section>`;
+}
+
+/* ───────── 통장 잔액 맞추기: 시작 잔액 + 회비 + 수입 + 상환 입금 − 지출 − 대출 지급 … = 앱 통장 잔액 ───────── */
+function bankCheck() {
+  const banks = banksAll(), L = { fee: 0, inc: 0, repay: 0, uncIn: 0, out: 0, loanOut: 0, adv: 0, uncOut: 0, adj: 0 };
+  const start = banks.reduce((s, b) => s + (b.openBalance || 0), 0);
+  for (const x of liveTx()) {
+    for (const b of banks) {
+      if (b.openDate && x.date < b.openDate) continue;
+      const dl = bankDelta(x, b.id); if (!dl) continue;
+      const a = accOf(x.accountId);
+      if (x.kind === 'adj') L.adj += dl;
+      else if (x.kind === 'tr' || x.kind === 'bill') L.adj += dl;
+      else if (x.kind === 'in') { if (isUnc(x)) L.uncIn += dl; else if (a && a.loanRepay) L.repay += dl; else if (a && a.fee) L.fee += dl; else L.inc += dl; }
+      else if (isUnc(x)) L.uncOut += dl; else if (a && a.loanOut) L.loanOut += dl; else if (a && a.advRepay) L.adv += dl; else L.out += dl;
+    }
+  }
+  const calc = start + Object.values(L).reduce((s, v) => s + v, 0);
+  return { start, L, calc, app: bankSum() };
+}
+function bankCheckCard() {
+  const B = bankCheck(), L = B.L, sd = startDate();
+  const row = (k, v, always) => (v || always ? `<div class="chkrow"><span>${k}</span><b class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${won(v)}</b></div>` : '');
+  const ok = B.calc === B.app, mb = mainBank();
+  return `<section class="card card-pad"><details ${S.bankChkOpen ? 'open' : ''} data-bankchk><summary class="secrow" style="cursor:pointer"><h2 class="h2">통장 잔액 맞추기</h2><span class="${ok ? 'pos' : 'warnt'}" style="font-weight:700">${ok ? '맞아요 ✓' : '안 맞아요'}</span></summary>
+    <div class="chkrow"><span>시작 잔액${sd ? ` (${sd.replace(/-/g, '.')})` : ''}</span><b>${B.start < 0 ? '−' : ''}${won(B.start)}</b></div>
+    ${row('+ 회비', L.fee, true)}${row('+ 기타 수입 (이자·찬조금 등)', L.inc)}${row('+ 대출 상환 입금', L.repay, true)}${row('+ 아직 정하지 않은 입금', L.uncIn)}
+    ${row('− 지출', L.out, true)}${row('− 대출 지급 (이번에 나간 대출)', L.loanOut)}${row('− 회원에게 돌려준 돈', L.adv)}${row('− 아직 정하지 않은 출금', L.uncOut)}${row('± 잔액 조정 · 통장끼리', L.adj)}
+    <div class="chkrow tot"><span>= 계산한 잔액</span><b>${B.calc < 0 ? '−' : ''}${won(B.calc)}원</b></div>
+    <div class="chkrow"><span>앱 통장 잔액</span><b>${B.app < 0 ? '−' : ''}${won(B.app)}원 ${ok ? '✓' : ''}</b></div>
+    <span class="sub small" style="display:block;margin-top:6px">시작 전에 이미 나간 대출은 통장에 다시 빠지지 않아요. 실제 통장(은행 앱) 잔액과 다르면 맞춰 주세요.</span>
+    ${mb ? `<button class="btn" style="margin-top:8px" data-act="dlgAdjust" data-id="${mb.id}">실제 통장 잔액과 맞추기</button>` : ''}</details></section>`;
+}
+document.addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('[data-bankchk]')) S.bankChkOpen = e.target.open; }, true);

@@ -257,6 +257,7 @@ function viewClubHome(L) {
       ${chips}${rows.length ? todoCard : ''}
       <div class="secrow"><h2 class="h2">회원 납부</h2>${yearNav}</div>
       ${empty || `<div class="stack" style="gap:10px">${cards}</div>`}
+      ${loanHomeTable()}${bankCheckCard()}
     </div>`;
   }
   const trs = ms.map(({ m, s }) => `<tr><th scope="row"><button class="mname" data-act="clubOpenMember" data-id="${m.id}">${esc(m.name)}</button></th>
@@ -283,8 +284,10 @@ function viewClubHome(L) {
       <section class="card card-pad"><span class="sub small">올해 지출</span><div class="statv neg">−${won(st.out)}</div></section>
       <section class="card card-pad"><span class="sub small">전체 미수금 · ${dueN}명</span><div class="statv ${dueAll ? 'duered' : ''}">${won(dueAll)}원</div></section>
     </div>
+    ${clubQuickBar()}
     ${L === 'compact' ? chips : ''}
     <div class="cols">${table}${L === 'wide' ? side : ''}</div>
+    <div class="cols"><div style="flex:1 1 560px;min-width:0" class="stack">${loanHomeTable()}</div><div style="flex:1 1 300px;min-width:0" class="stack">${bankCheckCard()}</div></div>
     ${L === 'compact' ? side.replace('flex:0 0 300px;min-width:290px', 'flex:1 1 auto') : ''}
   </div>`;
 }

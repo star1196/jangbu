@@ -315,9 +315,11 @@ function onClubInput(el) {
 /* ───────── 대출 ───────── */
 const loansAll = () => Store.all('loans').filter((l) => !l.deleted);
 function loanCalc(l) {
-  let repaid = 0; const byYear = {};
-  for (const x of clubTx()) if (x.club && x.club.type === 'loan' && x.club.loanId === l.id) { repaid += x.amount; const y = x.date.slice(0, 4); byYear[y] = (byYear[y] || 0) + x.amount; }
-  return { repaid, left: Math.max(0, (l.principal || 0) - repaid), byYear };
+  let repaid = 0, last = ''; const byYear = {};
+  for (const x of clubTx()) if (x.club && x.club.type === 'loan' && x.club.loanId === l.id) { repaid += x.amount; const y = x.date.slice(0, 4); byYear[y] = (byYear[y] || 0) + x.amount; if (x.date > last) last = x.date; }
+  // 시작 전에 이미 나간 대출: 시작할 때 남은 원금(startLeft)이 있으면 그것부터 줄어듦 (그 전에 갚은 돈은 장부 밖)
+  const base = l.startLeft > 0 ? l.startLeft : (l.principal || 0);
+  return { repaid, left: Math.max(0, base - repaid), base, byYear, last, paidBefore: Math.max(0, (l.principal || 0) - base) };
 }
 
 /* ───────── 대화 상자 ───────── */
