@@ -717,3 +717,65 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ptable .pc { min-width: 30px; }
 button.lrow { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; text-align: left; font: inherit; color: inherit; }
 button.lrow:first-of-type { border-top-color: transparent; }
+
+/* ───────── 2026-11: 장부 섞임 막기 · 저장 공간 · 찾기·기간 · 할부 · 카드 계획 · 친구회 더하기 ───────── */
+.bigwarn { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 14px; background: #F6E3CF; border: 2px solid var(--warn); color: var(--ink); font-size: calc(15px * var(--fs)); line-height: 1.5; font-weight: 700; }
+.bigwarn .ic { color: var(--warn); flex: none; }
+.bigwarn.soft { background: var(--warn-soft); border-width: 1.5px; font-weight: 600; }
+.topalert { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 10px 16px; border: 1.5px solid var(--warn); border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: calc(15px * var(--fs)); cursor: pointer; }
+.topalert .ic { color: var(--warn); flex: none; }
+.pfbar { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pfq { display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--sf); min-height: 48px; min-width: 0; }
+.pfq .input { border: 0; background: transparent; padding: 0; min-height: 44px; flex: 1; min-width: 0; box-shadow: none; }
+.pfq .input:focus { outline: none; }
+.pfdates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pfdates .input { flex: 1 1 140px; min-width: 0; }
+.storrow { display: flex; flex-direction: column; gap: 4px; }
+.sbar { display: block; height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+.sbar.big { height: 12px; margin: 8px 0 4px; }
+.sbar i { display: block; height: 100%; background: #7FA38A; border-radius: 4px; }
+.sbar.warn i { background: var(--warn); }
+.instrow { display: grid; grid-template-columns: minmax(0, 2.2fr) repeat(3, minmax(0, 1fr)); gap: 10px; align-items: center; width: 100%; padding: 12px 18px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; color: var(--ink); cursor: pointer; }
+.instrow:first-child { border-top: 0; }
+.instrow .im { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.instrow .im b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instrow .iv { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.phone .instrow { grid-template-columns: minmax(0, 1fr) auto auto; }
+.phone .instrow .iv:last-child { display: none; }
+.planbox { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.plangrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+.pg { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 8px; background: var(--soft); font-size: calc(11px * var(--fs)); color: var(--sub); }
+.pg b { font-size: calc(12px * var(--fs)); color: var(--ink); }
+.pg.ok { background: #E8F0EA; } .pg.ok b { color: #4f7a5d; }
+.pg.miss { background: #fff; border: 1.5px solid #E7C9A6; } .pg.miss b { color: var(--warn); }
+.pg.now { background: #fff; border: 1.5px dashed var(--warn); }
+.planedit { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap button { flex: 1 1 auto; }
+/* 친구회 */
+.duered { color: #B5473F; font-weight: 800; }
+.prep { color: #4f7a5d; font-size: calc(12px * var(--fs)); font-weight: 600; white-space: nowrap; }
+.pc.gap { background: #fff; border: 2px solid var(--warn); color: var(--warn); font-weight: 700; }
+.pd.gap { border: 2px solid var(--warn); background: var(--warn-soft); }
+.tag.gapt, .gapt { color: var(--warn); }
+.tag.gapt { background: var(--warn-soft); }
+.band { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 2px; line-height: 1.7; font-size: calc(14px * var(--fs)); }
+.bd { padding: 1px 8px; border-radius: 8px; background: var(--soft); white-space: nowrap; }
+.bd.ok { background: #E8F0EA; color: #3f6a4d; }
+.bd.gap { background: #fff; border: 2px solid var(--warn); color: var(--warn); font-weight: 700; }
+.bd.due { background: #F6E1DE; color: #B5473F; font-weight: 700; }
+.bd.part { background: #FBEDE9; color: #B5473F; }
+.bd.ex { background: #EEEEEB; color: var(--sub); }
+.filltab { width: 100%; border-collapse: collapse; font-size: calc(13px * var(--fs)); }
+.filltab td { padding: 7px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.filltab td:first-child { white-space: nowrap; color: var(--sub); }
+.filltab td.r { text-align: right; white-space: nowrap; }
+.filltab tr.gaprow td { background: var(--warn-soft); }
+.trow { flex-wrap: wrap; row-gap: 6px; padding: 6px 0; }
+.trow > span[style*="flex:1"] { min-width: 160px; }
+.loanlink { display: flex; flex-direction: column; text-align: left; width: 100%; border: 1px solid var(--line); cursor: pointer; color: var(--ink); }
+.loancard.on { border: 1.5px solid var(--ink); }
+.ughead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 18px; background: var(--soft); border-top: 1px solid var(--line); }
+.accchip .ic { margin-right: 2px; }
+.lgwrap { overflow-x: auto; }
+.lgwrap .lg-row { min-width: 640px; }

@@ -344,6 +344,7 @@ function afterOpen() {
   // 그날이 된 반복 입력을 '확인 대기'로 (다 만들면 다시 그림)
   setTimeout(() => makeDueRepeats().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}), 0);
   setTimeout(() => cleanPhotos().catch(() => {}), 0); // 내역이 완전히 지워진 영수증 사진 정리
+  setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
 }
@@ -600,6 +601,9 @@ const ACT = {
   ...RC_ACT,
   ...RESET_ACT,
   ...START_ACT,
+  ...PF_ACT,
+  ...SAFE_ACT,
+  ...INST_ACT,
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
@@ -625,7 +629,9 @@ $app.addEventListener('keydown', (e) => {
 /* 입력 시트 글자 처리 */
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)
+  if (typeof onSafeInput === 'function' && onSafeInput(el)) return; // 합치기 확인 · 카드 계획 칸 (safe.js · inst.js)
   if (onStartInput(el)) return; // 처음 시작하기 · 카드 이월 칸 (start.js)
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
   if (el.matches && el.matches('[data-bulkdate]') && S.dialog) { S.dialog.val = el.value || null; render(); }
@@ -781,7 +787,9 @@ const FORM = {
   ...SW_FORM,
   ...CLUB_FORM,
   ...PLAN_FORM,
-  ...MORE_FORM
+  ...MORE_FORM,
+  ...SAFE_FORM,
+  ...INST_FORM
 };
 
 $app.addEventListener('submit', (e) => {
@@ -830,6 +838,7 @@ async function boot() {
     return;
   }
   await refreshBundle();
+  askPersist(); // 저장 공간을 브라우저가 함부로 비우지 않게 요청 (safe.js)
   if (!S.ledgers.length) S.mode = 'create';
   else {
     S.mode = 'lock';

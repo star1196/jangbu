@@ -83,7 +83,73 @@ const accOf = (id) => Store.get('accounts', id);
 const payOf = (id) => Store.get('payMethods', id);
 const bankOf = (id) => Store.get('banks', id);
 // 장부에 들어간 내역 (휴지통 · 반복 입력 '확인 대기' · 여행 안에서만 보이는 내역(엑셀 여행 시트)은 빼고)
-const liveTx = () => Store.all('tx').filter((x) => !x.deleted && !x.pending && !x.tripOnly);
+// 자료가 바뀌지 않았으면 지난번 결과를 그대로 씀 (10만 건이어도 화면마다 다시 거르지 않게)
+const TXC = { v: -1, live: [], byYM: null, idx: null };
+function txCache() {
+  const v = Store.ver();
+  if (TXC.v !== v) { TXC.v = v; TXC.live = Store.all('tx').filter((x) => !x.deleted && !x.pending && !x.tripOnly); TXC.byYM = null; TXC.idx = null; }
+  return TXC;
+}
+const liveTx = () => txCache().live.slice();
+// 달별로 나눠 둔 내역 (목록·달력은 그 달 것만 봄)
+function txOfMonth(ym) {
+  const C = txCache();
+  if (!C.byYM) { C.byYM = new Map(); for (const x of C.live) { const k = x.date.slice(0, 7); if (!C.byYM.has(k)) C.byYM.set(k, []); C.byYM.get(k).push(x); } }
+  return (C.byYM.get(ym) || []).slice();
+}
+// 찾기용 글자 (가맹점·메모·계정·결제수단·통장, 띄어쓰기 없이 소문자 + 초성) — 한 번 만들고 자료가 바뀔 때까지 씀
+function txSearchText(x) {
+  const C = txCache(); if (!C.idx) C.idx = new Map();
+  let t = C.idx.get(x.id);
+  if (t == null) {
+    const n = norm([x.merchant, x.memo, (accOf(x.accountId) || {}).name, (payOf(x.payMethodId) || {}).name, x.bankId ? (bankOf(x.bankId) || {}).name : '', x.amount].filter(Boolean).join(' '));
+    t = n + '\u0001' + cho(n); C.idx.set(x.id, t);
+  }
+  return t;
+}
+const txHit = (x, q) => { q = norm(q); return !q || txSearchText(x).includes(q); };
+
+/* ── 모든 목록 공통: 찾기 칸 + 기간 [1개월][2개월][3개월][6개월][1년][전체][직접 지정] ──
+   key마다 따로 기억 (S.pf[key] = { q, p, from, to }). first: 맨 앞에 더 둘 칩 (예: 목록의 '월별') */
+const PF_CHIPS = ['1개월', '2개월', '3개월', '6개월', '1년', '전체', '직접 지정'];
+function pfOf(key, def) { S.pf = S.pf || {}; return S.pf[key] || (S.pf[key] = { q: '', p: def || '전체', from: '', to: '' }); }
+function pfRange(key, def) {
+  const P = pfOf(key, def), t = todayStr();
+  const back = (n) => { const d = parseYmd(t); d.setMonth(d.getMonth() - n); return addDays(ymd(d), 1); };
+  switch (P.p) {
+    case '1개월': return [back(1), t];
+    case '2개월': return [back(2), t];
+    case '3개월': return [back(3), t];
+    case '6개월': return [back(6), t];
+    case '1년': return [back(12), t];
+    case '직접 지정': return [P.from || '0000-00-00', P.to || '9999-12-31'];
+    default: return ['0000-00-00', '9999-12-31'];
+  }
+}
+function pfBar(key, def, first, hint) {
+  const P = pfOf(key, def);
+  const chips = [...(first ? [first] : []), ...PF_CHIPS].map((p) => `<button class="chip ${P.p === p ? 'on' : ''}" style="min-height:40px;padding:0 12px;font-size:${px(13)}" data-act="pfP" data-k="${key}" data-p="${p}">${p}</button>`).join('');
+  return `<div class="pfbar"><label class="pfq">${ic('search', 18, 'var(--sub)')}<input class="input" data-pfq="${key}" value="${esc(P.q)}" placeholder="${esc(hint || '찾기 (초성도 돼요)')}" aria-label="찾기">${P.q ? `<button class="iconbtn" data-act="pfClear" data-k="${key}" aria-label="찾기 지우기">${ic('x', 16)}</button>` : ''}</label>
+    <div class="chips" style="gap:6px">${chips}</div>
+    ${P.p === '직접 지정' ? `<div class="pfdates"><input class="input" type="date" data-pfd="${key}" data-w="from" value="${esc(P.from)}" aria-label="시작 날짜"><span class="sub">~</span><input class="input" type="date" data-pfd="${key}" data-w="to" value="${esc(P.to)}" aria-label="끝 날짜"></div>` : ''}</div>`;
+}
+// 글자 하나로 찾기 (이름·메모 등)
+const qHit = (text, q) => { q = norm(q); if (!q) return true; const n = norm(text); return n.includes(q) || cho(n).includes(q); };
+const PF_ACT = {
+  pfP: (el) => { const P = pfOf(el.dataset.k); P.p = el.dataset.p; if (P.p === '직접 지정' && !P.from) { P.to = todayStr(); P.from = P.to.slice(0, 8) + '01'; } render(); },
+  pfClear: (el) => { pfOf(el.dataset.k).q = ''; render(); }
+};
+// 찾기 칸에 글자를 넣을 때 (커서 그대로 두고 다시 그림)
+function onPfInput(el) {
+  if (el.dataset.pfq != null) {
+    pfOf(el.dataset.pfq).q = el.value;
+    clearTimeout(onPfInput.t);
+    onPfInput.t = setTimeout(() => { const pos = el.selectionStart; render(); const i = $app.querySelector(`[data-pfq="${el.dataset.pfq}"]`); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { /* 그대로 */ } } }, 250);
+    return true;
+  }
+  if (el.dataset.pfd != null) { pfOf(el.dataset.pfd)[el.dataset.w] = el.value; render(); return true; }
+  return false;
+}
 const pendingTx = () => Store.all('tx').filter((x) => !x.deleted && x.pending);
 const signed = (x) => (x.kind === 'in' ? x.amount : x.kind === 'out' ? -x.amount : 0);
 const isMoney = (x) => x.kind === 'in' || x.kind === 'out';

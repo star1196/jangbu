@@ -216,7 +216,7 @@ function viewSheet() {
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:${px(14)}">실제 낸 돈 <span class="sub">(금액 칸에 자동으로 들어가요)</span></span><span data-part="eff" style="font-size:${px(20)};font-weight:700"></span></div>
         </div>` : ''}
-        ${f.mode === 'edit' ? photoPart(f) : ''}
+        ${f.mode === 'edit' ? photoPart(f) + devPart(f) : ''}
         ${f.mode === 'edit' ? `<div class="chips">${f.kind !== 'tr' ? `<button class="btn" data-act="splitFromForm">${ic('columns', 18)}나누기</button>` : ''}${feat('repeat') && f.kind !== 'tr' ? `<button class="btn" data-act="repFromTx">${ic('repeat', 18)}반복으로 만들기</button>` : ''}<button class="btn" style="color:var(--out)" data-act="fDelete">휴지통으로 옮기기</button></div>` : ''}
         <div class="err" data-part="ferr"></div>
       </div>

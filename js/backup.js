@@ -27,24 +27,29 @@ const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제�
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
 
 /* ───────── 백업 저장 ───────── */
-async function makeBackupText() {
-  const at = Date.now(), cols = Store.snapshot();
+// opt.noPhotos: 사진 빼고 (파일이 훨씬 작음. 사진은 이 기기에 그대로) · opt.cols: 이 묶음만 (연도별 사진 내보내기)
+async function makeBackupText(opt) {
+  opt = opt || {};
+  const at = Date.now(), cols = opt.cols || Store.snapshot();
+  if (opt.noPhotos) delete cols.photos;
   const payload = { app: 'jangbu', v: 1, createdAt: at, device: deviceName(), schema: Store.LATEST, ledger: { ...Store.current(), salt: undefined, iter: undefined }, counts: { tx: liveCount(cols) }, cols };
   const sealed = await Store.sealBackup(payload);
-  // 겉에는 열기 전에 보여 줄 것만 (만든 시각·기기·장부 종류). 내용은 모두 잠김.
-  const file = { app: 'jangbu', kind: 'backup', v: 1, ledgerId: Store.current().id, type: Store.current().type, createdAt: at, device: deviceName(), ...sealed };
+  // 겉에는 열기 전에 보여 줄 것만 (만든 시각·기기·장부 종류·장부 이름). 내용은 모두 잠김.
+  // 장부 이름은 파일 이름에도 들어가는 것 → 다른 장부 백업을 잘못 고르면 열기 전에 이름으로 알려 주려고 겉에 둠
+  const file = { app: 'jangbu', kind: 'backup', v: 1, ledgerId: Store.current().id, type: Store.current().type, name: Store.current().name, createdAt: at, device: deviceName(), photos: !opt.noPhotos, part: opt.part || '', ...sealed };
   return { at, text: JSON.stringify(file), n: payload.counts.tx };
 }
 async function prepareBackup() {
   const D = S.dialog;
-  const b = await makeBackupText();
+  D.text = null; render();
+  const b = await makeBackupText({ noPhotos: !!D.noPhotos });
   if (S.dialog !== D) return;
-  D.at = b.at; D.name = backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
+  D.at = b.at; D.name = (D.noPhotos ? '사진빼고_' : '') + backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
   render();
 }
-// 지우기 직전 자동 백업 (초기화 · 장부 통째로 지우기): 파일 이름 앞에 '지우기전_'
-async function autoBackup() {
-  const b = await makeBackupText(), name = '지우기전_' + backupFileName(b.at);
+// 지우기·합치기 직전 자동 백업: 파일 이름 앞에 '지우기전_' · '합치기전_'
+async function autoBackup(prefix) {
+  const b = await makeBackupText(), name = (prefix || '지우기전_') + backupFileName(b.at);
   downloadText(name, b.text);
   setSync(Store.current().id, { lastSave: b.at });
   return name;
@@ -71,13 +76,19 @@ const canShareFiles = () => !!(navigator.canShare && navigator.share && window.F
 async function onBackupFile(file, mode) {
   let f = null;
   try { f = JSON.parse(await file.text()); } catch (e) { f = null; }
-  if (!f || f.app !== 'jangbu' || f.kind !== 'backup' || !f.ct) { toast('장부 백업 파일이 아니에요. 이름이 .장부(또는 .장부.txt)로 끝나는 파일을 골라 주세요'); return; }
+  // 사진·엑셀 등 백업이 아닌 파일: 아무것도 바꾸지 않고 알려 주기만
+  if (!f || f.app !== 'jangbu' || f.kind !== 'backup' || !f.ct) { S.dialog = { type: 'sfNotBackup', fileName: file.name }; render(); return; }
   if (mode === 'new') {
     if (await Store.hasLedger(f.ledgerId)) { toast('이 기기에 이미 있는 장부의 백업이에요. 그 장부를 열고 설정 → 불러오기로 합쳐 주세요'); return; }
     S.dialog = { type: 'newFromBackup', file: f, fileName: file.name, d: {} }; render(); return;
   }
   if (f.type !== Store.current().type) { toast('다른 종류 장부의 백업이라 합칠 수 없어요'); return; }
-  const D = { type: 'restore', file: f, fileName: file.name, step: 'pw' };
+  // 다른 장부(장부 id가 다름)의 백업: 합치지 않음 → [따로 새 장부로 열기] / [취소] (그래도 합치려면 장부 이름을 적어야 함)
+  if (f.ledgerId !== Store.current().id) { S.dialog = { type: 'sfOther', file: f, fileName: file.name, exists: await Store.hasLedger(f.ledgerId), typed: '' }; render(); return; }
+  openRestore(f, file.name, false);
+}
+async function openRestore(f, fileName, forced) {
+  const D = { type: 'restore', file: f, fileName, step: 'pw', forced };
   const p = await Store.openBackup(f, null); // 같은 비밀번호·같은 장부면 바로 열림
   if (p) { D.payload = p; D.step = 'confirm'; D.plan = planMerge(p); }
   S.dialog = D; render();
@@ -207,6 +218,8 @@ function planMerge(p) {
 async function applyMerge() {
   const D = S.dialog, P = D.plan, p = D.payload, items = [];
   S.busy = true; render();
+  // 합치기 전에 지금 장부를 먼저 파일로 (잘못 합쳐도 이 파일로 돌아올 수 있게)
+  const preName = await autoBackup('합치기전_');
   for (const [col, o] of P.puts) { items.push({ col, id: o.id, before: Store.get(col, o.id) ? { ...Store.get(col, o.id) } : null }); await Store.put(col, o, true); }
   if (P.newMap) await Store.put('meta', { ...(Store.get('meta', 'idmap') || { id: 'idmap' }), map: { ...((Store.get('meta', 'idmap') || {}).map || {}), ...P.newMap } });
   // 같은 카드가 두 장이 됐으면 하나로 (지우기 전에: 이 기기 내역이 지워질 카드를 가리키지 않게 먼저 옮김)
@@ -215,10 +228,13 @@ async function applyMerge() {
   if (dupN) cardsBefore.forEach((c, id) => { if (!items.some((i) => i.col === 'payMethods' && i.id === id)) items.push({ col: 'payMethods', id, before: c }); });
   for (const [col, id] of P.dels) { if (!Store.get(col, id)) continue; items.push({ col, id, before: { ...Store.get(col, id) } }); await Store.remove(col, id); }
   await Store.migrate(); // 예전 버전 앱에서 만든 백업이면 새 구조로 옮김
+  const prevMerge = syncInfo().lastMerge || null;
   setSync(Store.current().id, { lastMerge: { at: p.createdAt, device: p.device, mergedAt: Date.now() } });
-  S.busy = false; S.dialog = null; render();
   const c = P.cnt;
-  toast((c.add + c.chg + c.del ? `합쳤어요 · 새로 ${c.add} · 바뀜 ${c.chg} · 지움 ${c.del}` : '합쳤어요 · 바뀐 것이 없어요') + (dupN ? ` · 같은 카드 ${dupN}장을 하나로` : ''), { items, keepTime: true });
+  S.busy = false;
+  // 합친 뒤: 결과 + [되돌리기] + 합치기 전 백업 파일 이름 (창을 닫기 전까지 언제든 되돌릴 수 있음)
+  S.dialog = { type: 'sfMerged', msg: (c.add + c.chg + c.del ? `새로 ${c.add} · 바뀜 ${c.chg} · 지움 ${c.del}` : '바뀐 것이 없어요') + (dupN ? ` · 같은 카드 ${dupN}장을 하나로` : ''), preName, items, prevMerge, device: p.device };
+  render();
 }
 
 /* 백업 파일로 새 장부 만들기 (새 기기에서 처음) */
@@ -229,6 +245,7 @@ async function createFromBackup(form) {
   const p = await Store.openBackup(f, pw).catch(() => null);
   if (!p) { S.busy = false; render(); return showErr($app.querySelector('[data-form="fromBackup"]'), '비밀번호가 맞지 않아요. 백업을 만들 때의 장부 비밀번호예요.', 'pw'); }
   if ((p.schema || 0) > Store.LATEST) { S.busy = false; render(); return showErr($app.querySelector('[data-form="fromBackup"]'), '더 새 버전 앱에서 만든 백업이에요. 앱을 완전히 닫았다가 다시 열어 새 버전으로 바꾼 뒤 해 주세요.'); }
+  if (await Store.hasLedger(p.ledger.id)) { S.busy = false; render(); return showErr($app.querySelector('[data-form="fromBackup"]'), `이 기기에 이미 「${p.ledger.name}」 장부가 있어요. 장부 바꾸기로 그 장부를 열고 불러오기로 합쳐 주세요.`); } // 같은 장부를 덮어쓰지 않게
   const records = [];
   for (const col of Object.keys(p.cols || {})) for (const o of p.cols[col]) records.push([col, o]);
   try {
@@ -282,7 +299,10 @@ function viewBackupDlg(D) {
       <span class="sub small">이 장부의 모든 내용을 파일 하나로 저장해요. 다른 기기에서 [불러오기]로 합칠 수 있어요.</span>
       <div class="drow" style="border-top:0"><span class="sub">파일 이름</span><b style="text-align:right;word-break:break-all">${ready ? esc(D.name) : '만드는 중…'}</b></div>
       <div class="drow"><span class="sub">이 기기 이름</span><button class="btn" data-act="dlgDevice">${esc(deviceName())} · 바꾸기</button></div>
+      <div class="drow"><span class="sub">영수증 사진</span><div class="seg" style="max-width:240px"><button class="${D.noPhotos ? '' : 'on'}" data-act="bkPhotos" data-v="1">사진 포함</button><button class="${D.noPhotos ? 'on' : ''}" data-act="bkPhotos" data-v="0">사진 빼고</button></div></div>
+      ${D.noPhotos ? '<span class="sub small">사진은 이 기기에 그대로 있어요. 파일이 작아져 카카오톡으로 보내기 쉬워요.</span>' : ''}
       <div class="drow"><span class="sub">내역</span><b>${ready ? D.n + '건' : '…'}</b></div>
+      <div class="drow"><span class="sub">파일 크기</span><b>${ready ? mb(D.size) : '…'}</b></div>
       <div class="drow"><span class="sub">마지막 백업</span><b>${info.lastSave ? `${stamp(info.lastSave)} (${agoTxt(info.lastSave)})` : '없음'}</b></div>
       ${pwNote}
       ${canShareFiles() ? `<button class="btn big" data-act="shareBackup" ${ready ? '' : 'disabled'}>${ic('upload', 20)}카카오톡 · 메일로 보내기</button>` : ''}
@@ -303,14 +323,17 @@ function viewBackupDlg(D) {
       return `<div class="dlg"><h2 class="dlg-title">합칠 수 없어요</h2>${head}<div class="warnbox">${ic('circle-alert', 22)}<div>더 새 버전 앱에서 만든 백업이에요. 앱을 완전히 닫았다가 다시 열어 새 버전으로 바꾼 뒤 다시 불러와 주세요.</div></div><div class="dlg-btns">${cancel('닫기')}</div></div>`;
     }
     const older = last && f.createdAt < last.at;
+    const bName = (D.payload && D.payload.ledger && D.payload.ledger.name) || f.name || '';
+    const nameWarn = bName && bName !== Store.current().name ? `<div class="bigwarn">${ic('circle-alert', 28)}<div><b>장부 이름이 달라요</b><br>백업: 「${esc(bName)}」 · 지금 장부: 「${esc(Store.current().name)}」<br><span style="font-weight:400">다른 사람(다른 장부)의 백업이 아닌지 꼭 확인해 주세요.</span></div></div>` : '';
+    const forcedWarn = D.forced ? `<div class="bigwarn">${ic('circle-alert', 28)}<div><b>다른 장부의 백업을 합치려고 해요</b><br><span style="font-weight:400">합치기 전에 지금 장부를 파일로 자동 백업해요. 합친 뒤 [되돌리기]로 돌아갈 수 있어요.</span></div></div>` : '';
     const by = Object.keys(c.by).filter((k) => c.by[k].add + c.by[k].chg + c.by[k].del).map((k) => { const b = c.by[k]; return `<div class="drow"><span class="sub">${COL_NAMES[k] || k}</span><span>${[b.add && `새로 ${b.add}`, b.chg && `바뀜 ${b.chg}`, b.del && `지움 ${b.del}`].filter(Boolean).join(' · ')}</span></div>`; }).join('');
     const nothing = !(c.add + c.chg + c.del);
-    return `<div class="dlg"><h2 class="dlg-title">불러오기 (합치기)</h2>${head}
+    return `<div class="dlg">${nameWarn}${forcedWarn}<h2 class="dlg-title">불러오기 (합치기)</h2>${head}
       ${older ? `<div class="warnbox">${ic('circle-alert', 22)}<div><b>더 예전 파일이에요. 그래도 합칠까요?</b><br>이 기기에 이미 합친 백업(${stamp(last.at)})보다 먼저 만든 파일이에요. 합쳐도 이 기기에서 더 나중에 고친 내용은 그대로 남아요.</div></div>` : ''}
       ${P.same ? '' : `<div class="conf-note sub">다른 기기에서 따로 만든 장부의 백업이에요. 이름이 같은 계정과목·결제수단은 하나로 합쳐요.</div>`}
       <div class="mcount">${[['새로 들어올 것', c.add], ['바뀔 것', c.chg], ['지워질 것', c.del]].map(([l, n]) => `<div><span class="l">${l}</span><span class="a">${n}건</span></div>`).join('')}</div>
       ${by ? `<div>${by}</div>` : ''}
-      <span class="sub small">${nothing ? '이 기기에 이미 다 들어 있어요. 합쳐도 바뀌는 것이 없어요.' : '같은 내역은 더 나중에 고친 쪽으로 맞춰요. 지워질 것은 휴지통으로 가거나, 다른 기기에서 완전히 지운 것이에요. 합친 뒤 바로 [되돌리기]도 할 수 있어요.'}</span>
+      <span class="sub small">${nothing ? '이 기기에 이미 다 들어 있어요. 합쳐도 바뀌는 것이 없어요.' : '같은 내역은 더 나중에 고친 쪽으로 맞춰요. 지워질 것은 휴지통으로 가거나, 다른 기기에서 완전히 지운 것이에요.'} 합치기 전에 지금 장부를 「합치기전_…」 파일로 자동 백업하고, 합친 뒤 [되돌리기]도 할 수 있어요.</span>
       <div class="dlg-btns">${cancel()}<button class="btn ink" data-act="mergeYes" ${S.busy ? 'disabled' : ''}>${S.busy ? '합치는 중…' : '합치기'}</button></div></div>`;
   }
   if (D.type === 'newFromBackup') {
@@ -325,7 +348,7 @@ function viewBackupDlg(D) {
 }
 
 const BACKUP_ACT = {
-  dlgBackup: () => { S.dialog = { type: 'backup', step: 'ready' }; render(); prepareBackup().catch((e) => { S.dialog = null; render(); toast('백업을 만들지 못했어요 (' + e.message + ')'); }); },
+  dlgBackup: () => { S.dialog = { type: 'backup', step: 'ready', noPhotos: !!view.bkNoPhotos }; render(); prepareBackup().catch((e) => { S.dialog = null; render(); toast('백업을 만들지 못했어요 (' + e.message + ')'); }); },
   saveBackup: () => {
     const D = S.dialog; if (!D || !D.text) return;
     downloadText(D.name, D.text);
@@ -333,6 +356,7 @@ const BACKUP_ACT = {
     D.step = 'done'; render();
   },
   shareBackup: () => { const D = S.dialog; if (D && D.text) shareFile(D); },
+  bkPhotos: (el) => { const D = S.dialog; D.noPhotos = el.dataset.v === '0'; view.bkNoPhotos = D.noPhotos; saveView(); prepareBackup().catch((e) => toast('백업을 만들지 못했어요 (' + e.message + ')')); },
   pickBackup: (el) => { const inp = $app.querySelector(`input[data-backup="${el.dataset.mode || 'merge'}"]`); if (inp) inp.click(); },
   mergeYes: () => { if (!S.busy) applyMerge().catch((e) => { S.busy = false; render(); toast('합치지 못했어요 (' + e.message + ')'); }); },
   dlgDevice: () => { S.dialog = { type: 'device', back: S.dialog && S.dialog.type === 'backup' ? S.dialog : null }; render(); },

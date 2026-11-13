@@ -19,7 +19,21 @@ const Store = (() => {
   let opened = new Map();
   let bundleKey = null;  // 함께 열기 묶음 열쇠 (메모리에만, 잠그면 지움)
   let chain = Promise.resolve();
+  let ver = 0; // 자료가 바뀔 때마다 하나씩 (계산 결과를 잠깐 기억해 두는 데 씀: 10만 건에서도 빠르게)
   const LOCAL_IDS = ['idmap']; // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
+  // 여러 건을 한꺼번에 풀기·잠그기 (하나씩 기다리면 10만 건에서 너무 느림 → 500건씩 함께)
+  async function inBatches(list, fn, n) {
+    const out = new Array(list.length); n = n || 500;
+    for (let i = 0; i < list.length; i += n) {
+      const part = await Promise.all(list.slice(i, i + n).map(fn));
+      for (let j = 0; j < part.length; j++) out[i + j] = part[j];
+    }
+    return out;
+  }
+  // 새로 넣는 내역에 '넣은 기기' 적기 (합치기로 들어온 다른 기기 내역은 그 기기 이름 그대로)
+  function stampDev(col, obj, o) {
+    if (col === 'tx' && !obj.createdAt && !o.dev && typeof deviceName === 'function') { try { o.dev = deviceName(); } catch (e) { /* 그대로 */ } }
+  }
 
   function openDB() {
     if (dbp) return dbp;
@@ -107,14 +121,17 @@ const Store = (() => {
     const k = await deriveKey(password, salt, ITER);
     const id = wantId || uid();
     const check = await encryptWith(k, CHECK_TEXT);
-    const rows = [];
-    for (const [col, obj] of records || defaultRecords(type, preset)) {
+    const rows = await inBatches(records || defaultRecords(type, preset), async ([col, obj]) => {
       const box = await encryptWith(k, obj);
-      rows.push({ k: id + '|' + col + '|' + obj.id, lid: id, col, id: obj.id, iv: box.iv, ct: box.ct });
+      return { k: id + '|' + col + '|' + obj.id, lid: id, col, id: obj.id, iv: box.iv, ct: box.ct };
+    });
+    for (let i = 0; i < rows.length; i += 5000) {
+      const t = db.transaction('recs', 'readwrite');
+      rows.slice(i, i + 5000).forEach((r) => t.objectStore('recs').put(r));
+      await txDone(t);
     }
-    const t = db.transaction(['ledgers', 'recs'], 'readwrite');
+    const t = db.transaction('ledgers', 'readwrite');
     t.objectStore('ledgers').put({ id, type, name, salt, iter: ITER, check, createdAt: Date.now() });
-    rows.forEach((r) => t.objectStore('recs').put(r));
     await txDone(t);
     return id;
   }
@@ -125,10 +142,8 @@ const Store = (() => {
     const db = await openDB();
     const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(meta.id));
     const m = {};
-    for (const r of rows) {
-      const obj = await decryptWith(k, r);
-      (m[r.col] = m[r.col] || new Map()).set(r.id, obj);
-    }
+    const objs = await inBatches(rows, (r) => decryptWith(k, r));
+    rows.forEach((r, i) => { (m[r.col] = m[r.col] || new Map()).set(r.id, objs[i]); });
     opened.set(meta.id, { key: k, mem: m, ledger: { id: meta.id, type: meta.type, name: meta.name, salt: meta.salt, iter: meta.iter } });
     switchTo(meta.id);
   }
@@ -161,7 +176,7 @@ const Store = (() => {
   function switchTo(id) {
     const o = opened.get(id);
     if (!o) return false;
-    key = o.key; mem = o.mem; ledger = o.ledger;
+    key = o.key; mem = o.mem; ledger = o.ledger; ver++;
     return true;
   }
   // 모두 잠그기: 열린 모든 장부의 열쇠·내용을 메모리에서 지움
@@ -183,7 +198,8 @@ const Store = (() => {
     if (!key) return Promise.reject(new Error('잠겨 있어요'));
     const now = Date.now();
     const o = { ...obj, id: obj.id || uid(), updatedAt: keepTime && obj.updatedAt ? obj.updatedAt : now, createdAt: obj.createdAt || now };
-    (mem[col] = mem[col] || new Map()).set(o.id, o);
+    stampDev(col, obj, o);
+    (mem[col] = mem[col] || new Map()).set(o.id, o); ver++;
     const k = key, lid = ledger.id;
     chain = chain.then(async () => {
       const box = await encryptWith(k, o);
@@ -198,13 +214,14 @@ const Store = (() => {
   // 한꺼번에 저장 (엑셀 옮기기처럼 수천 건일 때 빠르게: 암호화 후 한 번에 기록)
   async function putMany(list) {
     if (!key) throw new Error('잠겨 있어요');
-    const now = Date.now(), out = [], rows = [], k = key, lid = ledger.id;
+    const now = Date.now(), out = [], k = key, lid = ledger.id;
     for (const [col, obj] of list) {
       const o = { ...obj, id: obj.id || uid(), updatedAt: now, createdAt: obj.createdAt || now };
-      (mem[col] = mem[col] || new Map()).set(o.id, o); out.push(o);
-      const box = await encryptWith(k, o);
-      rows.push({ k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct });
+      stampDev(col, obj, o);
+      (mem[col] = mem[col] || new Map()).set(o.id, o); out.push([col, o]);
     }
+    ver++;
+    const rows = await inBatches(out, async ([col, o]) => { const box = await encryptWith(k, o); return { k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct }; });
     await chain;
     const db = await openDB();
     for (let i = 0; i < rows.length; i += 2000) {
@@ -212,7 +229,7 @@ const Store = (() => {
       rows.slice(i, i + 2000).forEach((r) => t.objectStore('recs').put(r));
       await txDone(t);
     }
-    return out;
+    return out.map((p) => p[1]);
   }
 
   // 완전히 지우기 (휴지통 비우기 · 방금 만든 것 되돌리기에만 사용)
@@ -222,6 +239,7 @@ const Store = (() => {
     if (!key) return Promise.reject(new Error('잠겨 있어요'));
     if (!noMark && mem[col] && mem[col].has(id) && col !== 'gone' && !LOCAL_IDS.includes(id)) put('gone', { id: col + '|' + id, col, rid: id, at: Date.now() });
     if (mem[col]) mem[col].delete(id);
+    ver++;
     const lid = ledger.id;
     chain = chain.then(async () => {
       const db = await openDB();
@@ -259,6 +277,23 @@ const Store = (() => {
       if (ledger.type === 'club') return; // 친구회엔 카드 기능 없음
       if (!all('accounts').some((a) => a.kind === 'out' && a.name === '카드 수수료·이자')) {
         await put('accounts', { name: '카드 수수료·이자', kind: 'out', icon: 'credit-card', color: 3, hidden: false, order: all('accounts').length });
+      }
+    }],
+    [5, async () => { // 2026-11 친구회: 계정(무엇에 썼나)과 모임(어느 모임)을 따로. 새 기본 계정을 더하고, 예전 이름은 바꾸기만 (내역은 그대로)
+      if (ledger.type !== 'club') return;
+      const RENAME = { '경조사(축의·조의)': '경조사', '수수료(은행)': '수수료', '생일선물': '생일선물' };
+      const list = all('accounts');
+      for (const [name, kind, icon, color, flags] of DATA.CLUB_ACCOUNTS) {
+        if (list.some((a) => a.name === name && a.kind === kind)) continue;
+        const old = RENAME[name] && list.find((a) => a.name === RENAME[name] && a.kind === kind);
+        if (old) await put('accounts', { ...old, name, icon, ...(flags || {}) });
+        else await put('accounts', { name, kind, icon, color, hidden: false, order: all('accounts').length, ...(flags || {}) });
+      }
+      // 예전 모임 계정(정기모임·임시모임)은 그대로 두되 '예전 모임 계정' 표시 → 그 내역은 모임 종류로 읽음
+      for (const a of all('accounts')) if (['정기모임', '임시모임'].includes(a.name) && a.kind === 'out' && !a.legacyMeet) await put('accounts', { ...a, legacyMeet: true });
+      for (const x of all('tx')) {
+        const a = get('accounts', x.accountId);
+        if (a && a.legacyMeet && x.kind === 'out' && !(x.meet && x.meet.type)) await put('tx', { ...x, meet: { name: (x.meet && x.meet.name) || x.merchant || a.name, people: (x.meet && x.meet.people) || 0, type: a.name } }, true);
       }
     }]
   ];
@@ -495,6 +530,7 @@ const Store = (() => {
     for (const [col, id] of list) {
       if (mem[col] && mem[col].has(id)) { if (col !== 'gone' && !LOCAL_IDS.includes(id)) marks.push(['gone', { id: col + '|' + id, col, rid: id, at: Date.now() }]); mem[col].delete(id); }
     }
+    ver++;
     await chain;
     const db = await openDB();
     for (let i = 0; i < list.length; i += 2000) {
@@ -530,7 +566,24 @@ const Store = (() => {
     return out;
   }
 
-  return { switchTo, isOpened, openedIds, checkPassword,
+  // 저장 공간: 장부마다 내역·사진·그 밖의 크기(잠긴 채로 셈 → 비밀번호 없이도 됨)
+  async function usage() {
+    const db = await openDB(), out = {};
+    await new Promise((res, rej) => {
+      const r = db.transaction('recs').objectStore('recs').openCursor();
+      r.onsuccess = () => {
+        const c = r.result; if (!c) { res(); return; }
+        const v = c.value, o = out[v.lid] || (out[v.lid] = { tx: 0, photos: 0, other: 0, n: 0 });
+        const b = (v.ct && v.ct.byteLength) || 0;
+        if (v.col === 'tx') { o.tx += b; o.n++; } else if (v.col === 'photos') o.photos += b; else o.other += b;
+        c.continue();
+      };
+      r.onerror = () => rej(r.error);
+    });
+    return out;
+  }
+
+  return { switchTo, isOpened, openedIds, checkPassword, usage, ver: () => ver,
     bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
     hasBundleKey: () => !!bundleKey,
     removeMany, deleteLedger, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };

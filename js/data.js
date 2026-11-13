@@ -54,15 +54,33 @@ const DATA = (() => {
   const NAV = [['홈', 'house'], ['달력', 'calendar-days'], ['목록', 'list'], ['계정별', 'chart-pie'], ['설정', 'settings']];
 
   // 친구회(계모임) 기본 계정 (편집 가능). meet: 모임 지출(모임별 보기) · nonStat: 수입·지출 통계에서 빼는 것(대출 원금 오감)
+  // 2026-11: 계정 = 무엇에 썼나 / 모임(정기모임·임시모임·여행) = 어느 모임에서. 둘을 따로 적음.
   const CLUB_ACCOUNTS = [
-    ['정기모임', 'out', 'coffee', 0, { meet: true }], ['임시모임', 'out', 'utensils', 1, { meet: true }], ['우정맞춤', 'out', 'shirt', 2, { meet: true }],
-    ['생일선물', 'out', 'gift', 6], ['명절선물', 'out', 'package', 3], ['경조사', 'out', 'heart', 5], ['수수료', 'out', 'receipt', 4], ['기타지출', 'out', 'ellipsis', 7],
-    ['대출 지급', 'out', 'hand-coins', 4, { nonStat: true, loanOut: true }],
-    ['회비', 'in', 'hand-coins', 0, { fee: true }], ['이자', 'in', 'trending-up', 3], ['기타수입', 'in', 'coins', 7],
+    ['경조사(축의·조의)', 'out', 'heart', 5], ['교통·주차', 'out', 'car', 2], ['꽃·화환', 'out', 'star', 6], ['기부', 'out', 'hand-coins', 3], ['기타지출', 'out', 'ellipsis', 7],
+    ['대출 지급', 'out', 'banknote', 4, { nonStat: true, loanOut: true }], ['명절선물', 'out', 'package', 3], ['문구·인쇄', 'out', 'printer', 1], ['생일선물', 'out', 'cake', 6],
+    ['선물(기타)', 'out', 'gift', 5], ['수수료(은행)', 'out', 'landmark', 4], ['숙소', 'out', 'building', 1], ['식사', 'out', 'utensils', 0], ['우정맞춤', 'out', 'shirt', 2],
+    ['입장·체험', 'out', 'ticket', 2], ['장보기', 'out', 'shopping-basket', 0], ['카페·간식', 'out', 'coffee', 3], ['2차·주류', 'out', 'receipt', 5],
+    ['대신 낸 돈 돌려줌', 'out', 'rotate-ccw', 4, { nonStat: true, advRepay: true, sys: true }],
+    ['기타수입', 'in', 'coins', 7], ['이자', 'in', 'trending-up', 3], ['찬조금', 'in', 'award', 5], ['회비', 'in', 'hand-coins', 0, { fee: true }],
     ['대출 상환', 'in', 'rotate-ccw', 4, { nonStat: true, loanRepay: true }]
   ];
+  // 친구회 분류 사전: 가맹점 이름에 이 낱말이 있으면 그 계정 (지난번에 고른 계정이 먼저)
+  const CLUB_DICT = [
+    ['식사', '식당 한식 중식 일식 양식 고기 갈비 삼겹 횟집 회센터 국밥 냉면 칼국수 김밥 분식 치킨 피자 뷔페 반점 초밥 스시 맥도날드 버거킹 롯데리아 맘스터치 배달의민족 요기요 쿠팡이츠 음식'],
+    ['숙소', '펜션 호텔 모텔 리조트 콘도 게스트하우스 민박 풀빌라 야놀자 여기어때 에어비앤비 글램핑 캠핑장'],
+    ['교통·주차', '주유 주유소 톨게이트 하이패스 도로공사 주차 택시 카카오T 코레일 KTX SRT 고속버스 렌터카 렌트카 SK에너지 GS칼텍스 S-OIL 에쓰오일 오일뱅크'],
+    ['꽃·화환', '꽃집 플라워 화원 화환 꽃배달'],
+    ['카페·간식', '스타벅스 이디야 메가커피 컴포즈 빽다방 투썸 할리스 커피 카페 베이커리 파리바게뜨 뚜레쥬르 배스킨 베스킨 설빙 편의점 GS25 CU 세븐일레븐'],
+    ['2차·주류', '호프 포차 주점 이자카야 노래방 노래연습장 맥주 와인 술집 바 BAR'],
+    ['장보기', '이마트 홈플러스 롯데마트 코스트코 트레이더스 하나로마트 노브랜드 마트 정육 식자재'],
+    ['입장·체험', '입장 체험 매표 티켓 워터파크 테마파크 박물관 미술관 공연 CGV 메가박스 롯데시네마 볼링 골프'],
+    ['문구·인쇄', '문구 인쇄 복사 알파 오피스디포 현수막 출력'],
+    ['수수료(은행)', '수수료 송금수수료 이체수수료'],
+    ['명절선물', '선물세트 명절'],
+    ['우정맞춤', '맞춤 단체복 티셔츠 커플']
+  ].flatMap(([acc, words]) => words.split(' ').map((w) => [w, acc]));
   // 친구회 장부를 만들 때 켜 둘 기능 (나머지는 꺼 둠 · 설정에서 바꾸기)
-  const CLUB_FEATURES_ON = ['banks', 'files', 'receipt', 'loans', 'savings', 'interest', 'excel'];
+  const CLUB_FEATURES_ON = ['banks', 'files', 'receipt', 'loans', 'savings', 'interest', 'excel', 'clubAuto', 'advance', 'instView'];
 
   const PERIODS = ['오늘', '3일', '7일', '14일', '1개월', '3개월', '직접'];
 
@@ -101,10 +119,14 @@ const DATA = (() => {
     { key: 'vault', name: '보안 금고', desc: '계좌번호·중요 메모 · 숨김 통장 (따로 비밀번호)', step: 7, simple: false },
     { key: 'excel', name: '엑셀 옮기기·내보내기', desc: '예전 엑셀 시트 옮기기 · 통장별 시트 내보내기', step: 7, simple: false },
     { key: 'loans', name: '대출', desc: '회원별 대출 원금 · 상환 · 남은 원금', step: 8, simple: true, types: ['club'] },
-    { key: 'interest', name: '이자로 모임비 맞추기', desc: '매월 저축 · 이율 · 기간 → 예상 이자 계산', step: 8, simple: false, types: ['club'] }
+    { key: 'interest', name: '이자로 모임비 맞추기', desc: '매월 저축 · 이율 · 기간 → 예상 이자 계산', step: 8, simple: false, types: ['club'] },
+    { key: 'clubAuto', name: '회칙 자동 판정', desc: '생일선물 대상(생일날 미수금 0) · 만 45세 미혼 결혼축의금 선지급 알림', step: 8, simple: true, types: ['club'] },
+    { key: 'advance', name: '회원이 대신 낸 돈', desc: '회원이 먼저 낸 지출 · 돌려줄 돈 · 돌려준 이체 짝 맞추기', step: 8, simple: true, types: ['club'] },
+    { key: 'instView', name: '할부 모아보기', desc: '카드 · 가맹점 · 회차 · 이번 달 청구 · 남은 금액 한눈에', step: 8, simple: true },
+    { key: 'cardPlan', name: '카드 메모 · 사용 계획 · 해지일', desc: '혜택용 사용 계획 달성 · 해지 가능일 7일 전 알림', step: 8, simple: false }
   ];
   // 계모임 장부에는 안 맞는 집 가계부 기능 (사용할 기능 목록에서 안 보임)
-  ['cards', 'cardBill', 'cardPerf', 'discount', 'repeat', 'plan', 'trips'].forEach((k) => { const f = FEATURES.find((x) => x.key === k); if (f) f.types = ['home', 'hospital']; });
+  ['cards', 'cardBill', 'cardPerf', 'discount', 'repeat', 'plan', 'trips', 'cardPlan'].forEach((k) => { const f = FEATURES.find((x) => x.key === k); if (f) f.types = ['home', 'hospital']; });
 
   // 카드사 기본 목록 (설정에서 직접 추가 가능)
   const CARD_COMPANIES = ['신한카드', 'KB국민카드', '삼성카드', '현대카드', '롯데카드', '하나카드', '우리카드', 'BC카드', 'NH농협카드', 'IBK기업카드'];
@@ -140,5 +162,5 @@ const DATA = (() => {
   // 온라인몰: 여러 물건을 한 번에 사므로 자동 분류하지 않고 늘 미확인 → [나누기]로 나눠 적기
   const MALLS = ['쿠팡', '네이버페이', '네이버 페이', '스마트스토어', '11번가', 'G마켓', '지마켓', '옥션', 'SSG', '쓱닷컴', '컬리', '마켓컬리', '무신사', '위메프', '티몬', '인터파크', '알리익스프레스', '테무', 'TEMU', '롯데온', '카카오페이', '토스페이', '페이코', 'PAYCO', '오늘의집', '에이블리', '지그재그'];
 
-  return { CLUB_ACCOUNTS, CLUB_FEATURES_ON, DICT, MALLS, CARD_COMPANIES, BILL_DAYS, INSTALLMENTS, FEATURES, OWNERS, BANK_NAMES, THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, RED_OPTS, BLUE_OPTS, DEFAULT_IN, DEFAULT_OUT, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
+  return { CLUB_ACCOUNTS, CLUB_DICT, CLUB_FEATURES_ON, DICT, MALLS, CARD_COMPANIES, BILL_DAYS, INSTALLMENTS, FEATURES, OWNERS, BANK_NAMES, THEMES, PALETTES, INK_STEPS, IN_OPTS, OUT_OPTS, RED_OPTS, BLUE_OPTS, DEFAULT_IN, DEFAULT_OUT, FONT_SIZES, HOME_ACCOUNTS, LEDGER_TYPES, NAV, PERIODS, AUTO_LOCK_OPTS, DEFAULT_PAYS, DEFAULT_REC, ICON_CHOICES };
 })();

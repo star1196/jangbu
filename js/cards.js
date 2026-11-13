@@ -196,6 +196,7 @@ function viewCards(L) {
       ${cardsHtml || `<section class="card"><div class="empty">${ic('credit-card', 40, 'var(--sub)')}<span>등록한 카드가 없어요.</span></div></section>`}
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <button class="btn" style="flex:1 1 200px;min-height:52px;font-size:${px(15)}" data-act="goAddCard">${ic('plus', 18)}카드 추가</button>
+        ${feat('instView') ? `<button class="btn" style="flex:1 1 200px;min-height:52px;font-size:${px(15)}" data-act="goInst">${ic('list', 18)}할부 모아보기</button>` : ''}
         ${closed.length ? `<button class="btn ghost" data-act="toggleClosedCards">${S.showClosedCards ? '해지 카드 숨기기' : `해지 카드 보기 (${closed.length})`}</button>` : ''}
       </div>
       ${S.showClosedCards ? closed.map((c) => `<div class="closedcard"><b>${esc(c.name)} · ${cardTypeTxt(c)}${c.last4 ? ' · ··· ' + esc(c.last4) : ''}</b><span>발급 ${c.issueDate ? dateLabel(c.issueDate, true) : '—'} · 해지 ${c.closedDate ? dateLabel(c.closedDate, true) : '—'}</span><div class="chips"><button class="btn" data-act="openCard" data-id="${c.id}">내역 보기</button><button class="btn" data-act="reviveCard" data-id="${c.id}">다시 살리기</button></div></div>`).join('') : ''}
@@ -215,18 +216,18 @@ function cardPeriodRange() {
   }
 }
 function viewCardDetail(c) {
-  const [from, to] = cardPeriodRange();
+  const [from, to] = pfRange('card', '1개월'), q = pfOf('card', '1개월').q; // 모든 목록 공통 찾기 · 기간 (util.js)
   const ids = S.cardScope === '카드사 전체' && c.company ? cardsAll().filter((x) => x.company === c.company).map((x) => x.id) : [c.id];
-  const xs = liveTx().filter((x) => x.kind === 'out' && ids.includes(x.payMethodId) && x.date >= from && x.date <= to).sort(sortTx);
+  const xs = liveTx().filter((x) => x.kind === 'out' && ids.includes(x.payMethodId) && x.date >= from && x.date <= to && (!q || txHit(x, q))).sort(sortTx);
   const total = xs.reduce((s, x) => s + x.amount, 0);
   const agg = {}; xs.forEach((x) => { const k = isUnc(x) ? '' : x.accountId; agg[k] = (agg[k] || 0) + x.amount; });
   const dist = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const months = {}; xs.forEach((x) => { months[ymOf(x.date)] = (months[ymOf(x.date)] || 0) + x.amount; });
   const mk = Object.keys(months).sort().slice(-12), mmax = Math.max(1, ...mk.map((k) => Math.abs(months[k])));
-  const periods = ['이번 달', '지난달', '1년', '전체', '직접'].map((p) => `<button class="chip ${p === S.cardPeriod ? 'on' : ''}" style="min-height:40px;padding:0 12px;font-size:${px(13)}" data-act="cardPeriod" data-p="${p}">${p}</button>`).join('');
   return `<section class="card" style="flex:2 1 340px;min-width:0;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 class="h2" style="flex:1">${esc(c.name)} 보기${c.closed ? ' <span class="tag">해지</span>' : ''}</h2>${c.cardType !== 'check' && startDate() ? `<button class="btn" data-act="carryEdit" data-id="${c.id}">시작 이월${c.carry ? ' ✓' : ''}</button>` : ''}<button class="btn" data-act="editCard" data-id="${c.id}">카드 고치기</button></div>
-    <div class="chips" style="gap:6px">${periods}</div>
+    ${cardPlanPart(c)}
+    ${pfBar('card', '1개월', null, '가맹점 · 메모 · 금액 찾기')}
     ${c.company ? `<div class="seg">${['이 카드', '카드사 전체'].map((s) => `<button class="${s === S.cardScope ? 'on' : ''}" data-act="cardScope" data-s="${s}">${s === '카드사 전체' ? esc(c.company) + ' 모두' : '이 카드'}</button>`).join('')}</div>` : ''}
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span class="sub" style="font-size:${px(14)}">사용 합계</span><span class="amt ${clsOf(-total)}" style="font-size:${px(24)}">${moneyTxt(-total)}</span></div>
     ${dist.map(([id, v]) => { const a = accOf(id); return `<div class="distrow">${catGlyph(a || null, 18)}<span class="dn">${esc(a ? a.name : '미확인')}</span><span class="bar"><i style="width:${total ? Math.round(v / total * 100) : 0}%"></i></span><span class="dp">${total ? Math.round(v / total * 100) : 0}%</span></div>`; }).join('')}

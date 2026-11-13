@@ -4,11 +4,13 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
   if (S.screen === '보안·잠금') return viewSecurity(); // 모든 장부 공통 (switch.js)
+  if (S.screen === '저장 공간') return viewStorage(); // 모든 장부 공통 (safe.js)
+  if (S.screen === '할부 모아보기') return viewInst(L); // 모든 장부 공통 (inst.js)
   if (Store.current().type === 'club' && typeof clubScreen === 'function') { const h = clubScreen(L); if (h != null) return h; } // 친구회 전용 화면 (club.js)
   switch (S.screen) {
     case '홈': return viewHome(L);
@@ -96,9 +98,10 @@ function viewHome(L) {
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + startTodo() + pendingTodos() + cardTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + startTodo() + mergeTodo() + storageTodo() + pendingTodos() + cardTodos() + cardPlanTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
   const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
   return `<div class="stack">
+    ${homeTopAlerts()}
     <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·여행·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
     ${homeSavedSearch()}
     <div class="chips"><span class="sub" style="font-size:${px(14)};margin-right:4px">기간</span>${periods}</div>
@@ -254,7 +257,7 @@ function viewCal(L) {
   const y = S.calY, m = S.calM, ym = `${y}-${pad2(m + 1)}`;
   const first = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate(), prevDays = new Date(y, m, 0).getDate();
   const t = todayStr();
-  const monthTx = liveTx().filter((x) => ymOf(x.date) === ym);
+  const monthTx = txOfMonth(ym); // 그 달 것만 (util.js 달별 묶음)
   const byDay = {};
   monthTx.forEach((x) => { (byDay[+x.date.slice(8)] = byDay[+x.date.slice(8)] || []).push(x); });
   const sm = sumTx(monthTx.filter(counted));
@@ -305,7 +308,10 @@ function viewCal(L) {
 /* ───────── 목록 ───────── */
 function listFiltered() {
   const F = S.listF || {};
-  return liveTx().filter((x) => ymOf(x.date) === S.listYM
+  const P = pfOf('list', '월별'), q = P.q;
+  const [from, to] = P.p === '월별' ? ['', ''] : pfRange('list', '월별');
+  const base = P.p === '월별' ? txOfMonth(S.listYM) : liveTx().filter((x) => x.date >= from && x.date <= to);
+  return base.filter((x) => (!q || txHit(x, q))
     && (!F.accId || x.accountId === F.accId)
     && (!F.bankId || touches(x, F.bankId))
     && (!F.payId || x.payMethodId === F.payId || x.cardId === F.payId)
@@ -340,7 +346,7 @@ function viewList(L) {
       ? [['날짜', dateLabel(det.date, true)], ['보내는 통장', `${bankName(det.fromId)} −${won(det.amount)}원`], ['받는 통장', `${bankName(det.toId)} +${won(det.amount)}원`], ['메모', det.memo || '—'], ['합계', '이체는 수입·지출에 안 들어가요']]
       : det.kind === 'adj'
         ? [['날짜', dateLabel(det.date, true)], ['통장', bankName(det.bankId)], ['메모', det.memo || '—']]
-        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ['메모', det.memo || '—'],
+        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ['메모', det.memo || '—'], ...(det.dev ? [['넣은 기기', det.dev]] : []),
           ...(det.discount || det.pointUsed ? [['아낀 돈', `할인 ${won(det.discount || 0)}원 · 포인트 ${won(det.pointUsed || 0)}원`]] : []),
           ...(startDate() && det.date < startDate() ? [['합계', '시작점 이전이라 합계에서 빠져요']] : []),
           ...(isSep(det.bankId) ? [['합계', '별도 통장 안의 돈이라 가계부 합계에서 빠져요']] : [])];
@@ -355,8 +361,9 @@ function viewList(L) {
     <div class="stack" style="flex:2 1 460px;min-width:0;gap:12px">
       <div class="chips">${chips}<span style="flex:1"></span><button class="btn" data-act="toggleSel">${ic('list-checks', 18)}${S.selMode ? '선택 끝' : '여러 건 선택'}</button></div>
       ${bankSubChips}${cardSubChips}
+      ${F.unc ? '' : pfBar('list', '월별', '월별', '가맹점 · 메모 · 계정 · 금액 찾기')}
       <div class="calhead">
-        ${F.unc ? `<span style="font-size:${px(18)};font-weight:700">미확인 내역 전체</span>` : `<div class="calmonth"><button class="iconbtn" data-act="listMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="listMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>`}
+        ${F.unc ? `<span style="font-size:${px(18)};font-weight:700">미확인 내역 전체</span>` : pfOf('list').p !== '월별' ? `<span style="font-size:${px(18)};font-weight:700">${esc(pfOf('list').p)} · ${list.length}건</span>` : `<div class="calmonth"><button class="iconbtn" data-act="listMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="listMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>`}
         ${fchips ? `<div class="chips">${fchips}</div>` : ''}
       </div>
       ${S.selMode ? `<div class="chips"><button class="chip" data-act="pickAll">이 화면 모두 고르기</button><span class="sub small">고른 뒤 아래 막대에서 한 번에 바꿔요.</span></div>` : ''}
@@ -463,11 +470,12 @@ function viewSettings() {
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
+      ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${feat('reminders') ? sec('기억할 것', rowB('기억할 것 (끝나는 날 알림)', `${rems.length}개${nearRem != null ? ' · 가까운 것 D-' + nearRem : ''}`, 'goRem')) : ''}
-      ${sec('자료', rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + (feat('receipt') ? rowB('영수증 사진 붙이기', `${rcPhotoOn() ? '켜짐' : '꺼짐'} · ${photoStats().n}장 · ${mb(photoStats().bytes)}`, 'rcPhotoSet') : '') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}
+      ${sec('자료', rowB('저장 공간', storageLine(), 'goStorage') + rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + (feat('receipt') ? rowB('영수증 사진 붙이기', `${rcPhotoOn() ? '켜짐' : '꺼짐'} · ${photoStats().n}장 · ${mb(photoStats().bytes)}`, 'rcPhotoSet') : '') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}
       <input type="file" data-backup="merge" hidden>
       ${plansRows ? sec('계획 · 보안', plansRows) : ''}
       ${sec('보안 · 잠금', settingsLockRows())}
@@ -565,8 +573,12 @@ function viewDialog() {
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
   } else if (/^bw/.test(D.type)) {
     body = viewBundleDlg(D); // 함께 열기 (switch.js)
+  } else if (/^sf/.test(D.type)) {
+    body = viewSafeDlg(D); // 다른 장부 백업 · 합친 뒤 · 사진 내보내기 · 속도 시험 (safe.js)
+  } else if (/^ins/.test(D.type)) {
+    body = viewInstDlg(D); // 카드 메모 · 계획 · 해지일 (inst.js)
   } else if (/^club/.test(D.type) && typeof viewClubDlg === 'function') {
-    body = viewClubDlg(D); // 친구회 (club.js)
+    body = viewClubDlgX(D) || viewClubDlg(D); // 친구회 (club3.js 새 것 먼저 · club.js)
   } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {
     body = viewResetDlg(D); // 초기화 · 장부 지우기 · 가져오기 (reset.js)
   } else if (D.type === 'carry') {
