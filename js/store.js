@@ -304,6 +304,16 @@ const Store = (() => {
           await put('tx', { ...x, advBy: null, advByOld: x.advBy, memo: x.memo && x.memo.includes(note) ? x.memo : [note, x.memo].filter(Boolean).join(' · ') }, true);
         } else if (x.club && x.club.type === 'advAsk') await put('tx', { ...x, club: null }, true);
       }
+    }],
+    [7, async () => { // 2026-11-17 v30 장부끼리 따로: 이 장부가 생기기 전에 만든 서식 · 자동 분류 규칙 = 다른 장부에서 가져온 것 → 지우지 않고 「다른 장부에서 온 것」 표시(자동으로 안 씀)
+      const st = get('meta', 'settings') || {}, born = (st.createdAt || 0) - 60000;
+      if (born > 0) for (const col of ['templates', 'rules']) for (const o of all(col)) if (!o.foreign && !o.copiedFrom && (o.createdAt || 0) < born) await put(col, { ...o, foreign: true, foreignNote: '이 장부를 만들기 전에 만든 것 (다른 장부에서 가져옴)' }, true);
+      // 친구회: 가계부 사전을 통째로 가져온 경우 → 예전 사전은 dictOld로 그대로 두고, 친구회 기본 사전 + 친구회 계정에 맞는 추가 낱말만
+      if (ledger.type === 'club' && Array.isArray(st.dict)) {
+        const home = new Set(DATA.DICT.map(([w]) => w)), accs = new Set(all('accounts').map((a) => a.name));
+        const extra = st.dict.filter(([w, a]) => !home.has(w) && accs.has(a) && !DATA.CLUB_DICT.some(([w2]) => w2 === w));
+        if (st.dict.filter(([w]) => home.has(w)).length > 20) await put('meta', { ...st, dictOld: st.dict, dict: [...DATA.CLUB_DICT, ...extra] }, true);
+      }
     }]
   ];
   const LATEST = MIGRATIONS[MIGRATIONS.length - 1][0];

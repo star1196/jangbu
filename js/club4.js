@@ -431,7 +431,8 @@ const CLUB4_ACT = {
     await Store.put('tx', { ...x, accountId: acc ? acc.id : x.accountId, club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: 0, past: true } });
     render(); toast(`${dTxt(x.date)} ${won(x.amount)}원을 ${m.name} 회비로 이었어요 · ${P.alloc.length ? ymTxt(P.alloc[0].ym) + '부터' : ''}`, { items: [{ col: 'tx', id: x.id, before }] });
   },
-  exMode: (el) => { S.dialog.d.mode = el.dataset.v; render(); }
+  exMode: (el) => { S.dialog.d.mode = el.dataset.v; render(); },
+  coAccAll: () => { const d = S.dialog && S.dialog.d; if (!d) return; d.accAll = !(d.accAll || d.accQ); if (!d.accAll) d.accQ = ''; render(); }
 };
 function onClub4Input(el) {
   if (el.dataset && el.dataset.rbq != null && S.rb) { S.rb.q = el.value; const pos = el.selectionStart; render(); const i = $app.querySelector('[data-rbq]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { /* 그대로 */ } } return true; }

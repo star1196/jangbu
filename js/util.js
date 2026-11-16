@@ -109,6 +109,9 @@ function txSearchText(x) {
 }
 const txHit = (x, q) => { q = norm(q); return !q || txSearchText(x).includes(q); };
 
+/* ── 계정 ☆ 고정 (자주 쓰는 계정을 맨 위에 · 장부마다 따로) ── */
+const pinnedAccs = (kind) => Store.all('accounts').filter((a) => a.kind === kind && a.pin && !a.hidden).sort((a, b) => (a.pinOrder || 0) - (b.pinOrder || 0) || ko(a.name, b.name));
+
 /* ── 모든 목록 공통: 찾기 칸 + 기간 [1개월][2개월][3개월][6개월][1년][전체][직접 지정] ──
    key마다 따로 기억 (S.pf[key] = { q, p, from, to }). first: 맨 앞에 더 둘 칩 (예: 목록의 '월별') */
 const PF_CHIPS = ['1개월', '2개월', '3개월', '6개월', '1년', '전체', '직접 지정'];

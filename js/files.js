@@ -12,7 +12,9 @@ function loadXLSX() {
 }
 
 /* ── 분류 사전 · 온라인몰 (장부마다, 처음엔 기본 목록) ── */
-const dictOf = () => ((Store.get('meta', 'settings') || {}).dict || DATA.DICT);
+// 기본 사전은 장부 종류별로 따로 (가계부 · 병원 = 가계부용 / 친구회 = 친구회용). 고친 사전(settings.dict)은 그 장부 안에만.
+const baseDict = () => ((Store.current() || {}).type === 'club' ? DATA.CLUB_DICT : DATA.DICT);
+const dictOf = () => ((Store.get('meta', 'settings') || {}).dict || baseDict());
 const mallsOf = () => ((Store.get('meta', 'settings') || {}).malls || DATA.MALLS);
 // 온라인몰: 한 결제에 여러 물건 → 자동 분류하지 않고 늘 미확인 ([나누기]로 나눠 적기)
 const isMall = (merchant) => { const m = norm(merchant); return !!m && mallsOf().some((w) => norm(w) && m.includes(norm(w))); };
@@ -28,7 +30,7 @@ function classify(merchant, kind) {
   const m = norm(merchant); if (!m) return null;
   if (isMall(merchant)) return null;
   const ok = (id) => { const a = accOf(id); return a && a.kind === kind ? id : null; };
-  const rules = Store.all('rules');
+  const rules = Store.all('rules').filter((r) => !r.foreign); // 다른 장부에서 온 규칙은 안 씀 (장부끼리 따로)
   const ex = rules.find((r) => r.matchType === 'exact' && norm(r.pattern) === m && ok(r.accountId));
   if (ex) return { accountId: ex.accountId, ruleId: ex.id };
   const ct = rules.filter((r) => r.matchType === 'contains' && norm(r.pattern) && m.includes(norm(r.pattern)) && ok(r.accountId)).sort((a, b) => norm(b.pattern).length - norm(a.pattern).length)[0];
@@ -66,7 +68,7 @@ function parseAmt(v) {
 }
 
 /* ── 칸 종류 ── */
-const FIELDS = [['', '고르세요'], ['bal', '잔액(통장)'], ['date', '날짜'], ['merchant', '가맹점·내용'], ['out', '금액(나간 돈)'], ['in', '금액(들어온 돈)'], ['amount', '금액(+/− 한 칸)'], ['inst', '할부 개월'], ['cardNo', '카드번호'], ['approval', '승인번호'], ['memo', '메모'], ['skip', '쓰지 않음']];
+const FIELDS = [['', '고르세요'], ['bal', '잔액(통장)'], ['date', '날짜'], ['merchant', '가맹점·내용'], ['out', '금액(나간 돈)'], ['in', '금액(들어온 돈)'], ['amount', '금액(+/− 한 칸)'], ['inst', '할부 개월'], ['cardNo', '카드번호'], ['approval', '승인번호'], ['memo', '송금메모/적요'], ['skip', '쓰지 않음']];
 function guessField(h) {
   const s = norm(h);
   if (/일자|날짜|거래일|이용일|승인일|사용일|일시/.test(s)) return 'date';
@@ -78,7 +80,7 @@ function guessField(h) {
   if (/입금|맡기신/.test(s)) return 'in';
   if (/^금액$|거래금액/.test(s)) return 'amount';
   if (/가맹점|이용처|사용처|적요|내용|거래처|기재|받는분|보낸분|상호/.test(s)) return 'merchant';
-  if (/메모|비고/.test(s)) return 'memo';
+  if (/송금메모|메모|비고|받는분표시|내통장표시|받는분에게/.test(s)) return 'memo';
   return '';
 }
 
@@ -254,18 +256,60 @@ async function startImport(file) {
 function setImpHeader(o) {
   const hdr = (o.rows[o.h] || []).map((c) => String(c ?? '').trim());
   const sig = o.pdf ? `pdf ${norm(o.pdfCo) || '?'}|` + sigOf(hdr) : sigOf(hdr); // PDF는 카드사·은행 이름으로 구분
-  const tpls = Store.all('templates');
-  const exact = tpls.find((t) => t.sig === sig);
-  const near = exact ? null : tpls.map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
+  // 서식은 이 장부에서 만든 것만 (다른 장부에서 온 서식은 자동으로 안 씀) · 모양(제목 줄)이 정확히 같을 때만 자동
+  const tpls = Store.all('templates').filter((t) => !t.foreign);
   const type00 = !o.pdf && looksCard(hdr) ? 'card' : '';
+  const exactAll = tpls.filter((t) => t.sig === sig);
+  const exactCard = exactAll.find((t) => (t.target || {}).type === 'card'), exactBank = exactAll.filter((t) => (t.target || {}).type === 'bank');
+  // 카드 명세서(모양이 카드)는 예전처럼 같은 모양 카드 서식을 바로 · 통장(또는 모르는 모양)은 [어떤 파일인가요?]를 먼저
+  const exact = exactCard && (type00 === 'card' || o.pdf || !exactBank.length) ? exactCard : o.pdf ? exactAll[0] : null;
+  const near = exact || (!o.pdf && type00 !== 'card') ? null : tpls.filter((t) => (t.target || {}).type === 'card').map((t) => [t, sigSimilar(sig, t.sig)]).filter((p) => p[1] >= 0.6).sort((a, b) => b[1] - a[1])[0];
   const want = S.imp && S.imp.wantCard; // 처음 시작하기에서 '이 카드 지난달 명세서'로 들어온 경우
   const type0 = want && !type00 ? 'card' : type00;
   const card0 = type0 === 'card' && want ? want : type0 === 'card' && cardsOpen().length === 1 ? cardsOpen()[0].id : '';
   S.imp = { step: 'map', wantCard: want, name: o.name, rows: o.rows, h: o.h, hdr, sig, sheet: o.sheet, sheets: o.sheets, sheetsN: (o.sheets || []).length || 1, tplId: null, target: { type: type0, cardId: card0, bankId: '' }, map: {}, pdf: !!o.pdf, autoHead: !!o.auto };
   S.imp.map = mapFor(hdr, type0); // 카드 명세서면 표준 칸 사전으로 미리 채움 (모르는 칸은 필요없음)
   if (exact) { applyTemplate(exact); buildItems(); S.imp.step = 'preview'; checkAllDup(); }
+  else if (!o.pdf && type0 !== 'card') kindStart(exactBank); // 통장 파일: 입금 · 출금 · 입출금 · 어느 통장인지 먼저
   else if (near) { S.imp.ask = near[0].id; }
   render();
+}
+/* ── 통장 파일: [입금 내역] [출금 내역] [입출금 모두] [카드 명세서] + 어느 통장 (서식이 짐작해도 확인) ── */
+function flowGuess(I) {
+  const m = mapFor(I.hdr, 'bank'), col = (f) => Object.keys(m).filter((k) => m[k] === f).map(Number)[0];
+  const cO = col('out'), cI = col('in'), cA = col('amount'); let o = 0, i = 0;
+  dataRowsOf(I, 200).forEach((r) => { if (cO != null && parseAmt(r[cO])) o++; if (cI != null && parseAmt(r[cI])) i++; if (cA != null) { const a = parseAmt(r[cA]); if (a < 0) o++; else if (a > 0) i++; } });
+  return o && !i ? 'out' : i && !o ? 'in' : 'both';
+}
+function kindStart(cands) {
+  const I = S.imp, one = cands.length === 1 ? cands[0] : null;
+  I.step = 'kind'; I.kindCands = cands.map((t) => t.id);
+  I.target = { type: 'bank', cardId: '', bankId: one ? one.target.bankId || '' : (banksOpen('home')[0] || banksOpen()[0] || {}).id || '', flow: one ? one.flow || 'both' : flowGuess(I) };
+  I.flowGuess = flowGuess(I);
+}
+const FLOWS = [['in', '입금 내역', '들어온 돈만'], ['out', '출금 내역', '나간 돈만'], ['both', '입출금 모두', '들어온 돈 · 나간 돈']];
+const flowTxt = (f) => (FLOWS.find((x) => x[0] === (f || 'both')) || FLOWS[2])[1];
+const tplKey = (t) => (t.target && t.target.type === 'card' ? 'card' : 'bank');
+function tplFor(I) { // 이 파일 모양 + 고른 종류 · 통장(카드) · 입출금이 모두 같은 서식
+  const T = I.target;
+  return Store.all('templates').find((t) => !t.foreign && t.sig === I.sig && tplKey(t) === T.type && (T.type === 'card' ? (t.target.cardId || '') === (T.cardId || '') : (t.target.bankId || '') === (T.bankId || '') && (t.flow || 'both') === (T.flow || 'both')));
+}
+function viewKind() {
+  const I = S.imp, T = I.target, cands = (I.kindCands || []).map((id) => Store.get('templates', id)).filter(Boolean);
+  const opt = (type, flow, l, d) => { const on = T.type === type && (type === 'card' || (T.flow || 'both') === flow); return `<button class="typebtn ${on ? 'on' : ''}" data-act="impKind" data-t="${type}" data-f="${flow}"><span style="font-size:${px(17)};font-weight:700">${l}</span><span class="sub small">${d}</span></button>`; };
+  const found = tplFor(I);
+  return `<div class="stack" style="max-width:720px;gap:14px">
+    <section class="card card-pad" style="display:flex;align-items:flex-start;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:${px(16)};font-weight:700">${esc(I.name)}</span>
+      <span class="sub small">파일 모양으로 짐작: ${flowTxt(I.flowGuess)}${cands.length ? ` · 같은 모양 서식 ${cands.map((t) => `「${esc(t.name)}」`).join(' ')}` : ' · 처음 보는 모양'}</span></div></section>
+    ${impPeekTable(I)}
+    <section class="card card-pad stack" style="gap:12px"><span class="label">어떤 파일인가요?</span>
+      <div class="typegrid">${FLOWS.map(([f, l, d]) => opt('bank', f, `통장 · ${l}`, d)).join('')}${opt('card', '', '카드 명세서', '카드 쓴 내역')}</div>
+      ${T.type === 'bank' ? `<span class="label">어느 통장인가요?</span>${feat('banks') ? bankChips(T.bankId, 'impBank', null, true) : '<span class="sub small">통장 기능을 꺼 두었어요.</span>'}`
+        : `<span class="label">어느 카드인가요?</span><div class="chips">${cardsOpen().map((c) => `<button class="chip ${T.cardId === c.id ? 'on' : ''}" data-act="impCard" data-id="${c.id}">${esc(cardLabel(c))}</button>`).join('')}</div>`}
+      <span class="sub small">${found ? `${ic('check', 14)} 기억한 서식 「${esc(found.name)}」과 모양 · 종류 · ${T.type === 'card' ? '카드' : '통장'}가 모두 같아요. 바로 미리보기로 가요.` : '이 종류 · 이 통장으로 기억한 서식이 없어요. 다음 화면에서 칸을 확인해 주세요.'}</span></section>
+    <div class="stickyfoot"><span class="sub" style="flex:1 1 200px;font-size:${px(14)}">같은 은행이라도 입금 · 출금 파일 서식은 따로 기억해요.</span>
+      <button class="btn big" style="flex:1" data-act="impReset">취소</button><button class="btn ink big" style="flex:1.4" data-act="impKindGo" ${T.type === 'bank' ? (T.bankId || !feat('banks') ? '' : 'disabled') : T.cardId ? '' : 'disabled'}>다음</button></div>
+  </div>`;
 }
 // 제목 줄 고르기 화면 (못 찾았을 때 · [제목 줄 다시 고르기])
 function viewPickHead(L) {
@@ -281,7 +325,7 @@ function viewPickHead(L) {
   </div>`;
 }
 function applyTemplate(t) {
-  const I = S.imp; I.tplId = t.id; I.target = { ...t.target }; I.map = {};
+  const I = S.imp; I.tplId = t.id; I.target = { ...t.target, flow: t.flow || (t.target || {}).flow || 'both' }; I.map = {};
   I.hdr.forEach((h, i) => { const f = t.byName && t.byName[norm(h)]; I.map[i] = f != null ? f : (t.map[i] || ''); });
 }
 // 제목 줄 아래 실제 내역 줄(날짜가 든 줄) 처음 몇 개
@@ -355,12 +399,16 @@ function buildItems() {
     }
     items.push(it);
   });
+  // 입금 내역 / 출금 내역 파일이면 그쪽 줄만 (다른 쪽은 빼고 몇 줄인지 알려 줌)
+  if (T.type === 'bank' && (T.flow === 'in' || T.flow === 'out')) { const keep = items.filter((it) => it.kind === T.flow); I.flowDrop = items.length - keep.length; items.length = 0; keep.forEach((it, k) => { it.i = k; items.push(it); }); } else I.flowDrop = 0;
   // 중복 제외: 날짜+금액+가맹점이 같은 내역이 이미 있으면 건너뜀. 파일 안에 실제로 2건이면 둘 다(순번으로 비교)
   const keyOf = (x) => `${x.date}|${x.kind}|${x.amount}|${norm(x.merchant)}`;
   // 나눈 결제([나누기])는 원래 금액 한 건으로 셈 → 같은 명세서를 또 올려도 중복 안 생김
   const have = {}; liveTx().forEach((x) => { if (!isMoney(x) || (x.splitId && x.splitIdx !== 1)) return; const k = keyOf(x.splitId ? { ...x, amount: x.splitTotal } : x); have[k] = (have[k] || 0) + 1; });
   const seen = {};
   items.forEach((it) => { const k = keyOf(it); seen[k] = (seen[k] || 0) + 1; it.dupKey = k + '#' + seen[k]; if (seen[k] <= (have[k] || 0)) { it.dup = true; it.use = false; } });
+  // 서식을 고친 뒤 다시 읽기: 그 파일로 이미 들어간 내역(같은 날 · 같은 종류 · 같은 금액)은 중복으로
+  if (I.reImp) { const got = {}; liveTx().filter((x) => x.source === '파일:' + I.reImp).forEach((x) => { const k = `${x.date}|${x.kind}|${x.amount}`; got[k] = (got[k] || 0) + 1; }); items.forEach((it) => { const k = `${it.date}|${it.kind}|${it.amount}`; if (!it.dup && got[k] > 0) { got[k]--; it.dup = true; it.use = false; } }); }
   // 직접 입력한 것과 같은 건? (금액 같음 + 날짜 ±1일 + 같은 카드 또는 승인번호)
   const near1 = (a, b) => Math.abs(parseYmd(a) - parseYmd(b)) <= 86400000;
   // 이름도 봄(손으로 넣은 가맹점 · 친구회는 회원 이름과 입금자 별칭). 한 건은 한 번만 짝지음. 이미 짝지은 손 입력은 같은 파일 줄하고만.
@@ -398,7 +446,7 @@ function buildItems() {
   // 자동 분류 + 카드 취소 짝짓기
   items.forEach((it) => {
     if (it.bill) { it.pend = null; return; }
-    const k = it.kind, r = it.accId ? null : classify(it.merchant, k);
+    const k = it.kind, r = it.accId ? null : classify(it.merchant, k) || (it.memo ? classify(it.memo, k) : null); // 송금메모로도 분류 (예: "정기모임 식대")
     if (r) { it.accId = r.accountId; it.auto = true; }
     if (it.kind === 'out' && it.amount < 0) {
       const orig = items.find((o) => o !== it && o.amount === -it.amount && norm(o.merchant) === norm(it.merchant) && o.payId === it.payId)
@@ -535,6 +583,7 @@ function viewFile(L) {
     </div>`;
   }
   if (I.step === 'pickHead') return viewPickHead(L);
+  if (I.step === 'kind') return viewKind(L);
   if (I.step === 'map') return viewMap(L);
   if (I.step === 'preview') return viewPreview(L);
   if (I.step === 'done') {
@@ -570,7 +619,8 @@ function viewMap(L) {
       <div style="flex:0 1 240px;min-width:0;display:flex;flex-direction:column;gap:3px"><select class="input" style="min-height:48px" data-map="${i}" aria-label="${esc(h)} 칸 종류">${opts.replace(`value="${v}"`, `value="${v}" selected`)}</select>${isCard && f && f[2] && v && v !== 'skip' ? `<span class="sub small">${esc(f[2])}</span>` : ''}</div></div>`;
   }).join('');
   const has = (f) => Object.values(I.map).includes(f);
-  const ready = T.type && (T.type === 'card' ? (T.cardId || has('cardNo')) : T.bankId || !feat('banks')) && has('date') && has('merchant') && (has('out') || has('in') || has('amount'));
+  const needMemo = T.type === 'bank' && T.flow === 'out' && !has('memo') && !I.noMemo && !I.pdf;
+  const ready = T.type && (T.type === 'card' ? (T.cardId || has('cardNo')) : T.bankId || !feat('banks')) && has('date') && has('merchant') && (has('out') || has('in') || has('amount')) && !needMemo;
   const status = (isCard ? [['이용일', has('date')], ['사용처', has('merchant')], ['이용금액', has('out') || has('amount')]] : [['날짜', has('date')], ['가맹점·내용', has('merchant')], ['금액', has('out') || has('in') || has('amount')]]).map(([l, ok]) => `<span class="mstat ${ok ? 'ok' : ''}">${ic(ok ? 'check' : 'circle-alert', 16)}${l}</span>`).join('');
   return `<div class="stack" style="max-width:860px;gap:14px">
     <section class="card card-pad" style="display:flex;align-items:flex-start;gap:14px">${ic('file-spreadsheet', 28, 'var(--sub)')}
@@ -584,7 +634,10 @@ function viewMap(L) {
       ${T.type === 'card' ? `<span class="sub small">어느 카드인가요? (파일에 카드번호 칸이 있으면 뒤 4자리로 저절로 나눠요)</span>
         <div class="chips">${cardsOpen().map((c) => `<button class="chip ${T.cardId === c.id ? 'on' : ''}" data-act="impCard" data-id="${c.id}">${esc(cardLabel(c))}</button>`).join('')}<button class="chip" data-act="goAddCard">${ic('plus', 14)}카드 추가</button></div>` : ''}
       ${T.type === 'bank' && feat('banks') ? `<span class="sub small">어느 통장인가요?</span>${bankChips(T.bankId, 'impBank', null, true)}` : ''}
+      ${T.type === 'bank' ? `<span class="sub small">입금 · 출금 (같은 은행이라도 따로 기억해요)</span><div class="seg wrap">${FLOWS.map(([f, l]) => `<button class="${(T.flow || 'both') === f ? 'on' : ''}" data-act="impFlow" data-f="${f}">${l}</button>`).join('')}</div>` : ''}
+      ${I.likeName ? `<span class="sub small">${ic('info', 14)} 같은 모양의 「${esc(I.likeName)}」 칸을 미리 채워 두었어요(추천). 맞는지 확인해 주세요.</span>` : ''}
     </section>
+    ${needMemo ? `<div class="bigwarn soft">${ic('circle-alert', 22)}<div style="display:flex;flex-direction:column;gap:6px"><span>출금 파일은 <b>송금메모/적요</b> 칸(예: D열 송금메모)을 꼭 골라 주세요. 메모로 들어가고 찾기 · 자동 분류에 써요.</span><label class="check" style="min-height:40px"><input type="checkbox" data-act="impNoMemo" ${I.noMemo ? 'checked' : ''}>이 파일에는 송금메모 칸이 없어요</label></div></div>` : ''}
     <div class="chips">${status}</div>
     <section class="card" style="overflow:hidden">${rows}</section>
     <div class="stickyfoot"><span class="sub" style="flex:1 1 200px;font-size:${px(14)}">${ready ? '좋아요. 이 모양을 기억하고 미리보기로 갈게요.' : (isCard ? '카드를 고르고, 이용일·사용처·이용금액 칸을 알려 주세요. 나머지는 [필요없음]이어도 돼요.' : '어디 내역인지 고르고, 날짜·가맹점·금액 칸을 알려 주세요.')}</span>
@@ -629,6 +682,7 @@ function viewPreview(L) {
       <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:${px(15)};font-weight:700">${esc(I.name)}</span>
       <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}${st.arch ? ` · 시작점 이전 보관 ${st.arch}건` : ''}</span>${totalLine(I)}</div></section>
     <span class="sub" style="font-size:${px(14)}">칸을 눌러 바로 고칠 수 있어요. 왼쪽 네모를 끄면 그 줄은 저장하지 않아요. [확인하고 저장]을 누르기 전에는 장부에 들어가지 않아요.</span>
+    ${I.flowDrop ? `<div class="infoline">${ic('info', 18)}${flowTxt(I.target.flow)} 파일이라 ${I.target.flow === 'in' ? '출금' : '입금'} ${I.flowDrop}줄은 뺐어요. 둘 다 넣으려면 [다시 올리기] → 「입출금 모두」.</div>` : ''}
     ${balCheckHtml(I)}
     <section class="card impbulk"><span class="sub small" style="flex:1 1 100%">한 번에: 체크한 줄의 분류를 한꺼번에 바꾸거나, 아래 줄마다 하나씩 고쳐도 돼요.</span>
       <button class="btn" data-act="impChkAll">${I.items.every((it) => it.use || it.dup) ? '모두 끄기' : '모두 체크'}</button>
@@ -702,7 +756,9 @@ async function saveImport() {
   // 친구회: 입금자 이름(별칭) = 회원 + 월 회비 배수 → 회비 자동 배정 / 수동 회원은 보류 (club.js)
   const club = typeof clubAfterImport === 'function' ? await clubAfterImport(impId) : null;
   if (club) uncN = Math.max(0, uncN - club.auto);
-  await Store.put('imports', { id: impId, name: I.name, saved: savedN, tplName: (Store.get('templates', I.tplId) || {}).name || '' });
+  // 올린 파일 기록: 서식을 고친 뒤 [다시 읽기]를 할 수 있게 읽은 줄도 같이 (2,000줄까지 · 장부 비밀번호로 잠김)
+  const keepRows = !I.pdf && I.rows && I.rows.length <= 2000 ? I.rows.map((r) => (r || []).map((x) => (x == null ? '' : x instanceof Date ? x.toISOString() : x))) : null;
+  await Store.put('imports', { id: impId, name: I.name, saved: savedN, tplName: (Store.get('templates', I.tplId) || {}).name || '', tplId: I.tplId || '', target: { ...I.target }, ...(keepRows ? { rows: keepRows, h: I.h, sheet: I.sheet || '' } : {}) });
   S.busy = false;
   const bc = balCheck({ ...I, saved: true }); // 통장 잔액 칸이 있었으면: 저장한 뒤 은행 잔액 ↔ 앱 잔액
   S.imp = { step: 'done', savedN, uncN, archN, club, bc };
@@ -712,10 +768,13 @@ async function saveImport() {
 async function saveTemplate() {
   const I = S.imp, T = I.target;
   const c = payOf(T.cardId), b = bankOf(T.bankId);
-  const name = T.type === 'card' ? `${(c && (c.company || c.name)) || '카드'} 서식` : `${(b && (b.bank || b.name)) || '통장'} 서식`;
+  const flow = T.type === 'bank' ? T.flow || 'both' : '';
+  const name = T.type === 'card' ? `${(c && (c.company || c.name)) || '카드'} 서식` : `${(b && (b.bank || b.name)) || '통장'}${b && b.name && b.bank && !b.name.includes(b.bank) ? ' ' + b.name : ''} ${flowTxt(flow).replace(' 내역', '')} 서식`;
   const byName = {}; I.hdr.forEach((h, i) => { if (h) byName[norm(h)] = I.map[i] || ''; });
   const old = I.tplId ? Store.get('templates', I.tplId) : null;
-  const t = await Store.put('templates', { ...(old || {}), name, sig: I.sig, map: { ...I.map }, byName, target: { ...T } });
+  const keepName = old && old.nameEdited ? old.name : name;
+  const sample = I.pdf ? null : { rows: I.rows.slice(0, Math.min(I.rows.length, I.h + 9)).map((r) => (r || []).map((x) => (x == null ? '' : x instanceof Date ? x.toISOString() : x))), h: I.h };
+  const t = await Store.put('templates', { ...(old || {}), name: keepName, sig: I.sig, map: { ...I.map }, byName, target: { type: T.type, cardId: T.cardId || '', bankId: T.bankId || '' }, flow, sample, foreign: false });
   I.tplId = t.id;
 }
 
@@ -872,9 +931,53 @@ async function setDict(dict, malls) { const st = Store.get('meta', 'settings') |
 
 /* ── 기억한 파일 모양 (설정) ── */
 function viewTemplates() {
-  const ts = Store.all('templates');
-  return `<div class="stack"><div class="infoline">${ic('info', 18)}한 번 칸을 알려 준 파일 모양이에요. 같은 모양 파일은 저절로 읽어요. 카드사가 모양을 바꾸면 칸 지정 화면이 다시 떠요.</div>
-    <section class="card" style="padding:4px 22px">${ts.length ? ts.map((t) => `<div class="row" style="cursor:default">${ic('file-spreadsheet', 20, 'var(--sub)')}<span class="k" style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">${esc(t.name)}</span><span class="sub small">${t.target.type === 'card' ? '카드 명세서' : '통장 거래내역'} · ${esc(t.sig.split('|').filter(Boolean).slice(0, 4).join(' · '))}</span></span><button class="btn" data-act="tplDel" data-id="${t.id}">지우기</button></div>`).join('') : `<p class="sub" style="margin:0;padding:16px 0">기억한 모양이 없어요.</p>`}</section></div>`;
+  const ts = Store.all('templates'), own = ts.filter((t) => !t.foreign), foreign = ts.filter((t) => t.foreign);
+  const imps = Store.all('imports');
+  const row = (t) => { const T = t.target || {}, who = T.type === 'card' ? cardLabel(payOf(T.cardId) || { name: '카드 고르지 않음' }) : bankName(T.bankId) || '통장 고르지 않음', re = imps.filter((x) => x.tplId === t.id && x.rows).length;
+    return `<div class="tplrow">${ic('file-spreadsheet', 20, 'var(--sub)')}<span style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px"><b>${esc(t.name)}</b><span class="sub small">${T.type === 'card' ? '카드 명세서' : `통장 · ${flowTxt(t.flow)}`} · ${esc(who)}${t.copiedFrom ? ` · 「${esc(t.copiedFrom)}」에서 가져옴` : ''}${re ? ` · 올린 파일 ${re}개` : ''}</span><span class="sub small">${esc(t.sig.split('|').filter(Boolean).slice(0, 5).join(' · '))}</span></span>
+      <span class="chips" style="gap:6px">${t.foreign ? `<button class="btn" data-act="tplUse" data-id="${t.id}">이 장부 서식으로 쓰기</button>` : `<button class="btn" data-act="tplEdit" data-id="${t.id}">고치기</button>`}<button class="btn" data-act="tplDel" data-id="${t.id}">지우기</button></span></div>`; };
+  const cards = own.filter((t) => tplKey(t) === 'card'), banks = own.filter((t) => tplKey(t) === 'bank');
+  const byCo = {}; cards.forEach((t) => { const c = payOf(t.target.cardId); const k = (c && (c.company || c.name)) || '카드'; (byCo[k] = byCo[k] || []).push(t); });
+  const byBank = {}; banks.forEach((t) => { const b = bankOf(t.target.bankId); const k = (b && (b.bank || b.name)) || '은행 모름'; (byBank[k] = byBank[k] || []).push(t); });
+  const group = (title, obj) => Object.keys(obj).length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">${title}</h2>${Object.entries(obj).sort((a, b) => ko(a[0], b[0])).map(([k, list]) => `<span class="label" style="display:block;margin-top:8px">${esc(k)}</span>${list.map(row).join('')}`).join('')}</section>` : '';
+  return `<div class="stack"><div class="infoline">${ic('info', 18)}한 번 칸을 알려 준 파일 모양이에요. 제목 줄 · 칸이 <b>정확히 같을 때만</b> 저절로 읽고, 조금이라도 다르면 물어봐요. 카드 / 통장(은행 · 통장 · 입금 · 출금)마다 따로 기억해요. 이 장부 안에만 있어요.</div>
+    ${group('카드 명세서', byCo)}${group('통장 (은행별)', byBank)}
+    ${!own.length ? `<section class="card card-pad"><p class="sub" style="margin:0">기억한 모양이 없어요.</p></section>` : ''}
+    ${foreign.length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">다른 장부에서 온 서식 <span class="sub" style="font-weight:400">· 자동으로 안 써요</span></h2><span class="sub small">이 장부를 만들기 전에 만든 서식이에요(다른 장부에서 가져옴). 장부끼리 섞이지 않게 따로 두었어요. 지우지 않았어요.</span>${foreign.map(row).join('')}</section>` : ''}</div>`;
+}
+/* 서식 고치기: 이름 · 종류(입금/출금/입출금/카드) · 통장/카드 · 제목 줄 · 칸 지정 + 최근 파일 5줄 미리보기 · 다시 읽기 */
+function tplDraft(t) {
+  const imp = Store.all('imports').filter((x) => x.tplId === t.id && x.rows).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+  const src = imp ? { rows: imp.rows, h: imp.h } : t.sample || null;
+  const hdr = src ? (src.rows[src.h] || []).map((c) => String(c ?? '').trim()) : Object.keys(t.byName || {});
+  const map = {}; hdr.forEach((h, i) => { map[i] = (t.byName || {})[norm(h)] ?? (t.map || {})[i] ?? ''; });
+  return { name: t.name, type: tplKey(t), flow: t.flow || 'both', bankId: t.target.bankId || '', cardId: t.target.cardId || '', h: src ? src.h : 0, map, src, imp: imp ? imp.id : '' };
+}
+function tplPreview(d) {
+  if (!d.src) return '<span class="sub small">예전에 만든 서식이라 미리보기 줄이 없어요. 그 파일을 한 번 더 올리면 생겨요.</span>';
+  const col = (f) => Object.keys(d.map).filter((k) => d.map[k] === f).map(Number);
+  const cD = col('date')[0], cM = col('merchant'), cO = col('out')[0], cI = col('in')[0], cA = col('amount')[0], cMemo = col('memo')[0], cB = col('bal')[0];
+  const rows = d.src.rows.slice(d.h + 1).filter((r) => (r || []).some((c) => parseDateCell(c))).slice(0, 5);
+  if (!rows.length) return '<span class="sub small">이 제목 줄 아래에 날짜가 든 줄이 없어요. 제목 줄을 다시 골라 주세요.</span>';
+  return `<table class="bltab small"><thead><tr><th>날짜</th><th>내용</th><th class="r">금액</th><th>송금메모</th><th class="r">잔액</th></tr></thead><tbody>${rows.map((r) => { const o = cO != null ? parseAmt(r[cO]) : 0, inn = cI != null ? parseAmt(r[cI]) : 0, a = cA != null ? parseAmt(r[cA]) : 0, v = o ? -Math.abs(o) : inn ? Math.abs(inn) : a; return `<tr><td>${esc(parseDateCell(r[cD]) || '?')}</td><td>${esc(cM.map((c) => String(r[c] ?? '').trim()).filter(Boolean).join(' '))}</td><td class="r ${v < 0 ? 'neg' : 'pos'}">${v ? (v < 0 ? '−' : '+') + won(Math.abs(v)) : '?'}</td><td>${esc(cMemo != null ? String(r[cMemo] ?? '') : '')}</td><td class="r">${cB != null ? won(parseAmt(r[cB])) : ''}</td></tr>`; }).join('')}</tbody></table>`;
+}
+function viewTplDlg(D) {
+  const d = D.d, t = Store.get('templates', D.id); if (!t) return '';
+  const FL = d.type === 'card' ? CARD_FIELDS : FIELDS;
+  const hdr = d.src ? (d.src.rows[d.h] || []).map((c) => String(c ?? '').trim()) : Object.keys(t.byName || {});
+  const imps = Store.all('imports').filter((x) => x.tplId === t.id && x.rows);
+  return `<div class="dlg" style="max-width:680px"><h2 class="dlg-title">서식 고치기</h2>
+    <label class="field"><span class="label">이름</span><input class="input" data-tpl="name" value="${esc(d.name)}" maxlength="30" autocomplete="off"></label>
+    <span class="label">종류</span><div class="seg wrap">${FLOWS.map(([f, l]) => `<button class="${d.type === 'bank' && d.flow === f ? 'on' : ''}" data-act="tplKind" data-t="bank" data-f="${f}">통장 · ${l}</button>`).join('')}<button class="${d.type === 'card' ? 'on' : ''}" data-act="tplKind" data-t="card" data-f="">카드 명세서</button></div>
+    ${d.type === 'bank' ? `<label class="field"><span class="label">은행 · 통장</span><select class="input" data-tpl="bankId"><option value="">고르세요</option>${banksAll().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}${b.bank ? ' · ' + esc(b.bank) : ''}</option>`).join('')}</select></label>`
+      : `<label class="field"><span class="label">카드</span><select class="input" data-tpl="cardId"><option value="">고르세요</option>${cardsAll().map((c) => `<option value="${c.id}" ${c.id === d.cardId ? 'selected' : ''}>${esc(cardLabel(c))}</option>`).join('')}</select></label>`}
+    ${d.src ? `<label class="field"><span class="label">제목 줄</span><select class="input" data-tpl="h">${d.src.rows.slice(0, Math.min(d.src.rows.length, 25)).map((r, i) => `<option value="${i}" ${i === d.h ? 'selected' : ''}>${i + 1}째 줄 · ${esc((r || []).filter((x) => String(x).trim()).slice(0, 4).join(' | ').slice(0, 50))}</option>`).join('')}</select></label>` : ''}
+    <span class="label">칸 지정</span>
+    <div class="stack" style="gap:6px">${hdr.map((h, i) => !h ? '' : `<div class="drow" style="gap:8px"><span style="flex:1 1 140px;min-width:0">${String.fromCharCode(65 + (i % 26))}칸 · <b>${esc(h)}</b></span><select class="input" style="flex:0 1 200px" data-tplmap="${i}">${FL.map(([v, l]) => `<option value="${v}" ${(d.map[i] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}</div>
+    <span class="label">미리보기 (최근 파일 5줄)</span>${tplPreview(d)}
+    ${imps.length ? `<div class="field"><span class="label">고친 서식으로 이미 올린 파일 다시 읽기 <span style="font-weight:400">(이미 들어간 줄은 중복으로 빼요)</span></span>${imps.slice(0, 5).map((x) => `<div class="drow"><span>${esc(x.name)} <span class="sub small">${x.saved}건 저장</span></span><button class="btn" data-act="tplReread" data-imp="${x.id}">다시 읽기</button></div>`).join('')}</div>` : ''}
+    <div class="err" data-err></div>
+    <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="tplSave">저장</button></div></div>`;
 }
 
 const FILE_ACT = {
@@ -894,6 +997,18 @@ const FILE_ACT = {
     render();
   },
   impCard: (el) => { S.imp.target.cardId = el.dataset.id; render(); },
+  impKind: (el) => { const T = S.imp.target; T.type = el.dataset.t; if (T.type === 'bank') { T.flow = el.dataset.f || 'both'; if (!T.bankId) T.bankId = (banksOpen('home')[0] || banksOpen()[0] || {}).id || ''; } else if (!T.cardId && cardsOpen().length === 1) T.cardId = cardsOpen()[0].id; render(); },
+  impKindGo: () => {
+    const I = S.imp, t = tplFor(I);
+    if (t) { const T = { ...I.target }; applyTemplate(t); I.target = { ...I.target, ...T }; buildItems(); I.step = 'preview'; checkAllDup(); render(); return; }
+    // 기억한 서식이 없으면: 칸 지정 (같은 모양의 다른 서식이 있으면 그 칸을 미리 채워 「추천」만 · 확인은 사람이)
+    const like = Store.all('templates').find((x) => !x.foreign && x.sig === I.sig && tplKey(x) === I.target.type);
+    I.tplId = null; I.map = mapFor(I.hdr, I.target.type);
+    if (like) { I.hdr.forEach((h, i) => { const f = like.byName && like.byName[norm(h)]; if (f != null) I.map[i] = f; }); I.likeName = like.name; } else I.likeName = '';
+    I.step = 'map'; render();
+  },
+  impFlow: (el) => { S.imp.target.flow = el.dataset.f; render(); },
+  impNoMemo: () => { S.imp.noMemo = !S.imp.noMemo; render(); },
   impBank: (el) => { S.imp.target.bankId = el.dataset.id; render(); },
   impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; checkAllDup(); render(); },
   impMore: () => { S.imp.shown += 50; render(); },
@@ -958,6 +1073,27 @@ const FILE_ACT = {
     S.dialog = null; render(); toast('규칙을 저장했어요', { items: [{ col: 'rules', id: r.id, before }] });
   },
   ruleDel: async () => { const D = S.dialog, r = Store.get('rules', D.id); await Store.remove('rules', r.id); S.dialog = null; render(); toast('규칙을 지웠어요'); },
+  tplEdit: (el) => { const t = Store.get('templates', el.dataset.id); S.dialog = { type: 'tplEdit', id: t.id, d: tplDraft(t) }; render(); },
+  tplKind: (el) => { const d = S.dialog.d, was = d.type; d.type = el.dataset.t; if (d.type === 'bank') d.flow = el.dataset.f || 'both'; if (was !== d.type && d.src) { const hdr = (d.src.rows[d.h] || []).map((c) => String(c ?? '').trim()); d.map = mapFor(hdr, d.type); } render(); },
+  tplSave: async () => {
+    const D = S.dialog, d = D.d, t = Store.get('templates', D.id), before = { ...t };
+    const hdr = d.src ? (d.src.rows[d.h] || []).map((c) => String(c ?? '').trim()) : Object.keys(t.byName || {});
+    const has = (f) => Object.values(d.map).includes(f), err = (m) => { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = m; };
+    if (!has('date') || !has('merchant') || !(has('out') || has('in') || has('amount'))) return err('날짜 · 내용 · 금액 칸은 꼭 골라 주세요.');
+    if (d.type === 'bank' && d.flow === 'out' && !has('memo') && hdr.some((h) => /송금메모|메모|적요/.test(norm(h)))) return err('출금 서식은 송금메모/적요 칸을 꼭 골라 주세요.');
+    const byName = {}; hdr.forEach((h, i) => { if (h) byName[norm(h)] = d.map[i] || ''; });
+    const sig = d.src ? sigOf(hdr) : t.sig;
+    await Store.put('templates', { ...t, name: d.name.trim() || t.name, nameEdited: d.name.trim() !== t.name || t.nameEdited, sig, map: { ...d.map }, byName, target: { type: d.type, cardId: d.type === 'card' ? d.cardId : '', bankId: d.type === 'bank' ? d.bankId : '' }, flow: d.type === 'bank' ? d.flow : '', ...(d.src ? { sample: { rows: d.src.rows.slice(0, d.h + 9), h: d.h } } : {}) });
+    S.dialog = null; render(); toast('서식을 고쳤어요. 다음 파일부터 이 서식으로 읽어요', { items: [{ col: 'templates', id: t.id, before }] });
+  },
+  tplUse: async (el) => { const t = Store.get('templates', el.dataset.id), before = { ...t }; await Store.put('templates', { ...t, foreign: false, copiedFrom: t.copiedFrom || '다른 장부' }); render(); toast('이 장부 서식으로 쓸게요', { items: [{ col: 'templates', id: t.id, before }] }); },
+  tplReread: (el) => {
+    const imp = Store.get('imports', el.dataset.imp), t = Store.get('templates', S.dialog.id); if (!imp || !imp.rows || !t) return;
+    S.dialog = null;
+    const hdr = (imp.rows[imp.h] || []).map((c) => String(c ?? '').trim());
+    S.imp = { step: 'map', name: imp.name + ' (다시 읽기)', rows: imp.rows, h: imp.h, hdr, sig: sigOf(hdr), sheet: imp.sheet, sheets: null, sheetsN: 1, tplId: null, target: { ...t.target }, map: {}, pdf: false, reImp: imp.id };
+    applyTemplate(t); buildItems(); S.imp.step = 'preview'; go('파일 올리기');
+  },
   tplDel: async (el) => { await Store.remove('templates', el.dataset.id); render(); toast('파일 모양을 지웠어요. 다음에 올리면 칸을 다시 물어봐요'); }
 };
 

@@ -87,17 +87,18 @@ async function applyCopy(ci) {
   const srcCards = copyCards(d);
   if (it.cards) srcCards.forEach((c) => out.push(['payMethods', { ...c, bankId: bankIds.has(c.bankId) ? c.bankId : null }]));
   const cardIds = new Set(it.cards ? srcCards.map((c) => c.id) : []);
-  if (it.templates) (d.templates || []).forEach((t) => out.push(['templates', { ...t, target: { ...(t.target || {}), cardId: cardIds.has((t.target || {}).cardId) ? t.target.cardId : '', bankId: bankIds.has((t.target || {}).bankId) ? t.target.bankId : '' } }]));
+  if (it.templates) (d.templates || []).filter((t) => !t.foreign).forEach((t) => out.push(['templates', { ...t, copiedFrom: ci.name || '다른 장부', foreign: false, createdAt: Date.now(), target: { ...(t.target || {}), cardId: cardIds.has((t.target || {}).cardId) ? t.target.cardId : '', bankId: bankIds.has((t.target || {}).bankId) ? t.target.bankId : '' } }]));
   if (it.rules) {
     // 규칙은 계정과목 이름으로 이 장부의 계정에 다시 연결
     const srcName = new Map((d.accounts || []).map((a) => [a.id, a.name + '|' + a.kind]));
     const here = new Map(Store.all('accounts').map((a) => [a.name + '|' + a.kind, a.id]));
-    (d.rules || []).forEach((r) => { const id = here.get(srcName.get(r.accountId)); if (id) out.push(['rules', { ...r, accountId: id }]); });
+    (d.rules || []).filter((r) => !r.foreign).forEach((r) => { const id = here.get(srcName.get(r.accountId)); if (id) out.push(['rules', { ...r, accountId: id, copiedFrom: ci.name || '다른 장부', createdAt: Date.now() }]); });
   }
   if (out.length) await Store.putMany(out);
   if (it.dict || it.cards) {
     const src = ((d.meta || []).find((m) => m.id === 'settings')) || {}, st = Store.get('meta', 'settings') || { id: 'settings' };
-    await Store.put('meta', { ...st, ...(it.dict && src.dict ? { dict: src.dict } : {}), ...(it.dict && src.malls ? { malls: src.malls } : {}), ...(it.cards && src.cardCompanies ? { cardCompanies: src.cardCompanies } : {}) });
+    const sameType = ((S.ledgers || []).find((l) => l.id === ci.from) || {}).type === (Store.current() || {}).type; // 사전은 같은 종류 장부끼리만 (가계부 사전이 친구회로 가지 않게)
+    await Store.put('meta', { ...st, ...(it.dict && sameType && src.dict ? { dict: src.dict } : {}), ...(it.dict && src.malls ? { malls: src.malls } : {}), ...(it.cards && src.cardCompanies ? { cardCompanies: src.cardCompanies } : {}) });
   }
   return out.length;
 }
@@ -198,7 +199,7 @@ const RESET_ACT = {
       render(); toast(`「${name}」 장부를 지웠어요. 직전 백업: ${file}`);
     } catch (e) { S.busy = false; throw e; }
   },
-  cpOpen: () => keepCreate(() => { const ci = S.createImport; S.dialog = { type: 'cpFrom', from: ci ? ci.from : (S.ledgers[0] || {}).id, items: ci ? { ...ci.items } : { cards: true, banks: true, dict: true, templates: true, rules: false } }; render(); }),
+  cpOpen: () => keepCreate(() => { const ci = S.createImport; S.dialog = { type: 'cpFrom', from: ci ? ci.from : (S.ledgers[0] || {}).id, items: ci ? { ...ci.items } : { cards: true, banks: true, dict: false, templates: false, rules: false } }; render(); }),
   cpClear: () => keepCreate(() => { S.createImport = null; render(); }),
   cpPick: (el) => { const pw = ($app.querySelector('[data-cppw]') || {}).value || ''; keepCreate(() => { S.dialog.from = el.dataset.id; render(); }); const i = $app.querySelector('[data-cppw]'); if (i) i.value = pw; },
   cpToggle: (el) => { const pw = ($app.querySelector('[data-cppw]') || {}).value || ''; const it = S.dialog.items; it[el.dataset.k] = !it[el.dataset.k]; keepCreate(() => render()); const i = $app.querySelector('[data-cppw]'); if (i) i.value = pw; },

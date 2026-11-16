@@ -937,3 +937,16 @@ mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; 
 .duegrid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: calc(14px * var(--fs)); }
 .printonly { display: none; }
 @media print { body.printing .printonly { display: block !important; } body.printing .duecard, body.printing .noprint { display: none !important; } body.printing .duetab { font-size: 11px; } }
+
+/* ───────── 2026-11-17 v30: 서식 목록 · ☆ 자주 쓰는 계정 · 저장 버튼 고정 ───────── */
+.tplrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.tplrow:first-of-type { border-top: 0; }
+.bltab.small { font-size: calc(13px * var(--fs)); }
+.pinbtn { flex: none; min-width: 44px; min-height: 44px; border: 0; background: none; font-size: 22px; color: #BDBDB8; cursor: pointer; }
+.pinbtn.on { color: #C9A227; }
+.pinbox { margin: 0 12px 10px; padding: 10px 12px; border-radius: 12px; background: var(--soft); display: flex; flex-direction: column; gap: 4px; }
+.pinrow { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.chip .star { color: #C9A227; }
+.acclist { max-height: 46vh; overflow-y: auto; }
+/* 휴대폰: 대화 상자의 [저장] 줄은 늘 화면 아래에 */
+.compact .dlg .dlg-btns { position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); margin-bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); padding: 12px 0 max(14px, env(safe-area-inset-bottom)); background: var(--sf); border-top: 1px solid var(--line); z-index: 2; }

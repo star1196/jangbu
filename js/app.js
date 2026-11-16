@@ -547,6 +547,21 @@ const ACT = {
   // 계정과목 편집
   editKind: (el) => { S.editKind = el.dataset.k; S.editAccId = null; render(); },
   editPick: (el) => { S.editAccId = el.dataset.id; render(); },
+  // ☆ 자주 쓰는 계정 고정 · 순서
+  accPin: async (el, e) => {
+    if (e) e.stopPropagation();
+    const a = accOf(el.dataset.id), before = { ...a };
+    const mx = pinnedAccs(a.kind).reduce((m, x) => Math.max(m, x.pinOrder || 0), 0);
+    await Store.put('accounts', { ...a, pin: !a.pin, pinOrder: a.pin ? 0 : mx + 1 });
+    render(); toast(a.pin ? `'${a.name}' 고정을 풀었어요` : `'${a.name}'을(를) 자주 쓰는 계정으로 고정했어요`, { items: [{ col: 'accounts', id: a.id, before }] });
+  },
+  accPinMove: async (el) => {
+    const a = accOf(el.dataset.id), list = pinnedAccs(a.kind), i = list.findIndex((x) => x.id === a.id), j = i + Number(el.dataset.n);
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    for (const [k, x] of list.entries()) if ((x.pinOrder || 0) !== k + 1) await Store.put('accounts', { ...x, pinOrder: k + 1 });
+    render();
+  },
   editHide: async (el, e) => {
     e.stopPropagation();
     const a = accOf(el.dataset.id), before = { ...a };
@@ -677,6 +692,14 @@ $app.addEventListener('input', (e) => {
   if (onClub4Input(el)) return; // 회칙 · 결의 · 과거 입금 칸 (club4.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)
   if (onBooksInput(el)) return; // 장부 관리 칸 (books.js)
+  if (el.dataset && (el.dataset.tpl || el.dataset.tplmap != null) && S.dialog && S.dialog.type === 'tplEdit') { // 서식 고치기 칸
+    const d = S.dialog.d;
+    if (el.dataset.tplmap != null) d.map[+el.dataset.tplmap] = el.value;
+    else if (el.dataset.tpl === 'h') { d.h = +el.value; const hdr = (d.src.rows[d.h] || []).map((c) => String(c ?? '').trim()); d.map = mapFor(hdr, d.type); }
+    else d[el.dataset.tpl] = el.value;
+    if (el.dataset.tpl !== 'name') render();
+    return;
+  }
   if (typeof onSafeInput === 'function' && onSafeInput(el)) return; // 합치기 확인 · 카드 계획 칸 (safe.js · inst.js)
   if (onStartInput(el)) return; // 처음 시작하기 · 카드 이월 칸 (start.js)
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
@@ -728,6 +751,12 @@ $app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matc
 $app.addEventListener('keydown', (e) => { const el = e.target; if (el.dataset && el.dataset.f && S.f) onFormKey(e, el); });
 $app.addEventListener('focusout', (e) => { const el = e.target; if (el.dataset && el.dataset.f && S.f) onFormBlur(el); });
 $app.addEventListener('focusin', (e) => { const el = e.target; if (el.dataset && el.dataset.f === 'merchant' && S.f) { S.merOpen = true; updMer(); } });
+// 휴대폰: 키보드가 올라와도 치는 칸이 가려지지 않게 (대화 상자 · 입력 시트 안 칸)
+$app.addEventListener('focusin', (e) => {
+  const el = e.target; if (layout() !== 'phone' || !el.matches || !el.matches('input:not([type=checkbox]):not([type=radio]),textarea,select') || !el.closest('.dlg, .sheet-body')) return;
+  setTimeout(() => { if (document.activeElement === el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 320);
+});
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { const el = document.activeElement; if (el && $app.contains(el) && el.closest && el.closest('.dlg, .sheet-body') && layout() === 'phone') el.scrollIntoView({ block: 'center' }); });
 
 /* ───────── 입력 양식(작은 양식) 처리 ───────── */
 function showErr(form, msg, field) {

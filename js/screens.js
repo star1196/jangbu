@@ -527,6 +527,7 @@ function viewAcctEdit() {
   const cur = accOf(S.editAccId);
   const rows = accs.map((a) => `<div class="erow ${a.id === S.editAccId ? 'on' : ''}" data-act="editPick" data-id="${a.id}" role="button" tabindex="0">
       ${catIcon(a, 20, 38)}<span class="en ${a.hidden ? 'hid' : ''}">${esc(a.name)}</span>
+      <button class="pinbtn ${a.pin ? 'on' : ''}" data-act="accPin" data-id="${a.id}" aria-pressed="${!!a.pin}" aria-label="${esc(a.name)} 자주 쓰는 계정으로 고정">${a.pin ? '★' : '☆'}</button>
       <button class="hidebtn" data-act="editHide" data-id="${a.id}" aria-label="${esc(a.name)} 숨기기">숨기기<span class="tg ${a.hidden ? 'on' : ''}"><i></i></span></button></div>`).join('');
   const icons = cur ? DATA.ICON_CHOICES.map((n) => `<button class="icpick ${cur.icon === n ? 'on' : ''}" data-act="editIcon" data-v="${n}" aria-label="${n}">${ic(n, 24, cur.icon === n ? 'var(--sf)' : (kind === 'in' ? 'var(--in)' : 'var(--out)'))}</button>`).join('') : '';
   return `<div class="cols">
@@ -534,7 +535,9 @@ function viewAcctEdit() {
       <div style="padding:12px;display:flex;gap:8px;flex-wrap:wrap">
         <div class="seg" style="flex:1 1 200px">${[['out', '지출'], ['in', '수입']].map(([k, l]) => `<button class="${k === kind ? 'on' : ''}" data-act="editKind" data-k="${k}">${l}</button>`).join('')}</div>
         <button class="btn" data-act="dlgAddAcc">${ic('plus', 18)}계정 추가</button>
-      </div>${rows}
+      </div>
+      ${pinnedAccs(kind).length ? `<div class="pinbox"><span class="label">☆ 자주 쓰는 (입력할 때 맨 위 · 이 순서)</span>${pinnedAccs(kind).map((a, i, arr) => `<div class="pinrow">${catGlyph(a, 16)}<span style="flex:1">${esc(a.name)}</span><button class="iconbtn" data-act="accPinMove" data-id="${a.id}" data-n="-1" ${i ? '' : 'disabled'} aria-label="위로">▲</button><button class="iconbtn" data-act="accPinMove" data-id="${a.id}" data-n="1" ${i < arr.length - 1 ? '' : 'disabled'} aria-label="아래로">▼</button></div>`).join('')}</div>` : `<span class="sub small" style="display:block;padding:0 16px 8px">☆를 누르면 입력할 때 맨 위 「자주 쓰는」 줄에 나와요. 아래 목록은 늘 ㄱㄴㄷ 순이에요.</span>`}
+      ${rows}
     </section>
     ${cur ? `<section class="card" style="flex:1 1 320px;min-width:0;padding:22px;display:flex;flex-direction:column;gap:14px">
       <div style="display:flex;align-items:center;gap:14px">${catIcon(cur, 30, 60)}<span style="font-size:${px(20)};font-weight:700">${esc(cur.name)}</span></div>
@@ -594,6 +597,8 @@ function viewDialog() {
     body = `<div class="dlg"><h2 class="dlg-title">무엇을 할까요?</h2>
       <div class="stack" style="gap:10px">${D.ways.map((w) => `<button class="btn big" style="justify-content:flex-start;gap:14px;min-height:64px;text-align:left" data-act="plusGo" data-w="${w}">${ic(W[w][0], 26)}<span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:${px(17)}">${W[w][1]}</b><span class="sub small" style="font-weight:400">${W[w][2]}</span></span></button>`).join('')}</div>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
+  } else if (D.type === 'tplEdit') {
+    body = viewTplDlg(D); // 서식 고치기 (files.js)
   } else if (D.type === 'impOff') {
     body = `<div class="dlg"><h2 class="dlg-title">체크를 뺀 ${D.n}줄은 어떻게 할까요?</h2>
       <span class="sub small" style="line-height:1.55">체크한 줄은 그대로 저장해요. 체크를 뺀 줄은 둘 중 하나를 골라 주세요.</span>

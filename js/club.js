@@ -121,13 +121,20 @@ async function clubAfterImport(impId) {
     auto++;
   }
   // 나간 돈: ① 회원 이름 + 돌려줄 돈 있음 → 「돌려준 돈인가요?」로 미확인에 남김 ② 같은 가맹점 지난번 계정 ③ 친구회 분류 사전
+  // 송금메모에 모임 종류(정기모임 · 임시모임 …)가 있으면 그 모임으로 (분류가 이미 됐어도)
+  for (const x of clubTx().filter((y) => y.source === '파일:' + impId && y.kind === 'out' && !y.meet && y.memo)) {
+    const mt = meetTypes().find((t) => norm(x.memo).includes(norm(t)));
+    if (mt) await Store.put('tx', { ...x, meet: { type: mt } }, true);
+  }
   const outs = clubTx().filter((x) => x.source === '파일:' + impId && x.kind === 'out' && !x.club && isUnc(x));
   let cls = 0;
   for (const x of outs) {
     const m = false ? matchMember(x) : null;
     if (m && owedOf(m.id) > 0) { await Store.put('tx', { ...x, accountId: null, status: '미확인', club: { memberId: m.id, type: 'advAsk' } }, true); ask++; continue; }
-    const a = lastAccFor(x.merchant, x.id) || clubDictAcc(x.merchant);
-    if (a) { await Store.put('tx', { ...x, accountId: a.id, status: '확인', autoAcc: true }, true); cls++; }
+    // 송금메모(예: "정기모임 식대")도 봄: 계정 + 모임 종류
+    const a = lastAccFor(x.merchant, x.id) || clubDictAcc(x.merchant) || (x.memo ? clubDictAcc(x.memo) : null);
+    const mt = !x.meet && x.memo ? meetTypes().find((t) => norm(x.memo).includes(norm(t))) : null;
+    if (a || mt) { await Store.put('tx', { ...x, ...(a ? { accountId: a.id, status: '확인', autoAcc: true } : {}), ...(mt ? { meet: { type: mt } } : {}) }, true); if (a) cls++; }
   }
   return { auto, hold, ask, cls };
 }

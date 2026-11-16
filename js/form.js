@@ -297,10 +297,11 @@ function updCats() {
     const hits = searchSort(accs, f.catQ, (a) => a.name);
     box.innerHTML = hits.length ? hits.map(chip).join('') : `<span class="sub" style="font-size:${px(14)}">맞는 분류가 없어요.</span>`;
   } else {
-    const rec = recAccounts(f).map(accOf);
-    const rest = accs.filter((a) => !rec.some((r) => r.id === a.id));
-    const cur = f.accId && !rec.some((r) => r.id === f.accId) && !accs.some((a) => a.id === f.accId) ? accOf(f.accId) : null;
-    box.innerHTML = `<span class="sub small">추천</span>${rec.map(chip).join('')}<span class="catsep" aria-hidden="true"></span>${cur ? chip(cur) : ''}${rest.map(chip).join('')}`;
+    const pins = pinnedAccs(f.kind), rec = recAccounts(f).map(accOf).filter((a) => !pins.some((p) => p.id === a.id));
+    const top = [...pins, ...rec];
+    const rest = accs.filter((a) => !top.some((r) => r.id === a.id)); // 나머지는 ㄱㄴㄷ
+    const cur = f.accId && !top.some((r) => r.id === f.accId) && !accs.some((a) => a.id === f.accId) ? accOf(f.accId) : null;
+    box.innerHTML = `<span class="sub small">${pins.length ? '자주 쓰는' : '추천'}</span>${pins.map((a) => chip(a).replace('</button>', ' <span class="star">☆</span></button>')).join('')}${rec.map(chip).join('')}<span class="catsep" aria-hidden="true"></span>${cur ? chip(cur) : ''}${rest.map(chip).join('')}`;
   }
   // '저축·적금' 지출이면 어느 적금에 넣었는지 (5-1)
   const sv = part('sav');

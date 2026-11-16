@@ -466,13 +466,19 @@ function clubDictAcc(mer) {
 function recentAccs(n) { const seen = []; for (const x of clubTx().filter((y) => y.kind === 'out' && !isUnc(y) && !y.internal).sort(sortTx)) { const a = accOf(x.accountId); if (a && !a.sys && !a.loanOut && !a.legacyMeet && !seen.includes(a)) seen.push(a); if (seen.length >= n) break; } return seen; }
 function accPicker(d, act) {
   const all = outAccs(), q = d.accQ || '';
-  const key = d.merchant || d.memo || ''; const rec = [lastAccFor(key, d.txId), clubDictAcc(key), ...recentAccs(3)].filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 4);
-  const list = q ? searchSort(all, q, (a) => a.name) : all;
-  const chip = (a, star) => `<button type="button" class="chip accchip ${a.id === d.accountId ? 'on' : ''}" data-act="${act}" data-id="${a.id}">${catGlyph(a, 16)}${esc(a.name)}${star ? ' <span class="sub small">추천</span>' : ''}</button>`;
+  const key = d.merchant || d.memo || '';
+  // 자주 쓰는 줄: ☆ 고정한 계정 + (고정 안 한 것 중) 이 가맹점 · 사전 · 최근 3개
+  const pins = pinnedAccs('out').filter((a) => all.includes(a));
+  const rec = [lastAccFor(key, d.txId), clubDictAcc(key), ...recentAccs(3)].filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i && !pins.includes(a)).slice(0, 3);
+  const top = [...pins, ...rec], sel = d.accountId ? accOf(d.accountId) : null;
+  const list = q ? searchSort(all, q, (a) => a.name) : all; // all은 ㄱㄴㄷ
+  const chip = (a, tag) => `<button type="button" class="chip accchip ${a.id === d.accountId ? 'on' : ''}" data-act="${act}" data-id="${a.id}">${catGlyph(a, 16)}${esc(a.name)}${tag ? ` <span class="sub small">${tag}</span>` : ''}</button>`;
+  const open = d.accAll || !!q;
   return `<div class="field"><span class="label">계정 (무엇에 썼나요?)</span>
-    <label class="pfq">${ic('search', 16, 'var(--sub)')}<input class="input" data-co="accQ" value="${esc(q)}" placeholder="계정 찾기 (ㅅㅅ → 식사)"></label>
-    ${!q && rec.length ? `<div class="chips" style="gap:6px">${rec.map((a) => chip(a, true)).join('')}</div>` : ''}
-    <div class="chips" style="gap:6px">${list.map((a) => chip(a)).join('') || '<span class="sub small">맞는 계정이 없어요.</span>'}</div></div>`;
+    <div class="chips" style="gap:6px">${top.map((a) => chip(a, pins.includes(a) ? '☆' : '추천')).join('')}${sel && !top.includes(sel) ? chip(sel) : ''}<button type="button" class="chip" data-act="coAccAll" aria-expanded="${open}">${ic(open ? 'chevron-down' : 'chevron-right', 14)}${open ? '접기' : `모두 보기 (${all.length})`}</button></div>
+    ${open ? `<label class="pfq">${ic('search', 16, 'var(--sub)')}<input class="input" data-co="accQ" value="${esc(q)}" placeholder="계정 찾기 (초성도 돼요: ㅅㅅ → 식사)"></label>
+      <div class="chips acclist" style="gap:6px">${list.map((a) => chip(a, pins.includes(a) ? '☆' : '')).join('') || '<span class="sub small">맞는 계정이 없어요.</span>'}</div>` : ''}
+    <span class="sub small">☆ 자주 쓰는 계정은 설정 → 계정과목 편집에서 고정해요.</span></div>`;
 }
 
 /* ───────── 모임 (모임별 · 계정별) ───────── */
