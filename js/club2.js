@@ -49,11 +49,17 @@ function memberCalc(m, exclTxId, cutoff) {
   const paid = {}, pre = {}; let credit = m.startCredit || 0, holds = 0;
   const st = clubStartYM();
   if (m.lastPaid && m.lastPaid >= st) for (let ym = st; ym <= m.lastPaid; ym = monthShift(ym, 1)) if (dueYM(m, ym)) { paid[ym] = feeAt(ym); pre[ym] = 1; }
-  if (m.lastPaid && m.lastPart) { const nm = monthShift(m.lastPaid, 1); if (nm >= st && dueYM(m, nm)) { paid[nm] = (paid[nm] || 0) + m.lastPart; pre[nm] = 1; } }
-  for (const x of clubTx()) {
+  if (m.lastPaid && m.lastPart) { const nm = monthShift(m.lastPaid, 1); if ((nm >= st || preMode(m)) && dueYM(m, nm)) { paid[nm] = (paid[nm] || 0) + m.lastPart; pre[nm] = 1; } }
+  for (const x of clubFeeTx()) {
     const c = x.club; if (!c || c.memberId !== m.id || x.id === exclTxId || (cutoff && x.date > cutoff)) continue;
     if (c.type === 'fee') { let s = 0; for (const a of c.alloc || []) { paid[a.ym] = (paid[a.ym] || 0) + a.amt; s += a.amt; } credit += x.amount - s - (c.extra || 0); }
     else if (c.type === 'hold') holds++;
+  }
+  // 예전 버전에서 「시작 전 밀린 회비」(한 덩어리)로 낸 돈 → 달로 바뀐 회원은 오래된 달부터 채운 것으로
+  if (preMode(m) && paid.start) {
+    let rest = paid.start; delete paid.start;
+    for (let ym = firstDueYM(m); ym < st && rest > 0; ym = monthShift(ym, 1)) { if (!dueYM(m, ym)) continue; const a = Math.min(rest, feeAt(ym) - (paid[ym] || 0)); if (a > 0) { paid[ym] = (paid[ym] || 0) + a; rest -= a; } }
+    if (rest > 0) credit += rest;
   }
   let lastYM = ''; for (const k of Object.keys(paid)) if (k !== 'start' && paid[k] >= feeAt(k) && k > lastYM) lastYM = k;
   return { paid, pre, credit, holds, lastYM };
@@ -70,9 +76,18 @@ function autoStartDue(m, lastPaid, part) {
   return Math.max(0, due);
 }
 function cellOf(m, ym, calc) {
+  if (ym < clubStartYM()) { // 시작 전 구간: 옅은 회색 바탕 + 「시작 전」 (색 규칙은 같음)
+    if (m.joinDate && ym < m.joinDate.slice(0, 7)) return { s: 'none', pre: true };
+    if (isExempt(m, ym)) return { s: 'ex', pre: true };
+    if (m.lastPaid && ym <= m.lastPaid) return { s: 'ok', pre: true, p: feeAt(ym) };
+    if (!preMode(m)) return { s: 'none', pre: true };
+    const p0 = calc.paid[ym] || 0;
+    return { s: p0 >= feeAt(ym) ? 'ok' : p0 > 0 ? 'part' : isDeferred(m, ym) ? 'hold' : calc.lastYM > ym ? 'gap' : 'miss', p: p0, pre: true };
+  }
   if (ym < clubStartYM() || (m.joinDate && ym < m.joinDate.slice(0, 7)) || (m.status === 'left' && m.leftDate && ym > m.leftDate.slice(0, 7))) return { s: 'none' };
   if (isExempt(m, ym)) return { s: 'ex' };
   const fee = feeAt(ym), p = calc.paid[ym] || 0;
+  if (p < fee && isDeferred(m, ym)) return { s: 'hold', p, defer: true };
   if (p >= fee) return { s: 'ok', p };
   if (p > 0) return { s: 'part', p };
   if (ym <= curYM()) return { s: calc.holds ? 'hold' : calc.lastYM > ym ? 'gap' : 'miss' }; // 빠진 달: 뒤에 낸 달이 있는데 이 달만 비어 있음
@@ -80,8 +95,13 @@ function cellOf(m, ym, calc) {
 }
 function memberState(m) {
   const calc = memberCalc(m), cur = curYM();
-  let due = Math.max(0, (m.startDue || 0) - (calc.paid.start || 0));
-  for (let ym = clubStartYM(); ym <= cur; ym = monthShift(ym, 1)) if (dueYM(m, ym)) due += Math.max(0, feeAt(ym) - (calc.paid[ym] || 0));
+  let due = Math.max(0, startLump(m) - (calc.paid.start || 0)), preN = 0, preAmt = 0;
+  const st = clubStartYM();
+  for (let ym = firstDueYM(m); ym <= cur; ym = monthShift(ym, 1)) {
+    if (!dueYM(m, ym) || isDeferred(m, ym)) continue;
+    const left = Math.max(0, feeAt(ym) - (calc.paid[ym] || 0)); due += left;
+    if (ym < st && left) { preN++; preAmt += left; }
+  }
   const yms = Object.keys(calc.paid).filter((k) => k !== 'start' && calc.paid[k] > 0).sort();
   const last = yms[yms.length - 1];
   // 미리 낸 달: 이번 달 다음부터 빈틈없이 채운 마지막 달
@@ -90,17 +110,18 @@ function memberState(m) {
   const y = cur.slice(0, 4); let dueN = 0, paidN = 0;
   for (let i = 1; i <= +cur.slice(5); i++) { const ym = `${y}-${pad2(i)}`; if (!dueYM(m, ym)) continue; dueN++; if ((calc.paid[ym] || 0) >= feeAt(ym)) paidN++; }
   const gaps = []; for (let ym = clubStartYM(); ym <= cur; ym = monthShift(ym, 1)) if (cellOf(m, ym, calc).s === 'gap') gaps.push(ym);
-  return { calc, due, last, lastTxt, prepTo, gaps, rate: dueN ? Math.round(paidN / dueN * 100) : null, paidN, dueN, credit: calc.credit, holds: calc.holds };
+  return { calc, due, preN, preAmt, last, lastTxt, prepTo, gaps, rate: dueN ? Math.round(paidN / dueN * 100) : null, paidN, dueN, credit: calc.credit, holds: calc.holds };
 }
 const prepTxt = (ym) => `${ym.slice(0, 4) !== curYM().slice(0, 4) ? ym.slice(2, 4) + '년 ' : ''}${mTxt(ym)}분까지 냄`;
 // 그날(basis 'prev'면 전날)까지 들어온 돈으로 본 미수금 (그 달 회비까지)
 function dueOn(m, date, basis) {
   const cut = basis === 'prev' ? addDays(date, -1) : date, calc = memberCalc(m, null, cut);
-  let due = Math.max(0, (m.startDue || 0) - (calc.paid.start || 0));
-  for (let ym = clubStartYM(); ym <= date.slice(0, 7); ym = monthShift(ym, 1)) if (dueYM(m, ym)) due += Math.max(0, feeAt(ym) - (calc.paid[ym] || 0));
+  let due = Math.max(0, startLump(m) - (calc.paid.start || 0));
+  for (let ym = firstDueYM(m); ym <= date.slice(0, 7); ym = monthShift(ym, 1)) if (dueYM(m, ym) && !isDeferred(m, ym)) due += Math.max(0, feeAt(ym) - (calc.paid[ym] || 0));
   return due;
 }
 function cellHtml(c, ym, mid, big) {
+  if (c.pre) return cellHtml({ ...c, pre: false }, ym, mid, big).replace('class="pc ', `class="pc pre `).replace('</button>', '<i class="pcpre">시작 전</i></button>');
   const lab = big ? `<span class="pcm">${mTxt(ym)}</span>` : '';
   const act = mid ? `data-act="clubCell" data-id="${mid}" data-ym="${ym}"` : '';
   switch (c.s) {
@@ -109,7 +130,7 @@ function cellHtml(c, ym, mid, big) {
     case 'miss': return `<button class="pc miss" ${act} aria-label="${mTxt(ym)} 미납">${lab}${ic('x', 16)}</button>`;
     case 'gap': return `<button class="pc gap" ${act} aria-label="${mTxt(ym)} 빠짐">${lab}<span>빠짐</span></button>`;
     case 'ex': return `<button class="pc ex" ${act} aria-label="${mTxt(ym)} 면제">${lab}<span>면제</span></button>`;
-    case 'hold': return `<button class="pc hold" ${act} aria-label="${mTxt(ym)} 보류">${lab}<span>보류</span></button>`;
+    case 'hold': return `<button class="pc hold" ${act} aria-label="${mTxt(ym)} ${c.defer || c.pre ? '유보' : '보류'}">${lab}<span>${c.defer ? '유보' : '보류'}</span></button>`;
     default: return `<button class="pc later" ${act} aria-label="${mTxt(ym)}">${lab}<span>·</span></button>`;
   }
 }
@@ -126,6 +147,7 @@ function memberBand(m, s) {
     if (m.joinDate && ym < m.joinDate.slice(0, 7)) continue;
     if (isExempt(m, ym)) { months.push([ym, 'ex']); continue; }
     if (!m.lastPaid || ym <= m.lastPaid) { months.push([ym, 'ok']); continue; }
+    if (preMode(m)) { const p = calc.paid[ym] || 0; months.push([ym, p >= fee(ym) ? 'ok' : p > 0 ? 'part' : 'miss']); continue; }
     if (startPaid >= fee(ym)) { startPaid -= fee(ym); months.push([ym, 'ok']); } else months.push([ym, 'miss']);
   }
   const endYM = s.prepTo && s.prepTo > cur ? s.prepTo : cur;
@@ -144,16 +166,16 @@ function memberBand(m, s) {
 function fillLog(m) {
   const st = clubStartYM(), paid = new Set();
   if (m.lastPaid) for (let ym = m.lastPaid < st ? m.lastPaid : st; ym <= m.lastPaid; ym = monthShift(ym, 1)) paid.add(ym);
-  const xs = clubTx().filter((x) => x.club && x.club.memberId === m.id && x.club.type === 'fee').sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.createdAt || 0) - (b.createdAt || 0)));
+  const xs = clubFeeTx().filter((x) => x.club && x.club.memberId === m.id && x.club.type === 'fee').sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.createdAt || 0) - (b.createdAt || 0)));
   const rows = [];
   for (const x of xs) {
     const parts = (x.club.alloc || []).map((a) => {
       if (a.ym === 'start') return `시작 전 밀린 회비 ${won(a.amt)}`;
       const gap = [...paid].some((p) => p > a.ym);
-      return `${a.ym.slice(0, 4)}년 ${+a.ym.slice(5)}월분${a.amt < feeAt(a.ym) ? `(${won(a.amt)})` : ''}${gap ? ' <b class="gapt">(빠진 달)</b>' : ''}`;
+      return `${a.ym.slice(0, 4)}년 ${+a.ym.slice(5)}월분${a.amt < feeAt(a.ym) ? `(${won(a.amt)})` : ''}${a.ym < st ? ' <span class="sub">(시작 전 밀린 달)</span>' : ''}${gap ? ' <b class="gapt">(빠진 달)</b>' : ''}`;
     });
     (x.club.alloc || []).forEach((a) => { if (a.ym !== 'start') paid.add(a.ym); });
-    rows.push({ x, txt: parts.join(', ') || '채운 달 없음', gap: parts.some((p) => p.includes('빠진 달')) });
+    rows.push({ x, txt: parts.join(', ') || '채운 달 없음', gap: parts.some((p) => p.includes('빠진 달')), past: !!x.archived });
   }
   return rows.reverse();
 }
@@ -161,7 +183,7 @@ function fillLog(m) {
 /* ───────── 회칙 판정 ───────── */
 const giftBasis = () => ((clubCfg().giftRule || {}).basis === 'prev' ? 'prev' : 'day');
 const basisTxt = () => (giftBasis() === 'prev' ? '생일 전날까지' : '생일 당일까지');
-const wedAmount = () => clubCfg().wedAmount || 0;
+const wedAmount = () => clubCfg().wedAmount || (typeof wedFormula === 'function' ? wedFormula(8) : 0); // 만 45세 미혼 선지급 = 8번째 결혼 금액 (약관 1)
 const wedAcc = () => clubAcc('경조사(축의·조의)', 'out') || clubAcc('경조사', 'out');
 function giftPaidTx(m, Y) { return clubTx().find((x) => x.club && x.club.memberId === m.id && x.club.type === 'gift' && String(x.club.year) === String(Y)); }
 // 생일이 지난 회원은 그날 미수금으로 대상/아님을 기록 (한 번만 · 시작점 이후)
@@ -232,6 +254,7 @@ function viewClubHome(L) {
   const st = clubStats(`${y}-01-01`, `${y}-12-31`);
   const ms = membersOn().map((m) => ({ m, s: memberState(m) }));
   const dueAll = ms.reduce((s, r) => s + r.s.due, 0), dueN = ms.filter((r) => r.s.due > 0).length;
+  const preAllN = ms.reduce((s, r) => s + (r.s.preN || 0), 0), preAllAmt = ms.reduce((s, r) => s + (r.s.preAmt || 0), 0);
   const T = clubTodo(), rows = clubTodoRows(T);
   const loanLeft = feat('loans') ? loansAll().reduce((s, l) => s + loanCalc(l).left, 0) : 0;
   const settings = Store.get('meta', 'settings') || {};
@@ -253,7 +276,7 @@ function viewClubHome(L) {
       ${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
       <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="bigamt">${balance(bankSum())}</div>
         <span class="sub small">올해 수입 <b class="pos">+${won(st.inc)}</b>&nbsp;&nbsp; 지출 <b class="neg">−${won(st.out)}</b></span></section>
-      <section class="card" style="padding:14px 18px;display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">전체 미수금</span><b class="${dueAll ? 'duered' : ''}" style="font-size:${px(18)}">${won(dueAll)}원</b><span class="sub small">${dueN}명</span></section>
+      <section class="card" style="padding:14px 18px;display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">전체 미수금</span><b class="${dueAll ? 'duered' : ''}" style="font-size:${px(18)}">${won(dueAll)}원</b><span class="sub small">${dueN}명</span>${preAllN ? `<span class="small" style="flex:1 1 100%;color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
       ${chips}${rows.length ? todoCard : ''}
       <div class="secrow"><h2 class="h2">회원 납부</h2>${yearNav}</div>
       ${empty || `<div class="stack" style="gap:10px">${cards}</div>`}
@@ -282,7 +305,7 @@ function viewClubHome(L) {
       <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="statv">${balance(bankSum())}</div></section>
       <section class="card card-pad"><span class="sub small">올해 수입</span><div class="statv pos">+${won(st.inc)}</div></section>
       <section class="card card-pad"><span class="sub small">올해 지출</span><div class="statv neg">−${won(st.out)}</div></section>
-      <section class="card card-pad"><span class="sub small">전체 미수금 · ${dueN}명</span><div class="statv ${dueAll ? 'duered' : ''}">${won(dueAll)}원</div></section>
+      <section class="card card-pad"><span class="sub small">전체 미수금 · ${dueN}명</span><div class="statv ${dueAll ? 'duered' : ''}">${won(dueAll)}원</div>${preAllN ? `<span class="small" style="color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
     </div>
     ${clubQuickBar()}
     ${L === 'compact' ? chips : ''}
@@ -348,24 +371,27 @@ function viewClubMember() {
     <div class="btn2">
       <button class="btn ink big" data-act="clubFeeNew" data-id="${m.id}">회비 넣기</button>
       <button class="btn big" data-act="clubGiftGo" data-id="${m.id}">생일선물을 회비로</button>
-      <button class="btn big" data-act="clubExempt" data-id="${m.id}">면제 기간 정하기</button>
+      <button class="btn big" data-act="clubExempt" data-id="${m.id}">면제 · 유보 기간</button>
+      <button class="btn big" data-act="clubPastNew" data-id="${m.id}">과거 입금 기록 넣기</button>
       ${feat('loans') ? `<button class="btn big" data-act="clubRepay" data-id="${m.id}">대출 상환 넣기</button>` : ''}
     </div>
     <section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">납부 현황</h2><div class="band">${memberBand(m, s) || '<span class="sub">아직 회비 대상 달이 없어요.</span>'}</div>
       ${s.gaps.length ? `<span class="sub small" style="display:block;margin-top:6px">빠진 달 ${s.gaps.map(ymTxt).join(', ')} · 다음 입금은 「밀린 달부터」로 이 달들을 먼저 채워요.</span>` : ''}</section>
     <section class="card card-pad">
       <div class="secrow"><h2 class="h2">${y} 월별 납부</h2><span class="ynav"><button class="iconbtn" data-act="clubY" data-n="-1" aria-label="지난해">${ic('chevron-left', 18)}</button><button class="iconbtn" data-act="clubY" data-n="1" aria-label="다음 해">${ic('chevron-right', 18)}</button></span></div>
-      <div class="pgrid">${yms.map((ym) => cellHtml(cellOf(m, ym, s.calc), ym, m.id, true)).join('')}</div>
-      ${(m.startDue || 0) - (s.calc.paid.start || 0) > 0 ? `<span class="sub small" style="display:block;margin-top:10px">시작 전 밀린 회비 ${won((m.startDue || 0) - (s.calc.paid.start || 0))}원 남음${m.lastPaid ? ` (${ymTxt(m.lastPaid)}까지 냄)` : ''}</span>` : ''}
+      ${`${y}-01` < clubStartYM() ? `<span class="sub small" style="display:block;margin-bottom:6px">${ic('clock', 14)} 시작점(${ymTxt(clubStartYM())}) 전 달이에요. 색 규칙은 같아요.</span>` : ''}
+      <div class="pgrid ${`${y}-01` < clubStartYM() ? 'hasPre' : ''}">${yms.map((ym) => cellHtml(cellOf(m, ym, s.calc), ym, m.id, true)).join('')}</div>
+      ${s.preN ? `<span class="small" style="display:block;margin-top:10px;color:var(--warn);font-weight:700">시작 전 밀린 회비 ${s.preN}개월 · ${won(s.preAmt)}원 <span class="sub" style="font-weight:400">(${ymTxt(firstDueYM(m))} ~ · ◀로 지난해를 볼 수 있어요)</span></span>` : ''}
+      ${startLump(m) - (s.calc.paid.start || 0) > 0 ? `<span class="sub small" style="display:block;margin-top:10px">시작 전 밀린 회비 ${won(startLump(m) - (s.calc.paid.start || 0))}원 남음${m.lastPaid ? ` (${ymTxt(m.lastPaid)}까지 냄)` : ''}</span>` : ''}
       ${s.rate != null ? `<span class="sub small" style="display:block;margin-top:6px">올해 납부율 ${s.rate}% (${s.paidN}/${s.dueN}달)</span>` : ''}
     </section>
-    ${log.length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">입금 → 채운 달</h2><table class="filltab"><tbody>${log.slice(0, 24).map((r) => `<tr class="${r.gap ? 'gaprow' : ''}"><td>${r.x.date.replace(/-/g, '.')}</td><td class="r">${r.x.internal ? '장부 안' : '입금'} ${won(r.x.amount)}</td><td>→ ${r.txt} 처리</td></tr>`).join('')}</tbody></table></section>` : ''}
+    ${log.length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">입금 → 채운 달</h2><table class="filltab"><tbody>${log.slice(0, 24).map((r) => `<tr class="${r.gap ? 'gaprow' : ''}"><td>${r.x.date.replace(/-/g, '.')}${r.past ? ' <span class="tag">보관</span>' : ''}</td><td class="r">${r.x.internal ? '장부 안' : r.past ? '과거 입금' : '입금'} ${won(r.x.amount)}</td><td>→ ${r.txt} 처리</td></tr>`).join('')}</tbody></table></section>` : ''}
   </div>`;
   const right = `<div class="stack" style="flex:1 1 340px;min-width:0">
     <section class="card card-pad"><h2 class="h2" style="margin-bottom:10px">처리 방식</h2>
       <div class="seg"><button class="${m.mode !== 'manual' ? 'on' : ''}" data-act="clubMode" data-v="auto">자동</button><button class="${m.mode === 'manual' ? 'on' : ''}" data-act="clubMode" data-v="manual">수동 보류</button></div>
       <span class="sub small" style="display:block;margin-top:8px">${m.mode === 'manual' ? '이 회원 입금은 자동 배정하지 않고 「보류」로 들어가요. 목록에서 직접 나눠요.' : '이름(별칭)이 맞고 회비 배수면 저절로 회비로 채워요.'}</span></section>
-    ${(m.exempt || []).length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">면제 기간</h2>${m.exempt.map((e, i) => `<div class="drow"><span>${ymTxt(e.from)} ~ ${e.to ? ymTxt(e.to) : '끝 없음'}<br><span class="sub small">결의 ${esc(e.decided || '-')}${e.memo ? ' · ' + esc(e.memo) : ''}</span></span><button class="btn" data-act="clubExemptDel" data-i="${i}">빼기</button></div>`).join('')}</section>` : ''}
+    ${(m.exempt || []).length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">면제 · 유보 기간</h2>${m.exempt.map((e, i) => `<div class="drow"><span><span class="tag">${e.mode === 'hold' ? '유보' : '면제'}</span> ${ymTxt(e.from)} ~ ${e.to ? ymTxt(e.to) : '끝 없음'}<br><span class="sub small">결의 ${esc(e.decided || '-')}${e.memo ? ' · ' + esc(e.memo) : ''}</span></span><button class="btn" data-act="clubExemptDel" data-i="${i}">빼기</button></div>`).join('')}</section>` : ''}
     ${false && (ow || advX.length) ? `<section class="card card-pad"><div class="secrow"><h2 class="h2">돌려줄 돈</h2><b class="${ow > 0 ? 'duered' : ''}" style="font-size:${px(20)}">${won(Math.max(0, ow))}원</b></div>
       ${advX.slice(0, 8).map((x) => `<button class="drow" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0" data-act="clubTx" data-id="${x.id}"><span>${mmdd(x.date)} ${x.advBy === m.id ? '대신 냄 · ' + esc(x.merchant || (accOf(x.accountId) || {}).name || '') : '돌려줌'}</span><b class="${x.advBy === m.id ? '' : 'pos'}">${x.advBy === m.id ? '+' : '−'}${won(x.amount)}</b></button>`).join('')}
       ${ow > 0 ? `<button class="btn" style="margin-top:8px" data-act="clubAdvPair" data-id="${m.id}">돌려준 이체와 짝 맞추기</button>` : ''}</section>` : ''}
@@ -506,7 +532,7 @@ function viewMeetList(seg) {
   const avg = per.length ? Math.round(per.reduce((s, v) => s + v, 0) / per.length / 100) * 100 : 0;
   const cards = [...list].reverse().map((g) => {
     const pp = g.people ? Math.round(g.total / g.people) : 0;
-    return `<button class="mtcard" data-act="clubMeet" data-k="${esc(g.key)}"><span class="mtl"><span class="sub small">${mmdd(g.date)} <span class="tag">${esc(g.type || '모임')}</span></span><b>${esc(g.name)}</b><span class="sub small">${g.people ? `${g.people}명 · 1인 ${won(pp)}` : '인원 안 적음'} · ${Object.keys(g.accs).map(esc).join('·')}</span></span><b class="neg" style="font-size:${px(19)}">−${won(g.total)}</b></button>`;
+    return `<button class="mtcard" data-act="clubMeet" data-k="${esc(g.key)}"><span class="mtl"><span class="sub small">${mmdd(g.date)} <span class="tag">${esc(g.type || '모임')}</span></span><b>${esc(g.name)}</b>${typeof amt === 'function' && /정기/.test(g.type || '') && g.total > amt('meetCap') ? `<span class="small" style="color:var(--warn);font-weight:700">회칙 지원 한도 ${won(amt('meetCap'))}원 넘음 (제15조 8항)</span>` : ''}<span class="sub small">${g.people ? `${g.people}명 · 1인 ${won(pp)}` : '인원 안 적음'} · ${Object.keys(g.accs).map(esc).join('·')}</span></span><b class="neg" style="font-size:${px(19)}">−${won(g.total)}</b></button>`;
   }).join('');
   const types = [...new Set(meetingsAll().map((g) => g.type).filter(Boolean))];
   const tl = [...meetTypes(), ...types.filter((t) => !meetTypes().includes(t))];
@@ -599,7 +625,7 @@ function viewClubSettings() {
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${sec('장부', row('장부 이름', book.name, 'dlgRename') + row('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 · 회원 · 대출', 'go', 'data-to="처음 시작하기"') + row('시작점', st.startPoint ? st.startPoint + ' (이전 기록은 보관)' : '정하지 않음', 'dlgStart') + row('통장', `${banksOpen().length}개${banksAll().some((b) => b.closed) ? ` · 해지 ${banksAll().filter((b) => b.closed).length}개` : ''}`, 'goBankAdmin'))}
-      ${sec('회칙 · 회비', row('회칙', (cfg.rules || []).length ? `${cfg.rules.length}번 고침` : '아직 없음', 'go', 'data-to="회칙"') + row('월 회비', `${won(fh[0].amount)}원 (${fh[0].from.replace('-', '.')}부터)`, 'clubFeeHist', 'data-k="feeHist"') + row('생일선물 금액', `${won(gh[0].amount)}원 (${gh[0].from.replace('-', '.')}부터)`, 'clubFeeHist', 'data-k="giftHist"')
+      ${sec('회칙 · 회비', row('회칙', clausesAll().length ? `${clausesAll().filter((c) => c.status !== '삭제').length}개 조항 · 최종 개정 ${dTxt(ruleDates().last) || '-'}` : (cfg.rules || []).length ? '예전 글 · 조항 가져오기' : '아직 없음', 'go', 'data-to="회칙"') + row('개정·결의 기록', `${decisionsAll().length}건`, 'go', 'data-to="개정·결의 기록"') + row('월 회비', `${won(fh[0].amount)}원 (${fh[0].from.replace('-', '.')}부터)`, 'clubFeeHist', 'data-k="feeHist"') + row('생일선물 금액', `${won(gh[0].amount)}원 (${gh[0].from.replace('-', '.')}부터)`, 'clubFeeHist', 'data-k="giftHist"')
         + row('결혼 축의금', wedAmount() ? won(wedAmount()) + '원 (만 45세 미혼 선지급)' : '정하지 않음', 'clubWedAmt')
         + segRow('회비 배정 기본 방식', modes, cfg.allocMode, 'clubAllocMode')
         + segRow('생일선물 대상 판정 (미수금 0 기준일)', [['day', '생일 당일까지 낸 돈'], ['prev', '생일 전날까지 낸 돈']], giftBasis(), 'clubGiftBasis'))}
@@ -638,7 +664,8 @@ function lastPaidNote(m, last, part, dueStr) {
   if (!last) return '비우면 시작월부터 회비 대상이에요.';
   if (last >= st) return `→ ${ymTxt(st)} ~ ${ymTxt(last)} 미리 냄${part ? ` · ${ymTxt(monthShift(last, 1))} 일부 ${part}원` : ''} (시작 적립)`;
   if (last === monthShift(st, -1)) return `→ 시작 전까지 다 냄${part ? ` · ${ymTxt(st)} 일부 ${part}원` : ''}`;
-  return `→ ${ymTxt(monthShift(last, 1))} ~ ${ymTxt(monthShift(st, -1))} 밀림 (면제 빼고) · 시작 미수금 ${dueStr || '0'}원`;
+  const nMon = (() => { let n = 0; for (let ym = monthShift(last, 1); ym < st; ym = monthShift(ym, 1)) if (!isExempt(m, ym) && !(m.joinDate && ym < m.joinDate.slice(0, 7))) n++; return n; })();
+  return `→ 시작 전 밀린 달 ${ymTxt(monthShift(last, 1))} ~ ${ymTxt(monthShift(st, -1))} ${nMon}개월 (면제 빼고) · ${dueStr || '0'}원 · 입금하면 가장 오래된 달부터 채워요`;
 }
 function viewClubStart() {
   const W = csState();
@@ -686,7 +713,8 @@ function clubScreen(L) {
     case '회비 넣기': return viewClubFee(L);
     case '생일선물을 회비로': return viewClubGift(L);
     case '결산표': return viewClubReport(L);
-    case '회칙': return viewClubRules();
+    case '회칙': return viewRuleBook(); // 회칙 책자 (club4.js)
+    case '개정·결의 기록': return viewDecisions();
     case '처음 시작하기': return viewClubStart();
     default: return null;
   }

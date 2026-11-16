@@ -6,7 +6,7 @@
 'use strict';
 
 const CLUB_NAV = [['홈', 'house'], ['회원', 'users'], ['목록', 'list'], ['모임', 'coffee'], ['설정', 'sliders']];
-const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '처음 시작하기': '설정' };
+const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '개정·결의 기록': '회칙', '처음 시작하기': '설정' };
 const isClubBook = () => (Store.current() || {}).type === 'club';
 
 /* ───────── 기본 값 ───────── */
@@ -45,9 +45,18 @@ const isHold = (x) => x.club && x.club.type === 'hold';
 const isUncClub = (x) => isUnc(x) && !isHold(x);
 
 /* ───────── 회원별 계산 ───────── */
-const isExempt = (m, ym) => (m.exempt || []).some((e) => e.from <= ym && (!e.to || ym <= e.to));
+// 면제(없던 것으로) · 유보(나중에 냄: 유보 기간이 끝나기 전까지는 지금 미수금에서 뺌) — 회칙 약관 2
+const isExempt = (m, ym) => (m.exempt || []).some((e) => e.mode !== 'hold' && e.from <= ym && (!e.to || ym <= e.to));
+const isDeferred = (m, ym) => (m.exempt || []).some((e) => e.mode === 'hold' && e.from <= ym && (!e.to || ym <= e.to) && (!e.to || e.to >= curYM()));
+/* 시작 전 밀린 회비를 「달」로 (2026-11-16): 마지막으로 낸 달이 시작점보다 이전이면 그다음 달 ~ 시작 전 달을 달마다 회비 대상으로.
+   (시작 미수금을 금액으로 직접 고친 회원(startDueEdited)은 예전처럼 한 덩어리 금액) */
+const preMode = (m) => !!m && !!m.lastPaid && m.lastPaid < clubStartYM() && !m.startDueEdited;
+const firstDueYM = (m) => (preMode(m) ? monthShift(m.lastPaid, 1) : clubStartYM());
+const startLump = (m) => (preMode(m) ? 0 : m.startDue || 0);
+// 시작 전 과거 입금 기록(보관) · 엑셀로 들어온 보관 내역을 회원 회비로 이은 것도 회비 계산에 넣음 (통장 잔액 · 수입 합계에는 안 들어감)
+const clubFeeTx = () => [...clubTx(), ...liveTx().filter((x) => x.archived && isMoney(x) && x.club && x.club.type === 'fee')];
 function dueYM(m, ym) {
-  if (ym < clubStartYM()) return false;
+  if (ym < clubStartYM()) { if (!preMode(m) || ym <= m.lastPaid) return false; if (m.joinDate && ym < m.joinDate.slice(0, 7)) return false; return !isExempt(m, ym); }
   if (m.joinDate && ym < m.joinDate.slice(0, 7)) return false;
   if (m.status === 'left' && m.leftDate && ym > m.leftDate.slice(0, 7)) return false;
   return !isExempt(m, ym);
@@ -62,11 +71,11 @@ function clubAlloc(m, amount, o) {
   let avail = amount + credit;
   const targets = [];
   if (o.mode === 'pick') {
-    for (const ym of [...(o.picks || [])].sort()) { const need = ym === 'start' ? (m.startDue || 0) - (calc.paid.start || 0) : feeAt(ym) - (calc.paid[ym] || 0); if (need > 0) targets.push({ ym, need }); }
+    for (const ym of [...(o.picks || [])].sort()) { const need = ym === 'start' ? startLump(m) - (calc.paid.start || 0) : feeAt(ym) - (calc.paid[ym] || 0); if (need > 0) targets.push({ ym, need }); }
   } else {
-    if (o.mode !== 'deposit') { const sn = (m.startDue || 0) - (calc.paid.start || 0); if (sn > 0) targets.push({ ym: 'start', need: sn }); }
-    let ym = o.mode === 'deposit' ? (o.depYM > clubStartYM() ? o.depYM : clubStartYM()) : clubStartYM();
-    for (let i = 0; i < 120; i++, ym = monthShift(ym, 1)) { if (!dueYM(m, ym)) continue; const need = feeAt(ym) - (calc.paid[ym] || 0); if (need > 0) targets.push({ ym, need }); }
+    if (o.mode !== 'deposit') { const sn = startLump(m) - (calc.paid.start || 0); if (sn > 0) targets.push({ ym: 'start', need: sn }); }
+    let ym = o.mode === 'deposit' ? (o.depYM > clubStartYM() ? o.depYM : clubStartYM()) : firstDueYM(m); // 밀린 달부터 = 시작 전 밀린 달(가장 오래된 달)부터
+    for (let i = 0; i < 360; i++, ym = monthShift(ym, 1)) { if (!dueYM(m, ym) || (isDeferred(m, ym) && o.mode !== 'pick')) continue; const need = feeAt(ym) - (calc.paid[ym] || 0); if (need > 0) targets.push({ ym, need }); }
   }
   // 부분 납부는 밀린 달(이번 달까지 · 시작 전 밀린 회비)에만. 앞으로 올 달은 한 달이 다 찰 때만 채우고, 남는 돈은 적립금.
   // 예) 밀린 23만 + 31만 입금 → 밀린 달 모두 + 앞으로 2달 + 적립 2만 / 밀린 달이 많을 때 28만 → 9개월 + 마지막 달 부분 1만
@@ -173,20 +182,22 @@ function viewClubFee() {
   const filled = P ? P.alloc.filter((a) => a.ym !== 'start') : [];
   const sumTxt = P ? `→ <b>${P.alloc.length}개월</b> 채움${P.left ? ` + 남는 돈 <b>${won(P.left)}원</b>` : ''}${P.partLast ? ` · 마지막 달은 일부(${manTxt(P.alloc[P.alloc.length - 1].amt)})` : ''}${P.creditUsed ? ` · 적립금 ${won(P.creditUsed)}원 보탬` : ''}` : '금액을 넣어 주세요.';
   // 채워지는 달: 시작 해부터 마지막으로 채우는 달의 해까지 (+ 다음 6달)
-  const y0 = +clubStartYM().slice(0, 4), lastYM = filled.length ? filled[filled.length - 1].ym : curYM();
+  const y0 = +firstDueYM(m).slice(0, 4), lastYM = filled.length ? filled[filled.length - 1].ym : curYM();
   const endYM = monthShift(lastYM > curYM() ? lastYM : curYM(), 6);
   const blocks = [];
-  for (let yy = Math.max(y0, +(C.date || todayStr()).slice(0, 4) - 1); yy <= +endYM.slice(0, 4); yy++) {
+  const firstSel = filled.length ? +filled[0].ym.slice(0, 4) : 9999;
+  for (let yy = Math.max(y0, Math.min(firstSel, +(C.date || todayStr()).slice(0, 4) - 1, C.mode === 'pick' ? y0 : 9999)); yy <= +endYM.slice(0, 4); yy++) {
     const cells = [];
     for (let i = 1; i <= 12; i++) {
       const ym = `${yy}-${pad2(i)}`; if (ym > endYM) break;
       const al = P && P.alloc.find((a) => a.ym === ym), paid = (P ? P.paid[ym] : 0) || 0, fee = feeAt(ym);
-      if (ym < clubStartYM() || !dueYM(m, ym)) cells.push(`<span class="fc dis">${mTxt(ym)}<br>${isExempt(m, ym) ? '면제' : '·'}</span>`);
+      if (!dueYM(m, ym)) cells.push(`<span class="fc dis">${mTxt(ym)}<br>${isExempt(m, ym) ? '면제' : ym < clubStartYM() && m.lastPaid && ym <= m.lastPaid ? ic('check', 14) : '·'}</span>`);
       else if (al) cells.push(`<button class="fc sel" data-act="cfPick" data-ym="${ym}">${mTxt(ym)}<br><b>${paid ? '남은 ' : ''}${manTxt(al.amt)}</b></button>`);
       else if (paid >= fee) cells.push(`<span class="fc paid">${mTxt(ym)}<br>${ic('check', 14)}</span>`);
       else cells.push(`<button class="fc" data-act="cfPick" data-ym="${ym}">${mTxt(ym)}<br>${paid ? manTxt(paid) : '+'}</button>`);
     }
-    blocks.push(`<b class="fcy">${yy}</b><div class="fcgrid">${cells.join('')}</div>`);
+    const preY = `${yy}-12` < clubStartYM();
+    blocks.push(`<b class="fcy">${yy}${preY ? ' <span class="tag">시작 전</span>' : ''}</b><div class="fcgrid ${preY ? 'pre' : ''}">${cells.join('')}</div>`);
   }
   const startA = P && P.alloc.find((a) => a.ym === 'start');
   const modeBtn = (k, l) => `<button class="opt ${C.mode === k ? 'on' : ''}" data-act="cfMode" data-v="${k}">${C.mode === k ? ic('check', 18) : ''}${l}</button>`;
@@ -337,7 +348,9 @@ function viewClubDlg(D) {
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="cmDelYes">${used ? '탈퇴로 바꾸기' : '정말 지우기'}</button></div></div>`;
   }
   if (D.type === 'clubExempt') {
-    return `<form class="dlg" data-form="clubExempt"><h2 class="dlg-title">면제 기간 정하기</h2><span class="sub small">회칙에 따라 과반 결의로 면제한 기간이에요. 그 달들은 회비 대상에서 빠져요(미수금 0).</span>
+    return `<form class="dlg" data-form="clubExempt"><h2 class="dlg-title">면제 · 유보 기간 정하기</h2>
+      <div class="seg"><button type="button" class="${d.mode !== 'hold' ? 'on' : ''}" data-act="exMode" data-v="free">면제 (없던 것으로)</button><button type="button" class="${d.mode === 'hold' ? 'on' : ''}" data-act="exMode" data-v="hold">유보 (나중에 납부)</button></div>
+      ${d.mode === 'hold' ? '<span class="sub small">회칙 약관 2: 유보 기간에는 미수금으로 세지 않고, 기간이 끝나면 그 달들을 다시 내야 할 회비로 셈해요.</span>' : ''}<span class="sub small">회칙에 따라 과반 결의로 면제한 기간이에요. 그 달들은 회비 대상에서 빠져요(미수금 0).</span>
       <div style="display:flex;gap:8px"><label class="field" style="flex:1"><span class="label">시작월</span><input class="input" type="month" data-co="from" value="${esc(d.from)}"></label><label class="field" style="flex:1"><span class="label">끝월</span><input class="input" type="month" data-co="to" value="${esc(d.to)}"></label></div>
       <label class="field"><span class="label">결의일</span><input class="input" type="date" data-co="decided" value="${esc(d.decided)}"></label>
       <label class="field"><span class="label">사유 메모</span><input class="input" data-co="memo" value="${esc(d.memo)}"></label>
@@ -530,8 +543,8 @@ const CLUB_FORM = {
     if (!d.from) return showErr(f, '시작월을 골라 주세요.');
     if (d.to && d.to < d.from) return showErr(f, '끝월이 시작월보다 빨라요.');
     const m = memberOf(D.memberId), before = { ...m };
-    await Store.put('members', { ...m, exempt: [...(m.exempt || []), { from: d.from, to: d.to || '', decided: d.decided || '', memo: d.memo.trim() }] });
-    S.dialog = null; render(); toast(`${ymTxt(d.from)}~${d.to ? ymTxt(d.to) : ''} 면제로 정했어요`, { items: [{ col: 'members', id: m.id, before }] });
+    await Store.put('members', { ...m, exempt: [...(m.exempt || []), { from: d.from, to: d.to || '', decided: d.decided || '', memo: d.memo.trim(), mode: d.mode === 'hold' ? 'hold' : 'free' }] });
+    S.dialog = null; render(); toast(`${ymTxt(d.from)}~${d.to ? ymTxt(d.to) : ''} ${d.mode === 'hold' ? '유보' : '면제'}로 정했어요`, { items: [{ col: 'members', id: m.id, before }] });
   },
   async clubHist(f) {
     const D = S.dialog, d = D.d, amt = toInt(d.amount);

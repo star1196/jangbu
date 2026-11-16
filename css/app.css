@@ -844,3 +844,52 @@ button.lrow:first-of-type { border-top-color: transparent; }
 .bkmore:hover, .bkmore:focus-visible { background: var(--soft); color: var(--ink); }
 .swline { display: flex; align-items: center; gap: 2px; }
 .swline .swrow { flex: 1; min-width: 0; }
+
+/* ───────── 2026-11-16 친구회: 회칙 책자 · 개정·결의 기록 · 시작 전 밀린 달 ───────── */
+.rbtitle { font-size: calc(22px * var(--fs)); font-weight: 800; letter-spacing: -0.02em; }
+.rbtoc { display: flex; flex-direction: column; gap: 6px; }
+.rbbook { padding: 6px 0; }
+.rbchap { border-top: 1px solid var(--line); }
+.rbchap:first-child { border-top: 0; }
+.rbchead { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 10px 20px; border: 0; background: none; font: inherit; font-size: calc(17px * var(--fs)); font-weight: 800; color: var(--ink); text-align: left; cursor: pointer; }
+.rbchead .sub { margin-left: auto; font-weight: 400; }
+.clause { border-top: 1px dashed var(--line); }
+.clbtn { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 12px 20px 12px 30px; border: 0; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.clbtn:hover { background: var(--soft); }
+.clhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; font-size: calc(16px * var(--fs)); line-height: 1.5; }
+.cltag { margin-left: auto; font-size: calc(12px * var(--fs)); color: var(--sub); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+.cltag.old { color: var(--sub); }
+.cltext { display: flex; flex-direction: column; gap: 3px; font-size: calc(15.5px * var(--fs)); line-height: 1.75; color: var(--ink); }
+.cltext.big { font-size: calc(16px * var(--fs)); padding: 10px 14px; background: var(--soft); border-radius: 12px; }
+.cll.in { padding-left: 1.2em; }
+.cll.in2 { padding-left: 2.2em; }
+.clause.old .clhead, .clause.old .cltext, .cltext.old { color: var(--sub); text-decoration: line-through; text-decoration-color: rgba(0,0,0,.35); }
+.clause.old .cltag { text-decoration: none; }
+mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; }
+.clhist { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cldiff { font-size: calc(15px * var(--fs)); line-height: 1.7; white-space: pre-wrap; padding: 8px 12px; border-radius: 10px; background: var(--sf); border: 1px solid var(--line); }
+.cldiff.small { font-size: calc(13.5px * var(--fs)); }
+.cldiff del { background: #F7E0DD; color: #9A3B34; text-decoration: line-through; }
+.cldiff ins { background: #DFEBDF; color: #2F5E3A; text-decoration: none; }
+.decrow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; width: 100%; min-height: 56px; padding: 10px 18px; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.decrow:first-child { border-top: 0; }
+.decd { font-variant-numeric: tabular-nums; min-width: 6.2em; color: var(--sub); }
+.decs { flex: 1 1 220px; min-width: 0; }
+.rltab { display: flex; flex-direction: column; margin-top: 8px; }
+.rlrow { display: grid; grid-template-columns: minmax(110px, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.rlrow > span { grid-column: 1 / -1; font-size: calc(14px * var(--fs)); color: var(--sub); }
+.rlrow > .btn { grid-column: 2; grid-row: 1; }
+.rlrow > .linkbtn { justify-self: start; }
+@media (min-width: 900px) { .rlrow { grid-template-columns: 150px 150px 1fr auto; } .rlrow > span { grid-column: 3; color: var(--ink); } .rlrow > .btn { grid-column: 4; grid-row: auto; } }
+.pc.pre { outline: 1px dashed #CFCFCA; outline-offset: -1px; }
+.pc .pcpre { position: absolute; left: 0; right: 0; bottom: 2px; font-style: normal; font-size: calc(9.5px * var(--fs)); color: var(--sub); }
+.pgrid.hasPre { background: #F1F1EE; border-radius: 14px; padding: 8px; }
+.fcgrid.pre { background: #F1F1EE; border-radius: 12px; padding: 6px; }
+@media print {
+  body.printrules .rbwrap > *:not(.rbtop):not(.rbbook) { display: none !important; }
+  body.printrules .rbbook, body.printrules .rbtop { border: 0 !important; box-shadow: none !important; }
+  body.printrules .clbtn { padding: 6px 0 6px 18px; }
+  body.printrules .rbchead svg { display: none; }
+  body.printrules .clause { break-inside: avoid; }
+  body.printrules .noprint { display: none !important; }
+}

@@ -578,7 +578,9 @@ function viewDialog() {
   } else if (/^ins/.test(D.type)) {
     body = viewInstDlg(D); // 카드 메모 · 계획 · 해지일 (inst.js)
   } else if (/^club/.test(D.type) && typeof viewClubDlg === 'function') {
-    body = viewClubDlgX(D) || viewClubDlg(D); // 친구회 (club3.js 새 것 먼저 · club.js)
+    body = viewClub4Dlg(D) || viewClubDlgX(D) || viewClubDlg(D); // 친구회 (club4 → club3 → club.js)
+  } else if (/^(cl[A-Z]|dec[A-Z]|rl[A-Z])/.test(D.type) && typeof viewClub4Dlg === 'function') {
+    body = viewClub4Dlg(D); // 회칙 조항 · 개정·결의 기록 (club4.js)
   } else if (/^bk/.test(D.type)) {
     body = viewBooksDlg(D); // 장부 관리 (books.js)
   } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {

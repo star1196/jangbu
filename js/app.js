@@ -384,6 +384,8 @@ function afterOpen() {
   setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
+  // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
+  setTimeout(() => { if (typeof clubRulesAutoSeed === 'function' && isClubBook()) Promise.all([clubRulesAutoSeed(), clubAccountsAdd()]).then(([a, b]) => { if ((a || b) && S.mode === 'app') render(); }).catch(() => {}); }, 0);
 }
 
 async function saveBankDraft() {
@@ -586,6 +588,7 @@ const ACT = {
   discardYes: () => { S.dialog = null; closeForm(true); },
   ...SW_ACT, // 장부 바꾸기 · 함께 열기 · 모두 잠그기 (switch.js)
   ...CLUB_ACT, // 친구회 (club.js)
+  ...CLUB4_ACT, // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
   toLock: () => { S.mode = Store.isOpen() ? 'app' : 'lock'; render(); }, // 열린 장부가 있으면 그 장부로 돌아감
@@ -668,6 +671,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onClub4Input(el)) return; // 회칙 · 결의 · 과거 입금 칸 (club4.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)
   if (onBooksInput(el)) return; // 장부 관리 칸 (books.js)
   if (typeof onSafeInput === 'function' && onSafeInput(el)) return; // 합치기 확인 · 카드 계획 칸 (safe.js · inst.js)
