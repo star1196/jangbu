@@ -893,3 +893,18 @@ mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; 
   body.printrules .clause { break-inside: avoid; }
   body.printrules .noprint { display: none !important; }
 }
+
+/* ───────── 2026-11-17 친구회 입금 정리 (이름별) · 미리보기 한꺼번에 ───────── */
+.ugcard { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.ugtop { display: flex; align-items: flex-start; gap: 10px; }
+.ugchk { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -8px 0 0 -8px; }
+.ugchk input { width: 22px; height: 22px; }
+.ugrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.uglist { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.ugitem { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.ugitem:first-child { border-top: 0; }
+.ugitem > .sub:first-child { min-width: 6.2em; font-variant-numeric: tabular-nums; }
+.impbulk { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; }
+.balchk { padding: 12px 16px; border-radius: 12px; font-size: calc(14.5px * var(--fs)); }
+.balchk.ok { background: #E8F0E9; color: #2F5E3A; }
+.balchk.warn { background: var(--warn-soft); color: var(--ink); border: 1.5px solid var(--warn); }

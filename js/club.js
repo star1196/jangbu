@@ -6,7 +6,7 @@
 'use strict';
 
 const CLUB_NAV = [['홈', 'house'], ['회원', 'users'], ['목록', 'list'], ['모임', 'coffee'], ['설정', 'sliders']];
-const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '개정·결의 기록': '회칙', '처음 시작하기': '설정' };
+const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '개정·결의 기록': '회칙', '입금 정리': '목록', '처음 시작하기': '설정' };
 const isClubBook = () => (Store.current() || {}).type === 'club';
 
 /* ───────── 기본 값 ───────── */
@@ -410,9 +410,11 @@ async function cfSaveNow() {
     saved = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: '회비', accountId: acc.id, payMethodId: bankPayId(), bankId: C.bankId, status: '확인', source: '직접', club, deleted: false });
   }
   const msg = `${m.name} 회비 ${P.alloc.length}개월을 채웠어요${P.left ? ` · ${won(P.left)}원은 ${C.left === 'other' ? '기타 수입' : '적립금'}` : ''}`;
+  const back = C.back, step = C.step;
   S.cf = null; S.clubMember = m.id;
   S.hist = S.hist.filter((s) => s !== '회비 넣기');
-  S.screen = '회원 상세'; S.fwd = []; render();
+  if (back === '입금 정리' && step && ugGroups().some((g) => g.mid)) { toast(msg, { items: [{ col: 'tx', id: saved.id, before }] }); CLUB5_ACT.ugStep(); S.hist = S.hist.filter((s) => s !== '회비 넣기'); return; } // 하나씩 확인하기: 다음 입금으로
+  S.screen = back || '회원 상세'; S.fwd = []; render();
   toast(msg, { items: [{ col: 'tx', id: saved.id, before }] });
 }
 async function cgSaveNow() {

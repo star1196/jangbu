@@ -588,7 +588,8 @@ const ACT = {
   discardYes: () => { S.dialog = null; closeForm(true); },
   ...SW_ACT, // 장부 바꾸기 · 함께 열기 · 모두 잠그기 (switch.js)
   ...CLUB_ACT, // 친구회 (club.js)
-  ...CLUB4_ACT, // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
+  ...CLUB4_ACT,
+  ...CLUB5_ACT, // 친구회 입금 정리 (club5.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
   toLock: () => { S.mode = Store.isOpen() ? 'app' : 'lock'; render(); }, // 열린 장부가 있으면 그 장부로 돌아감
@@ -671,6 +672,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onClub5Input(el)) return; // 입금 정리 칸 (club5.js)
   if (onClub4Input(el)) return; // 회칙 · 결의 · 과거 입금 칸 (club4.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)
   if (onBooksInput(el)) return; // 장부 관리 칸 (books.js)
@@ -691,7 +693,8 @@ $app.addEventListener('input', (e) => {
   // 카드 추가 칸
   if (el.dataset && el.dataset.ca && S.cardAdd) { const k = el.dataset.ca, num = k === 'last4' || k === 'first4'; S.cardAdd[k] = num ? digits(el.value).slice(0, 4) : el.value; if (num) el.value = S.cardAdd[k]; }
   // 파일 미리보기 칸
-  if (el.dataset && el.dataset.imp && S.imp && S.imp.items) onImpInput(el);
+  if (el.dataset && (el.dataset.imp || el.dataset.impbulk != null) && S.imp && S.imp.items) onImpInput(el);
+  if (el.dataset && el.dataset.uncone) uncPickOne(el);
   // 대화 상자 안 칸(data-d): 다시 그리지 않고 값만 기억 (커서 유지)
   if (el.dataset && el.dataset.d && S.dialog && S.dialog.d) {
     const k = el.dataset.d;

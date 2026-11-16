@@ -66,7 +66,7 @@ function parseAmt(v) {
 }
 
 /* ── 칸 종류 ── */
-const FIELDS = [['', '고르세요'], ['date', '날짜'], ['merchant', '가맹점·내용'], ['out', '금액(나간 돈)'], ['in', '금액(들어온 돈)'], ['amount', '금액(+/− 한 칸)'], ['inst', '할부 개월'], ['cardNo', '카드번호'], ['approval', '승인번호'], ['memo', '메모'], ['skip', '쓰지 않음']];
+const FIELDS = [['', '고르세요'], ['bal', '잔액(통장)'], ['date', '날짜'], ['merchant', '가맹점·내용'], ['out', '금액(나간 돈)'], ['in', '금액(들어온 돈)'], ['amount', '금액(+/− 한 칸)'], ['inst', '할부 개월'], ['cardNo', '카드번호'], ['approval', '승인번호'], ['memo', '메모'], ['skip', '쓰지 않음']];
 function guessField(h) {
   const s = norm(h);
   if (/일자|날짜|거래일|이용일|승인일|사용일|일시/.test(s)) return 'date';
@@ -301,6 +301,7 @@ function impPeekTable(I) {
 function buildItems() {
   const I = S.imp, T = I.target, col = (f) => Object.keys(I.map).filter((k) => I.map[k] === f).map(Number);
   const cD = col('date')[0], cM = col('merchant'), cO = col('out')[0], cI = col('in')[0], cA = col('amount')[0], cInst = col('inst')[0], cNo = col('cardNo')[0], cAp = col('approval')[0], cMemo = col('memo')[0];
+  const cBal = col('bal')[0] != null ? col('bal')[0] : (() => { const i = (I.hdr || []).findIndex((h) => /잔액|잔고/.test(norm(h))); return i >= 0 ? i : undefined; })(); // 통장 잔액 칸 (은행 잔액과 앱 잔액 비교용)
   const cF = col('fee')[0], cDi = col('disc')[0], cIdx = col('instIdx')[0], cP = col('principal')[0], cBT = col('billTotal')[0];
   const absAmt = (v) => Math.abs(parseAmt(v)); // 수수료·할인은 명세서 부호와 상관없이 크기만 씀
   const items = [];
@@ -344,6 +345,7 @@ function buildItems() {
     } else { bankId = T.bankId || null; payId = (Store.all('payMethods').find((p) => p.kind === 'bank') || {}).id || null; }
     const instN = cInst != null ? instOf(r[cInst]) : 1;
     const it = { i: items.length, row: ri, tail: ri, date, merchant, kind, amount, payId, bankId, inst: instN > 1 ? instN : 1, approval: cAp != null ? String(r[cAp] ?? '').trim() : '', memo: cMemo != null ? String(r[cMemo] ?? '').trim() : '', accId: null, auto: false, use: true, dup: false, same: null, bill: null, cancelOf: null };
+    if (T.type === 'bank' && cBal != null && String(r[cBal] ?? '').trim() !== '') it.bal = parseAmt(r[cBal]);
     if (T.type === 'card') {
       // 이용금액이 −면 취소·환불(위에서 이미 −로 둠). 수수료·할인은 부호와 상관없이 크기로.
       Object.assign(it, { base: amount, fee0: cF != null ? absAmt(r[cF]) : 0, disc0: cDi != null ? absAmt(r[cDi]) : 0, asks: [], feeCol: cF != null,
@@ -473,6 +475,34 @@ function totalLine(I) {
     : `<span style="font-size:${px(15)};font-weight:700;color:var(--warn)">명세서 ${won(st.amount)}원 · 앱 ${won(appT)}원 · 차이 ${won(Math.abs(st.amount - appT))}원</span><span class="sub small">다른 줄이 없는지, 할부·할인·수수료 칸이 맞는지 확인해 주세요. (명세서에서 찾은 칸: ${esc(st.label)})</span>`;
 }
 
+/* ── 친구회 통장 파일 미리보기: 입금자 이름 → 회원 · 회비 배수면 「저장하면 ○○ 회비로」 (아니면 저장 뒤 입금 정리에서) ── */
+function clubPreviewNote(it) {
+  if (typeof isClubBook !== 'function' || !isClubBook() || it.kind !== 'in' || it.dup || it.accId) return '';
+  const m = matchMember({ merchant: it.merchant, memo: it.memo || '' });
+  if (m && m.mode !== 'manual' && it.amount % feeAt(it.date.slice(0, 7)) === 0) return `<span class="pnote ok">${ic('check', 12)}저장하면 ${esc(m.name)} 회비로 (밀린 달부터 · 자동)</span>`;
+  return `<span class="pnote">${m ? `${esc(m.name)} 회원 같아요 · ` : ''}저장 뒤 [입금 정리]에서 이름별로 한 번에 · 하나씩 정해요</span>`;
+}
+const clubAutoN = (I) => (typeof isClubBook === 'function' && isClubBook() ? I.items.filter((it) => it.use && clubPreviewNote(it).includes('자동')).length : 0);
+
+/* ── 통장 파일에 「잔액」 칸이 있으면: 은행 잔액(파일 마지막 거래 뒤) ↔ 앱 잔액(저장하면) 비교 ── */
+function balCheck(I) {
+  if (!I || !I.target || I.target.type !== 'bank' || !I.target.bankId || !I.items) return null;
+  const its = I.items.filter((it) => it.bal != null && it.date); if (!its.length) return null;
+  const desc = I.items[0].date > I.items[I.items.length - 1].date; // 최신이 위인 파일
+  const lastDate = its.reduce((m, it) => (it.date > m ? it.date : m), '');
+  const same = its.filter((it) => it.date === lastDate), last = desc ? same[0] : same[same.length - 1];
+  const b = bankOf(I.target.bankId); if (!b || (b.openDate && lastDate < b.openDate)) return { skip: true, lastDate, bank: last.bal };
+  let app = balBefore(b.id, addDays(lastDate, 1));
+  if (!I.saved) I.items.filter((it) => it.use && !it.dup && !(it.same && it.same.yes) && it.date <= lastDate).forEach((it) => { app += it.kind === 'in' ? it.amount : -it.amount; });
+  return { lastDate, bank: last.bal, app, diff: last.bal - app, name: b.name };
+}
+function balCheckHtml(I) {
+  const c = balCheck(I); if (!c) return '';
+  if (c.skip) return `<div class="balchk warn">${ic('info', 16)} 파일 마지막 잔액 ${won(c.bank)}원 (${dTxt(c.lastDate)}) · 이 통장 시작일보다 앞이라 비교하지 않아요.</div>`;
+  return c.diff === 0 ? `<div class="balchk ok">${ic('check', 16)} 통장 잔액이 맞아요 · 은행 ${won(c.bank)}원 = 앱 ${won(c.app)}원 (${dTxt(c.lastDate)} 마지막 거래 뒤 · ${esc(c.name)})</div>`
+    : `<div class="balchk warn">${ic('circle-alert', 16)} <b>통장 잔액이 달라요</b> · 은행 ${won(c.bank)}원 · 앱 ${won(c.app)}원 · 차이 ${won(Math.abs(c.diff))}원 (${dTxt(c.lastDate)} 기준 · ${esc(c.name)})<br><span class="sub small">빠진 거래가 있거나, 통장 시작 잔액이 다를 수 있어요. 끈 줄 · 중복 제외 줄을 확인하고, 그래도 다르면 통장 화면의 [잔액 맞추기]로 맞춰요.</span></div>`;
+}
+
 /** 읽은 줄이 모두 이미 장부에 있으면: 「이미 올린 파일이에요. N건 모두 중복」 */
 function checkAllDup() {
   const st = impStats();
@@ -511,9 +541,10 @@ function viewFile(L) {
     return `<div class="donebox">
       <span class="donecheck">${ic('check', 36)}</span>
       <span style="font-size:${px(24)};font-weight:700">${I.savedN}건을 장부에 저장했어요</span>
+      ${I.bc && !I.bc.skip ? `<div class="balchk ${I.bc.diff === 0 ? 'ok' : 'warn'}" style="max-width:560px">${I.bc.diff === 0 ? `${ic('check', 16)} 통장 잔액이 맞아요 · ${won(I.bc.bank)}원` : `${ic('circle-alert', 16)} <b>통장 잔액이 달라요</b> · 은행 ${won(I.bc.bank)}원 · 앱 ${won(I.bc.app)}원 · 차이 ${won(Math.abs(I.bc.diff))}원`} (${dTxt(I.bc.lastDate)} 기준)</div>` : ''}
       ${I.archN ? `<span class="sub" style="font-size:${px(15)}">시작점 이전 ${I.archN}건은 <b>보관</b>으로 넣었어요. 지출 합계에는 안 들어가고, 카드 대금·남은 할부 계산에만 써요.</span>` : ''}
       ${I.uncN ? `<span class="sub" style="font-size:${px(15)}">미확인 <b style="color:var(--warn)">${I.uncN}건</b>이 남았어요. 지금 정리할까요?</span>` : I.archN && I.archN === I.savedN ? '' : `<span class="sub" style="font-size:${px(15)}">모두 분류됐어요.</span>`}
-      <div class="chips" style="justify-content:center;margin-top:12px">${S.sw ? '<button class="btn ink big" data-act="swBack">처음 시작하기로 돌아가기</button>' : ''}${I.uncN && !S.sw ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button><button class="btn big" data-act="impReset">다른 파일 올리기</button></div>
+      <div class="chips" style="justify-content:center;margin-top:12px">${S.sw ? '<button class="btn ink big" data-act="swBack">처음 시작하기로 돌아가기</button>' : ''}${typeof isClubBook === 'function' && isClubBook() && ugTxs().length ? `<button class="btn ink big" data-act="goClubSort">미확인 입금 ${ugTxs().length}건 · 이름별로 정리</button>` : ''}${I.uncN && !S.sw ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button><button class="btn big" data-act="impReset">다른 파일 올리기</button></div>
     </div>`;
   }
   return '';
@@ -575,6 +606,7 @@ function viewPreview(L) {
         : it.cancelOf ? `<span class="pnote">취소 · ${dateLabel(it.cancelOf.date)} 결제와 짝</span>`
         : it.disc && T.type !== 'card' ? `<span class="pnote ok">${ic('check', 12)}할인 ${won(it.disc)}원 반영 (원래 ${won(it.amount + it.disc)}원)</span>`
           : it.billMiss ? '<span class="pnote warn">카드 대금 같은데 금액이 달라요 · 확인해 주세요</span>'
+            : clubPreviewNote(it) ? clubPreviewNote(it)
             : isPreStart(it.date) && !it.bill ? `<span class="pnote">${ic('clock', 12)}시작점 이전 · 보관 (지출 합계엔 안 넣고 ${T.type === 'card' ? '카드 대금·남은 할부 계산에만 써요' : '기록으로만 둬요'})</span>` : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
   const row = (it) => {
@@ -597,12 +629,17 @@ function viewPreview(L) {
       <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:${px(15)};font-weight:700">${esc(I.name)}</span>
       <span style="font-size:${px(14)}">${st.read}건 읽음 · 자동 분류 ${st.auto}건 · <b style="color:var(--warn)">미확인 ${st.unc}건</b> · 중복 제외 ${st.dup}건${st.same ? ` · 같은 건 ${st.same}건` : ''}${st.arch ? ` · 시작점 이전 보관 ${st.arch}건` : ''}</span>${totalLine(I)}</div></section>
     <span class="sub" style="font-size:${px(14)}">칸을 눌러 바로 고칠 수 있어요. 왼쪽 네모를 끄면 그 줄은 저장하지 않아요. [확인하고 저장]을 누르기 전에는 장부에 들어가지 않아요.</span>
+    ${balCheckHtml(I)}
+    <section class="card impbulk"><span class="sub small" style="flex:1 1 100%">한 번에: 체크한 줄의 분류를 한꺼번에 바꾸거나, 아래 줄마다 하나씩 고쳐도 돼요.</span>
+      <button class="btn" data-act="impChkAll">${I.items.every((it) => it.use || it.dup) ? '모두 끄기' : '모두 체크'}</button>
+      <select class="input" style="flex:1 1 180px" data-impbulk aria-label="체크한 줄 분류"><option value="">체크한 줄 분류 고르기…</option>${['in', 'out'].map((k) => visibleAccs(k).map((a) => `<option value="${a.id}" ${S.impBulk === a.id ? 'selected' : ''}>${k === 'in' ? '수입 · ' : '지출 · '}${esc(a.name)}</option>`).join('')).join('')}</select>
+      <button class="btn ink" data-act="impBulkApply" ${S.impBulk ? '' : 'disabled'}>체크한 ${st.use}건에 적용</button></section>
     <section class="card" style="overflow:hidden">
       ${phone ? '' : `<div class="ptr head"><span></span><span style="padding-left:16px">날짜</span><span>가맹점</span><span class="r">금액</span><span>분류</span><span>${T.type === 'card' ? '카드' : '통장'}</span></div>`}
       ${its.map(row).join('')}
       ${I.items.length > I.shown ? `<button class="morerows" data-act="impMore">나머지 ${I.items.length - I.shown}건 더 보기</button>` : ''}
     </section>
-    <div class="stickyfoot"><span class="sub" style="flex:1 1 220px;font-size:${px(14)}">${st.use}건 저장 예정 · 미확인 ${st.unc}건은 저장 뒤 정리</span>
+    <div class="stickyfoot"><span class="sub" style="flex:1 1 220px;font-size:${px(14)}">${st.use}건 저장 예정${clubAutoN(I) ? ` · 회비 자동 ${clubAutoN(I)}건` : ''} · 미확인 ${Math.max(0, st.unc - clubAutoN(I))}건은 저장 뒤 정리</span>
       <button class="btn big" data-act="impReset">다시 올리기</button><button class="btn ink big" data-act="impSave" ${st.use || st.same ? '' : 'disabled'}>확인하고 저장</button></div>
   </div>`;
 }
@@ -663,7 +700,8 @@ async function saveImport() {
   if (club) uncN = Math.max(0, uncN - club.auto);
   await Store.put('imports', { id: impId, name: I.name, saved: savedN, tplName: (Store.get('templates', I.tplId) || {}).name || '' });
   S.busy = false;
-  S.imp = { step: 'done', savedN, uncN, archN, club };
+  const bc = balCheck({ ...I, saved: true }); // 통장 잔액 칸이 있었으면: 저장한 뒤 은행 잔액 ↔ 앱 잔액
+  S.imp = { step: 'done', savedN, uncN, archN, club, bc };
   render(); toast(`${savedN}건을 저장했어요${club && club.auto ? ` · 회비 자동 ${club.auto}건` : ''}${club && club.hold ? ` · 보류 ${club.hold}건` : ''}${archN ? ` · 시작점 이전 ${archN}건은 보관` : ''}`, { items: undo });
 }
 
@@ -722,7 +760,10 @@ function viewUnc(L) {
     <div class="chips"><button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="uncAll">${S.uncAll ? '다른 분류 닫기' : '다른 분류'}</button>${!many && isMoney(x) ? `<button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="splitOpen" data-id="${x.id}">${ic('columns', 18)}나누기</button>` : ''}</div>
     ${S.uncAll ? `<div class="chips">${all.map((a) => `<button class="chip" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catGlyph(a, 18)}${esc(a.name)}</button>`).join('')}</div>` : ''}
     ${G.merchant && !G.mall ? `<button class="autochk" data-act="uncAuto" role="checkbox" aria-checked="${S.uncAuto !== false}"><span class="chk ${S.uncAuto !== false ? 'on' : ''}">${S.uncAuto !== false ? ic('check', 16) : ''}</span><span style="font-size:${px(15)}">이 가맹점은 다음에도 자동으로</span></button>` : ''}
+    ${many ? `<button class="btn" data-act="uncOpen" aria-expanded="${!!S.uncOpen}">${ic(S.uncOpen ? 'chevron-down' : 'chevron-right', 16)}${S.uncOpen ? '접기' : `펼쳐서 하나씩 (${G.items.length}건)`}</button>` : ''}
+    ${many && S.uncOpen ? `<section class="card" style="padding:4px 16px">${G.items.map((i) => `<div class="ugitem"><span class="sub">${shortDate(i.date)}</span><b class="${clsOf(signed(i))}">${moneyTxt(signed(i))}</b><select class="input" style="flex:1 1 160px" data-uncone="${i.id}" aria-label="이 건 분류"><option value="">이 건만 분류…</option>${all.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>`).join('')}</section>` : ''}
     <div style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" data-act="uncPrev" ${S.uncLast ? '' : 'disabled'}>이전</button><button class="btn ghost" data-act="uncSkip" data-k="${esc(G.key)}">건너뛰기</button></div>
+    ${(S.uncDone || []).length ? `<section class="card card-pad"><div class="secrow"><h2 class="h2" style="font-size:${px(16)}">방금 정리한 것 ${S.uncDone.length}건</h2><button class="btn ghost" data-act="uncDoneClear">비우기</button></div><span class="sub small">몇 건만 골라 다시 고칠 수 있어요.</span>${S.uncDone.map((id) => Store.get('tx', id)).filter(Boolean).slice(0, 30).map((t) => `<div class="ugitem"><span class="sub">${shortDate(t.date)}</span><span style="flex:1 1 140px;min-width:0">${esc(t.merchant || '')} <b class="${clsOf(signed(t))}">${moneyTxt(signed(t))}</b><br><span class="sub small">${esc((accOf(t.accountId) || {}).name || '미확인')}</span></span><button class="btn" data-act="openTx" data-id="${t.id}">고치기</button></div>`).join('')}</section>` : ''}
   </div>`;
 }
 
@@ -854,6 +895,12 @@ const FILE_ACT = {
   impMore: () => { S.imp.shown += 50; render(); },
   impSame: (el) => { const it = S.imp.items[+el.dataset.i]; it.same.yes = el.dataset.v === '1'; it.use = !it.same.yes; render(); },
   impSave: () => { if (!S.busy) saveImport(); },
+  impChkAll: () => { const its = S.imp.items, on = !its.every((it) => it.use || it.dup); its.forEach((it) => { if (!it.dup) it.use = on; }); render(); },
+  impBulkApply: () => {
+    const a = accOf(S.impBulk); if (!a) return;
+    let n = 0; S.imp.items.forEach((it) => { if (it.use && !it.bill && it.kind === a.kind) { it.accId = a.id; it.auto = false; n++; } });
+    S.impBulk = ''; render(); toast(n ? `체크한 ${n}건을 '${a.name}'(으)로 바꿨어요 · 줄마다 다시 고칠 수 있어요` : `'${a.name}'은(는) ${a.kind === 'in' ? '수입' : '지출'} 분류라 맞는 줄이 없어요`);
+  },
   impAsk: (el) => { const it = S.imp.items[+el.dataset.i]; it.asks[+el.dataset.q].choice = el.dataset.v; cardSplit(it); render(); },
   goUncFix: () => { S.uncTotal = null; S.uncSkip = []; S.uncLast = null; go('미확인 정리'); },
   uncAll: () => { S.uncAll = !S.uncAll; render(); },
@@ -864,9 +911,12 @@ const FILE_ACT = {
     const befores = [];
     for (const x of G.items) { befores.push({ ...x }); await Store.put('tx', { ...x, accountId: el.dataset.acc, status: '확인' }); }
     if (S.uncAuto !== false && G.merchant && !G.mall) await saveRule(G.merchant, el.dataset.acc);
-    S.uncLast = { befores }; S.uncAll = false; render();
+    S.uncLast = { befores }; S.uncAll = false; S.uncDone = [...befores.map((b) => b.id), ...(S.uncDone || [])].slice(0, 60); render();
     if (G.items.length > 1) toast(`${G.items.length}건을 '${(accOf(el.dataset.acc) || {}).name}'(으)로 정했어요`);
   },
+  // 하나씩: 묶음을 펼쳐 한 건만 분류
+  uncOpen: () => { S.uncOpen = !S.uncOpen; render(); },
+  uncDoneClear: () => { S.uncDone = []; render(); },
   uncPrev: async () => { const L0 = S.uncLast; if (!L0) return; for (const b of L0.befores || []) await Store.put('tx', b, true); S.uncLast = null; render(); },
   uncSkip: (el) => { S.uncSkip = [...(S.uncSkip || []), el.dataset.k]; if (uncGroups().every((g) => S.uncSkip.includes(g.key))) S.uncSkip = []; render(); },
   splitOpen: (el) => openSplit(el.dataset.id),
@@ -900,7 +950,15 @@ const FILE_ACT = {
 };
 
 // 미리보기 칸 고치기 (다시 그리지 않음)
+async function uncPickOne(el) {
+  const x = Store.get('tx', el.dataset.uncone); if (!x || !el.value) return;
+  const before = { ...x };
+  await Store.put('tx', { ...x, accountId: el.value, status: '확인' });
+  S.uncDone = [x.id, ...(S.uncDone || [])].slice(0, 60); render();
+  toast(`${x.merchant || ''} ${won(x.amount)}원 → '${(accOf(el.value) || {}).name}'`, { items: [{ col: 'tx', id: x.id, before }] });
+}
 function onImpInput(el) {
+  if (el.dataset && el.dataset.impbulk != null) { S.impBulk = el.value; render(); return; }
   const it = S.imp.items[+el.dataset.i], k = el.dataset.imp; if (!it) return;
   if (k === 'use') { it.use = el.checked; el.closest('.ptr,.pcard').classList.toggle('off', !it.use); }
   else if (k === 'date') { if (el.value) it.date = el.value; }

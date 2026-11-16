@@ -236,7 +236,10 @@ function clubTodo() {
 // 할 일 줄들 (홈 · 휴대폰/탭/노트북 공통)
 function clubTodoRows(T) {
   const out = [];
-  if (T.unc.length) out.push(`<button class="trow" data-act="clubListF" data-f="unc"><span class="odot"></span><span style="flex:1">미확인 입금·지출</span><b>${T.unc.length}건</b></button>`);
+  if (typeof clausesAll === 'function' && !clausesAll().length) out.push(`<div class="trow">${ic('book-open', 18)}<span style="flex:1">회칙 37개 조항이 아직 안 들어갔어요<br><span class="sub small">${hasOldRuleText() ? '예전에 적어 둔 회칙 글이 있어서 저절로 넣지 않았어요 (예전 글은 그대로 남아요)' : '눌러서 넣어요'}</span></span><span class="chips" style="gap:6px"><button class="btn ink" data-act="rbImport">넣기</button><button class="btn" data-act="go" data-to="회칙">보기</button></span></div>`);
+  const uncIn = T.unc.filter((x) => x.kind === 'in').length;
+  if (uncIn) out.push(`<button class="trow" data-act="goClubSort"><span class="odot"></span><span style="flex:1">미확인 입금 · 이름별로 정리</span><b>${uncIn}건</b></button>`);
+  if (T.unc.length - uncIn) out.push(`<button class="trow" data-act="clubListF" data-f="unc"><span class="odot"></span><span style="flex:1">미확인 지출</span><b>${T.unc.length - uncIn}건</b></button>`);
   [...new Set(T.hold.map((x) => x.club.memberId))].forEach((id) => out.push(`<button class="trow" data-act="clubListF" data-f="hold"><span class="tag hold">보류</span><span style="flex:1">${esc((memberOf(id) || {}).name || '')}</span><b>${T.hold.filter((x) => x.club.memberId === id).length}건</b></button>`));
   const mt = mergeTodo(); if (mt) out.push(`<div class="trow">${ic('file-up', 18)}<span style="flex:1">다른 기기 백업을 먼저 불러오세요<br><span class="sub small">${syncInfo().lastMerge ? '마지막으로 합친 때 ' + agoTxt(syncInfo().lastMerge.mergedAt || syncInfo().lastMerge.at) : '다른 기기에서 넣은 내역이 있어요'}</span></span><button class="btn" data-act="pickBackup">불러오기</button><input type="file" data-backup="merge" hidden></div>`);
   if (S.storWarn) out.push(`<button class="trow" data-act="goStorage">${ic('circle-alert', 18, 'var(--warn)')}<span style="flex:1">저장 공간 ${Math.round(S.storWarn.usage / S.storWarn.quota * 100)}% 찼어요</span>${ic('chevron-right', 16)}</button>`);
@@ -438,7 +441,8 @@ function viewClubList() {
       <span class="chips">${feat('files') ? `<button class="btn" data-act="clubFile">${ic('upload', 18)}통장 파일</button>` : ''}<button class="btn" data-act="clubOutNew">${ic('plus', 18)}지출</button></span></div>
     ${pfBar('clist', '1년', null, '이름 · 가맹점 · 메모 · 금액 찾기')}
     <div class="chips">${tabs.map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="clubListF" data-f="${k}">${l}${k !== 'all' && cnt(k) ? ' ' + cnt(k) : ''}</button>`).join('')}</div>
-    ${f === 'unc' && list.length ? '<div class="infoline">누르면 회원 · 회비/대출 상환/기타 · 지출 계정으로 정해요. 같은 가맹점은 한 번에 정할 수 있어요.</div>' : ''}
+    ${f === 'unc' && list.some((x) => x.kind === 'in') ? `<button class="btn ink big" data-act="goClubSort">${ic('list-checks', 20)}미확인 입금 ${list.filter((x) => x.kind === 'in').length}건 · 입금자 이름별로 정리하기</button>` : ''}
+    ${f === 'unc' && list.length ? '<div class="infoline">하나씩 하려면 줄을 눌러 회원 · 회비/대출 상환/기타 · 지출 계정으로 정해요. 같은 가맹점은 한 번에 정할 수 있어요.</div>' : ''}
     <section class="card" style="overflow:hidden">${body || `<div class="empty">${ic('check', 32, 'var(--sub)')}${f === 'unc' || f === 'hold' ? '정리 끝' : '내역이 없어요.'}</div>`}</section>
   </div>`;
 }
@@ -715,6 +719,7 @@ function clubScreen(L) {
     case '결산표': return viewClubReport(L);
     case '회칙': return viewRuleBook(); // 회칙 책자 (club4.js)
     case '개정·결의 기록': return viewDecisions();
+    case '입금 정리': return viewClubSort(L); // 입금자 이름별 정리 (club5.js)
     case '처음 시작하기': return viewClubStart();
     default: return null;
   }

@@ -131,7 +131,7 @@ function viewRuleBook() {
   const all = clausesAll(), R = S.rb || (S.rb = { old: false, edit: false, q: '', search: false, fold: {} });
   if (!all.length) {
     return `<div class="stack" style="max-width:760px"><section class="card card-pad stack" style="gap:10px"><h2 class="h2">회칙 조항이 아직 없어요</h2>
-      <span class="sub" style="line-height:1.6">친구회 회칙 파일(37개 조항: 제1장 총칙 ~ 2022.06.25 추가 약관)을 장·조 순서대로 넣어요. ${hasOldRuleText() ? '예전에 적어 둔 회칙 글은 지우지 않고 아래 「예전 회칙 글」에 그대로 둬요.' : ''}</span>
+      <span class="sub" style="line-height:1.6">친구회 회칙 파일(37개 조항: 제1장 총칙 ~ 2022.06.25 추가 약관)을 장·조 순서대로 넣어요. ${hasOldRuleText() ? '<br><b style="color:var(--warn)">이 장부에는 예전에 적어 둔 회칙 글이 있어서, 겹치지 않게 저절로 넣지 않고 기다리고 있어요.</b> 예전 글은 지우지 않고 아래 「예전 회칙 글」에 그대로 둬요.' : ''}</span>
       <button class="btn ink big" data-act="rbImport">${ic('file-up', 20)}회칙 37개 조항 가져오기</button></section>${oldRuleHtml()}</div>`;
   }
   const q = R.q.trim(), chaps = [];
@@ -310,7 +310,7 @@ const pastCands = (m) => liveTx().filter((x) => x.archived && x.kind === 'in' &&
 
 /* ───────── 누르기 ───────── */
 const CLUB4_ACT = {
-  rbImport: async () => { const n = await importRules(); render(); toast(`회칙 ${n}개 조항을 넣었어요`); },
+  rbImport: async () => { const n = await importRules(); render(); toast(`회칙 ${n}개 조항을 넣었어요 · 설정 → 회칙에서 봐요`); },
   rbOld: () => { S.rb.old = !S.rb.old; render(); },
   rbEdit: () => { S.rb.edit = !S.rb.edit; render(); },
   rbSearch: () => { S.rb.search = !S.rb.search; if (!S.rb.search) S.rb.q = ''; render(); },
