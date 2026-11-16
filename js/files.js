@@ -819,6 +819,7 @@ function viewDict() {
       <span class="sub small">쿠팡·네이버페이처럼 한 번에 여러 물건을 사는 곳은 자동으로 나누지 않아요. 미확인 정리에서 한 건씩 고르거나 [나누기]로 나눠 적어요.</span>
       <div class="chips" style="gap:6px">${mallsOf().map((w) => `<button class="chip" style="min-height:36px;font-size:${px(13)}" data-act="mallDel" data-w="${esc(w)}">${esc(w)}${ic('x', 12)}</button>`).join('')}</div>
       <div class="cols" style="gap:8px"><input class="input" style="flex:1 1 200px" data-mallw value="${esc(S.mallW || '')}" placeholder="온라인몰 이름 추가" autocomplete="off"><button class="btn" data-act="mallAdd">추가</button></div></section>
+    ${typeof rcShopsSection === 'function' ? rcShopsSection() : ''}
     <button class="btn ghost" style="align-self:flex-start" data-act="dictReset">기본 사전으로 되돌리기</button>
   </div>`;
 }

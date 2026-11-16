@@ -560,7 +560,24 @@ const Store = (() => {
     }
     const t = db.transaction('ledgers', 'readwrite'); t.objectStore('ledgers').delete(id); await txDone(t);
     try { await bDel('L:' + id); } catch (e) { /* 그대로 */ }
-    if (ledger && ledger.id === id) lock(); else opened.delete(id);
+    try { const cfg = await bundleCfg(); if (cfg && cfg.openerId === id) await bundleClear(); } catch (e) { /* 그대로 */ } // 함께 열기 묶음의 여는 장부였으면 묶음도 풀기
+    const o = opened.get(id); if (o) { o.key = null; o.mem = null; }
+    opened.delete(id);
+    if (ledger && ledger.id === id) { // 지금 장부를 지웠으면: 열려 있는 다른 장부로, 없으면 잠금
+      key = null; mem = {}; ledger = null;
+      const next = [...opened.keys()][0];
+      if (next) switchTo(next); else lock();
+    }
+  }
+  // 장부 이름만 바꾸기 (잠긴 장부도 됨: 이름은 원래 잠그지 않음)
+  async function renameLedgerById(id, name) {
+    const db = await openDB();
+    const t = db.transaction('ledgers', 'readwrite'), st = t.objectStore('ledgers');
+    const meta = await reqP(st.get(id)); if (!meta) return false;
+    meta.name = name; st.put(meta); await txDone(t);
+    const o = opened.get(id); if (o) o.ledger.name = name;
+    if (ledger && ledger.id === id) ledger.name = name;
+    return true;
   }
   // 다른 장부를 열지 않고 내용만 읽기 (새 장부에 카드·통장 등을 가져올 때). 비밀번호가 틀리면 null
   async function readLedger(id, password, cols) {
@@ -595,5 +612,5 @@ const Store = (() => {
   return { switchTo, isOpened, openedIds, checkPassword, usage, ver: () => ver,
     bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
     hasBundleKey: () => !!bundleKey,
-    removeMany, deleteLedger, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+    removeMany, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

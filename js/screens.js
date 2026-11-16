@@ -468,14 +468,14 @@ function viewSettings() {
   const plansRows = (feat('plan') ? rowB('고정 수입·지출 계획표', (curPlan() || {}).name || '아직 없음', 'goPlan') : '') + (feat('vault') ? rowB('금고', vaultRec() ? (vaultIsOpen() ? '열려 있음' : '비밀번호 따로') : '아직 없음', 'goVault') : '') + (feat('excel') ? rowB('엑셀 시트 옮기기', '예전 가계부 엑셀', 'goXl') : '');
   return `<div class="cols">
     <div class="stack" style="flex:1 1 360px;min-width:0">
-      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
+      ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : '') + (twinsOf(book.id).length ? rowB('<span style="color:var(--warn)">같은 이름 장부 하나로 합치기</span>', `이 기기에 「${book.name}」 ${twinsOf(book.id).length + 1}개`, 'bkMergeHere') : '') + rowB('<span style="color:var(--out)">이 장부 완전 삭제</span>', '이 기기에서', 'bkDelHere'))}
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
       ${feat('reminders') ? sec('기억할 것', rowB('기억할 것 (끝나는 날 알림)', `${rems.length}개${nearRem != null ? ' · 가까운 것 D-' + nearRem : ''}`, 'goRem')) : ''}
-      ${sec('자료', rowB('저장 공간', storageLine(), 'goStorage') + rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + (feat('receipt') ? rowB('영수증 사진 붙이기', `${rcPhotoOn() ? '켜짐' : '꺼짐'} · ${photoStats().n}장 · ${mb(photoStats().bytes)}`, 'rcPhotoSet') : '') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'dlgDelBook'))}
+      ${sec('자료', rowB('저장 공간', storageLine(), 'goStorage') + rowB('백업 저장', syncInfo().lastSave ? `마지막 ${agoTxt(syncInfo().lastSave)}` : '아직 안 함', 'dlgBackup') + rowB('불러오기 (합치기)', '다른 기기 백업', 'pickBackup') + (feat('excel') ? rowB('엑셀로 내보내기', '통장별 시트', 'exportXl') : '') + rowB('이 기기 이름', deviceName() + (view.device ? '' : ' (자동)'), 'dlgDevice') + rowB('휴지통', nTrash ? nTrash + '건 · 30일 보관' : '비어 있어요', 'goTrash') + (feat('receipt') ? rowB('영수증 사진 붙이기', `${rcPhotoOn() ? '켜짐' : '꺼짐'} · ${photoStats().n}장 · ${mb(photoStats().bytes)}`, 'rcPhotoSet') : '') + rowB('초기화', '골라서 지우기', 'dlgReset') + rowB('<span style="color:var(--out)">장부 통째로 지우기</span>', '이 기기에서', 'bkDelHere'))}
       <input type="file" data-backup="merge" hidden>
       ${plansRows ? sec('계획 · 보안', plansRows) : ''}
       ${sec('보안 · 잠금', settingsLockRows())}
@@ -579,6 +579,8 @@ function viewDialog() {
     body = viewInstDlg(D); // 카드 메모 · 계획 · 해지일 (inst.js)
   } else if (/^club/.test(D.type) && typeof viewClubDlg === 'function') {
     body = viewClubDlgX(D) || viewClubDlg(D); // 친구회 (club3.js 새 것 먼저 · club.js)
+  } else if (/^bk/.test(D.type)) {
+    body = viewBooksDlg(D); // 장부 관리 (books.js)
   } else if (/^(reset|delBook|cpFrom)$/.test(D.type)) {
     body = viewResetDlg(D); // 초기화 · 장부 지우기 · 가져오기 (reset.js)
   } else if (D.type === 'carry') {

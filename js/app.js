@@ -237,10 +237,13 @@ function viewLock() {
   }
   const cur = vis.find((l) => l.id === S.lockSel) || vis[0];
   S.lockSel = cur.id;
-  const books = vis.map((l) => `<button type="button" class="chip ${l.id === cur.id ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="pickBook" data-id="${l.id}">${esc(l.name)}</button>`).join('');
+  const dupName = (l) => vis.filter((x) => sameName(x.name, l.name)).length > 1;
+  const nth = (l) => dupName(l) ? ' ' + (vis.filter((x) => sameName(x.name, l.name)).indexOf(l) + 1) : '';
+  const books = vis.map((l) => `<span class="bkchip"><button type="button" class="chip ${l.id === cur.id ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="pickBook" data-id="${l.id}">${esc(l.name)}${nth(l)}</button><button type="button" class="bkmore" data-act="bkMenu" data-id="${l.id}" aria-label="${esc(l.name)}${nth(l)} 관리">${ic('ellipsis', 18)}</button></span>`).join('');
   return `<div class="gate"><form class="gate-box" data-form="unlock" autocomplete="off">
     <div style="display:flex;justify-content:center;color:var(--sub)">${ic('lock', 40)}</div>
-    <h1 class="gate-title">${esc(cur.name)}</h1>
+    <h1 class="gate-title">${esc(cur.name)}${dupName(cur) ? nth(cur) : ''}</h1>
+    ${dupName(cur) ? `<span class="small" style="color:var(--warn)">이름이 같은 장부가 있어요. 오른쪽 ⋯ → [하나로 합치기]로 정리할 수 있어요.</span>` : ''}
     <span class="sub" style="font-size:${px(15)}">비밀번호를 입력하세요</span>
     <input class="pw" style="margin-top:12px" type="password" name="pw" placeholder="비밀번호" autocomplete="current-password" aria-label="비밀번호" data-autofocus>
     <div class="err" data-err></div>
@@ -637,6 +640,7 @@ const ACT = {
   ...START_ACT,
   ...PF_ACT,
   ...SAFE_ACT,
+  ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
@@ -665,6 +669,7 @@ $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)
+  if (onBooksInput(el)) return; // 장부 관리 칸 (books.js)
   if (typeof onSafeInput === 'function' && onSafeInput(el)) return; // 합치기 확인 · 카드 계획 칸 (safe.js · inst.js)
   if (onStartInput(el)) return; // 처음 시작하기 · 카드 이월 칸 (start.js)
   if (el.dataset && el.dataset.f && S.f) onFormInput(el);
@@ -730,6 +735,7 @@ const FORM = {
     const pw1 = f.elements.pw1.value, pw2 = f.elements.pw2.value;
     S.createName = name;
     if (!name) return showErr(f, '장부 이름을 적어 주세요.', 'name');
+    if (nameTaken(name)) return showErr(f, '이미 같은 이름의 장부가 있어요. 다른 이름으로 해 주세요.', 'name');
     if (pw1.length < 4) return showErr(f, '비밀번호는 4자 이상으로 해 주세요.', 'pw1');
     if (pw1 !== pw2) return showErr(f, '두 비밀번호가 서로 달라요.', 'pw2');
     if (!f.elements.agree.checked) return showErr(f, '위 안내를 읽고 확인 칸을 눌러 주세요.');
@@ -772,6 +778,8 @@ const FORM = {
   async rename(f) {
     const name = f.elements.name.value.trim();
     if (!name) return showErr(f, '장부 이름을 적어 주세요.', 'name');
+    S.ledgers = await Store.listLedgers();
+    if (nameTaken(name, Store.current().id)) return showErr(f, '이미 같은 이름의 장부가 있어요. 다른 이름으로 해 주세요.', 'name');
     await Store.renameLedger(name);
     S.ledgers = await Store.listLedgers();
     S.dialog = null; render(); toast('장부 이름을 바꿨어요');

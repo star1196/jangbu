@@ -129,7 +129,7 @@ function viewResetDlg(D) {
     const box = (on) => `<span class="ckbox ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>`;
     const nSel = RESET_ITEMS.filter((x) => D.sel[x.k]).length;
     return `<div class="dlg" style="max-width:560px"><h2 class="dlg-title">초기화 · 골라서 지우기</h2>
-      <span class="sub small">체크한 것만 지워요. 체크하지 않은 것은 그대로예요. 지우기 직전에 백업 파일을 자동으로 저장해요.</span>
+      <span class="sub small">체크한 것만 지워요. 체크하지 않은 것은 그대로예요. 다음 화면에서 지우기 전 백업 파일을 만들지 고를 수 있어요.</span>
       <div class="chips"><button class="btn" data-act="rsAll">전체 선택</button><button class="btn" data-act="rsNone">전체 해제</button></div>
       <div class="rslist">${RESET_ITEMS.map((x) => `<button class="rsrow ${D.sel[x.k] ? 'on' : ''}" data-act="rsToggle" data-k="${x.k}" role="checkbox" aria-checked="${!!D.sel[x.k]}">${box(D.sel[x.k])}<span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;text-align:left"><b>${esc(x.name)}</b>${x.desc ? `<span class="small sub">${esc(x.desc)}</span>` : ''}</span><span class="small sub">${x.k === 'settings' || x.k === 'dict' || x.k === 'accounts' ? '' : resetCount(x.k) + '건'}</span></button>`).join('')}</div>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="rsNext" ${nSel ? '' : 'disabled'}>지우기 (${nSel}개 항목)</button></div></div>`;
@@ -137,7 +137,8 @@ function viewResetDlg(D) {
   if (D.type === 'reset' && D.step === 'confirm') {
     const names = RESET_ITEMS.filter((x) => D.sel[x.k]).map((x) => x.name);
     return `<div class="dlg"><h2 class="dlg-title">정말 지울까요?</h2>
-      <div class="warnbox">${ic('circle-alert', 22)}<div><b>${esc(names.join(', '))}</b>을(를) 지워요. 지운 것은 되돌릴 수 없어요.<br>지우기 직전에 백업 파일(이름 앞에 '지우기전_')을 자동으로 저장해요. 필요하면 그 파일을 [불러오기]로 되살릴 수 있어요.</div></div>
+      <div class="warnbox">${ic('circle-alert', 22)}<div><b>${esc(names.join(', '))}</b>을(를) 지워요. 지운 것은 되돌릴 수 없어요.<br>백업 파일(이름 앞에 '지우기전_')을 만들면, 필요할 때 그 파일을 [불러오기]로 되살릴 수 있어요.</div></div>
+      ${bkCheck(D)}
       <div class="dlg-btns"><button class="btn" data-act="rsBack">다시 고르기</button><button class="btn ink" style="background:var(--out);border-color:var(--out)" data-act="rsRun" ${S.busy ? 'disabled' : ''}>${S.busy ? '지우는 중…' : '백업하고 지우기'}</button></div></div>`;
   }
   if (D.type === 'delBook') {
@@ -173,14 +174,14 @@ const RESET_ACT = {
     const sel = { ...S.dialog.sel };
     S.busy = true; render();
     try {
-      const file = await autoBackup();
+      const file = bkOn(S.dialog) ? await autoBackup() : '';
       const n = await runReset(sel);
       await cleanPhotos(); // 지운 내역의 영수증 사진도 같이
       S.busy = false; S.dialog = null; S.f = null; S.imp = null; S.xl = null;
-      go('홈'); toast(`초기화했어요 (${n}건 지움). 직전 백업: ${file}`);
+      go('홈'); toast(`초기화했어요 (${n}건 지움)${file ? `. 직전 백업: ${file}` : ' · 백업 없이 지웠어요'}`);
     } catch (e) { S.busy = false; throw e; }
   },
-  dlgDelBook: () => { S.dialog = { type: 'delBook' }; render(); },
+  dlgDelBook: () => BOOK_ACT.bkDelHere(), // 예전 [장부 통째로 지우기] → 새 [장부 완전 삭제]
   delBookRun: async () => {
     if (S.busy) return;
     const name = Store.current().name, typed = ($app.querySelector('[data-delname]') || {}).value || '';

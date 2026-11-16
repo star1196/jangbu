@@ -174,7 +174,19 @@ async function hashOf(file) {
 /* ── 읽은 글자에서 칸 찾기 ── */
 const RC_COMPANIES = [['국민', /KB국민|국민|KB/i], ['신한', /신한/], ['삼성', /삼성/], ['현대', /현대/], ['롯데', /롯데/], ['하나', /하나|외환/], ['우리', /우리/], ['BC', /\bBC\b|비씨/i], ['NH농협', /농협|NH/i], ['IBK기업', /IBK|기업/i], ['카카오뱅크', /카카오뱅크|카카오/], ['iM뱅크', /iM\s*뱅크|아이엠뱅크|대구은행|DGB/i], ['저축은행', /저축/], ['케이뱅크', /케이뱅크/], ['토스', /토스/], ['씨티', /씨티|citi/i], ['수협', /수협/], ['광주', /광주은행|광주카드/], ['전북', /전북/], ['제주', /제주은행|제주카드/]];
 const RC_SKIP = /영수증|카드|승인|매출|전표|고객|신용|체크|현금|일시|할부|합계|부가|과세|면세|공급|사업자|대표|주소|전화|tel|fax|번호|금액|단가|수량|품명|상품|감사|교환|환불|매입|거래|일자|일시|시간|pos|no\b|www|http|\d{2,3}-\d{3,4}-\d{4}/i;
-const MER_LABEL = /(?:가\s*맹\s*점\s*(?:명|이\s*름)\s*[:：]?|가\s*맹\s*점\s*[:：]|상\s*호\s*(?:명)?\s*[:：]|상\s*호\s*명|매\s*장\s*명|점\s*포\s*명|업\s*체\s*명|병\s*원\s*명|약\s*국\s*명)\s*/;
+// 가맹점 이름이 아닌 줄: 주소 · 우편번호 · 전화 · 사업자번호 · 홈페이지 (2026-11-16)
+const RC_ADDR = /주\s*소|우\s*편|번\s*지|\d+\s*층|\d+\s*호(?![가-힣])|[가-힣]{1,6}(?:특별시|광역시|시|도)\s+[가-힣]{1,6}(?:구|군|시)|[가-힣0-9]{1,10}(?:로|길)\s*\d+|[가-힣]{1,6}(?:동|읍|면|리)\s*\d+(?:-\d+)?(?![\d,])|^\(?\d{5}\)?\s|\(\d{5}\)|[가-힣]+(?:구|군)\s+[가-힣]+(?:동|읍|면|로|길)/;
+const RC_TELRE = /0\d{1,2}\s*[-)．.]\s*\d{3,4}\s*[-．.]\s*\d{4}|1[5-9]\d{2}\s*-\s*\d{4}|TEL|FAX|전\s*화/i;
+const RC_BIZRE = /\d{3}\s*-\s*\d{2}\s*-\s*\d{5}|사\s*업\s*자/;
+const RC_WEB = /www\.|https?:|\.co\.kr|\.com\b|\.kr\b|\.net\b|홈\s*페\s*이\s*지|@/i;
+const rcNoise = (l) => RC_ADDR.test(l) || RC_TELRE.test(l) || RC_BIZRE.test(l) || RC_WEB.test(l);
+// 사업자등록번호 · 전화번호 (영수증으로 배운 가게를 알아보는 열쇠)
+function rcShopIds(all) {
+  const b = String(all).match(/(\d{3})\s*-\s*(\d{2})\s*-\s*(\d{5})/) || String(all).replace(/\s+/g, '').match(/사업자(?:등록)?(?:번호)?[:：]?(\d{3})-?(\d{2})-?(\d{5})/);
+  const t = String(all).match(/(0\d{1,2})\s*[-)．.]\s*(\d{3,4})\s*[-．.]\s*(\d{4})/);
+  return { bizNo: b ? `${b[1]}-${b[2]}-${b[3]}` : '', tel: t ? `${t[1]}-${t[2]}-${t[3]}` : '' };
+}
+const MER_LABEL = /(?:판\s*매\s*자\s*(?:명)?\s*[:：]?|가\s*맹\s*점\s*(?:명|이\s*름)\s*[:：]?|가\s*맹\s*점\s*[:：]|상\s*호\s*(?:명)?\s*[:：]|상\s*호\s*명|매\s*장\s*명|점\s*포\s*명|업\s*체\s*명|병\s*원\s*명|약\s*국\s*명)\s*/;
 // 영수증 전체 글자로 분류 추천 (가맹점을 못 읽어도): 강한 낱말을 먼저, 그다음 분류 사전
 const TEXT_HINTS = [
   ['병원·약국', /의원|병원|치과|한의원|내과|외과|소아과|안과|이비인후과|피부과|정형외과|산부인과|진료|처방|약국|약제|조제|의료|건강보험|본인부담|clinic|hospital/i],
@@ -195,7 +207,25 @@ function suggestAccFromText(text0, kind) {
   for (const line of String(text).split(/\n/)) { const h = dictHit(line, kind); if (h) return { accountId: h.accountId, by: h.word, name: (accOf(h.accountId) || {}).name }; }
   return null;
 }
+// 「카드번호·카드NO·CARD」 옆 숫자: 1234-56**-****-1234 · 123456******1234 · 1234******** · ****-****-****-1234
+function cardNoByLabel(all0) {
+  const ls = String(all0).split(/\n/);
+  for (let i = 0; i < ls.length; i++) {
+    const lm = ls[i].match(/카\s*드\s*번\s*호|카\s*드\s*N\s*O|CARD\s*(?:N\s*O\.?)?|카드\s*#/i);
+    if (!lm) continue;
+    let rest = ls[i].slice(lm.index + lm[0].length).replace(/^[\s:：.]+/, '');
+    if (!/\d/.test(rest) && ls[i + 1]) rest = ls[i + 1];
+    const t = rest.replace(/[※ж＊×✱✳⁎∗#Хх]/g, '*').match(/[\d*xX][\d*xX\s-]{6,}[\d*xX]/);
+    if (!t) continue;
+    const c = t[0].replace(/[\s-]/g, '');
+    if (!/[*xX]/.test(c) && c.length >= 13) continue; // 가린 칸 없는 긴 숫자는 카드번호가 아님
+    const f4 = (c.match(/^(\d{4})/) || [])[1] || '', l4 = c.length >= 12 && /[*xX]/.test(c) ? (c.match(/[*xX]\d*?(\d{4})$/) || [])[1] || '' : '';
+    if (f4 || l4) return { first4: f4, last4: l4 };
+  }
+  return null;
+}
 function cardNoOf(all0) {
+  const lab = cardNoByLabel(all0); if (lab) return lab;
   const all = String(all0).split(/\n/).filter((l) => !/KEY|TID|사업자|TEL|전화|\d{10,}/i.test(l.replace(/\s+/g, ''))).join('\n').replace(/[※ж＊×✱✳⁎∗#]/g, '*').replace(/[Хх]/g, '*');
   const mk = all.match(/(\d{4})\s*-\s*(\d{2}\s*\*{1,2}|\*{2,4})\s*-?\s*\*{2,4}\s*-?\s*(\*{2,4}|\d{4})/); // 영수증: 앞 4자리-□□**-****-****
   if (mk) return { first4: mk[1], last4: /^\d{4}$/.test(mk[3]) ? mk[3] : '' };
@@ -203,6 +233,7 @@ function cardNoOf(all0) {
   let m = all.match(/(\d{4}|[*xX]{4})\s*-?\s*(\d{2}[*xX]{2}|[*xX]{4}|\d{4}|[*xX]{2}\d{2})\s*-?\s*([*xX]{4}|\d{4}|[*xX]{2}\d{2}|[*xX]{3}\d)\s*-?\s*(\d{4}|[*xX\d]{3,4})/)
     || all.match(/(\d{4})([*xX\d]{4})([*xX]{4})([*xX\d]{4})/);
   if (m && !/[*xX]/.test(m[0])) m = null; // 가린 칸이 없는 16자리는 카드번호가 아님(관리번호 등)
+  if (!m) { const s8 = all.match(/(?:^|[^\d*])(\d{4})\s*-?\s*[*xX]{4}\s*-?\s*[*xX]{4}(?![\d*xX])/); if (s8) return { first4: s8[1], last4: '' }; } // 1234******** (앞 4자리만)
   if (!m) { const k = all.replace(/\s+/g, '').match(/카드번호[:：]?(\d{4})?[\d*xX-]*?(\d{4})?(?!\d)/); return k ? { first4: k[1] || '', last4: k[2] && k[2] !== k[1] ? k[2] : '' } : { first4: '', last4: '' }; }
   return { first4: /^\d{4}$/.test(m[1]) ? m[1] : '', last4: /^\d{4}$/.test(m[4]) ? m[4] : '' };
 }
@@ -273,24 +304,40 @@ function parseReceipt(raw) {
   if (best) r.amount = best.n;
   // 사용처: '가맹점명·상호·매장명' 옆 글자(같은 줄이 비면 다음 줄) → 없으면 맨 위쪽 줄
   const clean = (s) => String(s || '').replace(/\s{2,}.*/, '').replace(/(사업자|대표|tel|전화|주소).*/i, '').replace(/[:：\[\]]/g, '').trim().slice(0, 30);
+  // 1) 「가맹점명 · 상호 · 매장명 · 점포명 · 판매자」 옆 (주소 · 전화 · 사업자번호 줄은 가맹점이 아님)
+  const merOk = (t) => (t.match(/[가-힣A-Za-z]/g) || []).length >= 2 && !rcNoise(t);
+  const labelMer = () => {
+    for (let i = 0; i < lines.length; i++) {
+      const lm = lines[i].match(MER_LABEL);
+      if (!lm || /^\s*\//.test(lines[i].slice(lm.index + lm[0].length)) || /신고|안내|협회|포상|다른\s*경우/.test(lines[i])) continue;
+      const rest = clean(lines[i].slice(lm.index + lm[0].length));
+      if (merOk(rest)) return rest;
+      if (lines[i + 1] && merOk(lines[i + 1]) && !RC_SKIP.test(lines[i + 1].replace(/\s+/g, ''))) return clean(lines[i + 1]);
+    }
+    return '';
+  };
+  // 2) 사업자번호 줄 옆 · 바로 위 줄
+  const bizMer = () => {
+    const i = lines.findIndex((l) => /\d{3}\s*-\s*\d{2}\s*-\s*\d{5}/.test(l)); if (i < 0) return '';
+    const side = clean(lines[i].replace(/.*\d{3}\s*-\s*\d{2}\s*-\s*\d{5}/, '').replace(/^[^가-힣A-Za-z]+/, ''));
+    if (merOk(side) && !RC_SKIP.test(side.replace(/\s+/g, ''))) return side;
+    for (let k = i - 1; k >= Math.max(0, i - 2); k--) { const up = clean(lines[k]); if (merOk(up) && !RC_SKIP.test(up.replace(/\s+/g, '')) && !/\d{1,3}(?:,\d{3})+|\d\s*원/.test(up)) return up; }
+    return '';
+  };
+  const lab = labelMer(); if (lab) r.merchant = lab;
   // 카드 단말기 영수증: '대표자(TEL:053…) 상호' 줄 → 전화번호 뒤 글자가 가게 이름 (TEL 글자가 깨져도 괄호 속 전화번호로 찾음)
-  for (const l of lines) { if (r.merchant) break; const t = l.match(/[(（][^)）\d]{0,6}[:：.]?\s*0\d{1,2}-?\d{3,4}-?\d{4}\s*[)）]?\s*(.+)$/) || l.match(/(?:TEL|tel|전화|Tel)\s*[:：.]?\s*[\d\-\s]{7,}\s*[)）]?\s*(.+)$/); if (t) { const nm = clean(t[1].replace(/^[^가-힣A-Za-z]+/, '')); if ((nm.match(/[가-힣A-Za-z]/g) || []).length >= 3) r.merchant = nm; } }
-  for (let i = 0; i < lines.length && !r.merchant; i++) {
-    const lm = lines[i].match(MER_LABEL);
-    if (!lm || /^\s*\//.test(lines[i].slice(lm.index + lm[0].length)) || /신고|안내|협회|포상|다른\s*경우/.test(lines[i])) continue;
-    const rest = clean(lines[i].slice(lm.index + lm[0].length));
-    if ((rest.match(/[가-힣A-Za-z]/g) || []).length >= 2) r.merchant = rest;
-    else if (lines[i + 1] && (lines[i + 1].match(/[가-힣A-Za-z]/g) || []).length >= 2 && !RC_SKIP.test(lines[i + 1].replace(/\s+/g, ''))) r.merchant = clean(lines[i + 1]);
-  }
+  for (const l of lines) { if (r.merchant) break; const t = l.match(/[(（][^)）\d]{0,6}[:：.]?\s*0\d{1,2}-?\d{3,4}-?\d{4}\s*[)）]?\s*(.+)$/) || l.match(/(?:TEL|tel|전화|Tel)\s*[:：.]?\s*[\d\-\s]{7,}\s*[)）]?\s*(.+)$/); if (t) { const nm = clean(t[1].replace(/^[^가-힣A-Za-z]+/, '')); if ((nm.match(/[가-힣A-Za-z]/g) || []).length >= 3 && !rcNoise(nm)) r.merchant = nm; } }
+  if (!r.merchant) { const bm = bizMer(); if (bm) r.merchant = bm; }
   // 카드 단말기 영수증: '대표자(TEL:053…) 상호' 줄 → 전화번호 뒤 글자가 가게 이름
   if (!r.merchant) for (const l of lines) { const t = l.match(/(?:TEL|tel|전화|Tel)\s*[:：.]?\s*[\d\-\s]{7,}\s*[)）]?\s*(.+)$/); if (t) { const nm = clean(t[1]).replace(/^[^가-힣A-Za-z]+/, ''); if ((nm.match(/[가-힣A-Za-z]/g) || []).length >= 3) { r.merchant = nm; break; } } }
   // 가게 이름 끝말로 찾기 (…의원 · …약국 · …병원 · …마트 등)
-  if (!r.merchant) { const BIZ = /([가-힣A-Za-z0-9]{2,20}(?:의원|병원|치과|한의원|약국|마트|상회|식당|카페|학원|센터|주유소|편의점))(?![가-힣])/; for (const l of lines) { const t = l.match(BIZ); if (t && !/주소|대표/.test(l)) { r.merchant = t[1]; break; } } }
+  if (!r.merchant) { const BIZ = /([가-힣A-Za-z0-9]{2,20}(?:의원|병원|치과|한의원|약국|마트|상회|식당|카페|학원|센터|주유소|편의점))(?![가-힣])/; for (const l of lines) { const t = l.match(BIZ); if (t && !/주소|대표/.test(l) && !RC_ADDR.test(l)) { r.merchant = t[1]; break; } } }
   // 맨 위쪽 줄: 금액·날짜가 든 줄(상품 줄)과 카드·승인 같은 말이 든 줄은 건너뜀
-  if (!r.merchant) { const top = lines.slice(0, 6).find((l) => (l.match(/[가-힣]/g) || []).length >= 2 && !RC_SKIP.test(l.replace(/\s+/g, '')) && !/\d{4,}|\d{1,3}(?:,\d{3})+|\d\s*원|\d{1,2}[:/.-]\d{1,2}/.test(l)); if (top) r.merchant = clean(top); }
+  if (!r.merchant) { const top = lines.slice(0, 6).find((l) => (l.match(/[가-힣]/g) || []).length >= 2 && !rcNoise(l) && !RC_SKIP.test(l.replace(/\s+/g, '')) && !/\d{4,}|\d{1,3}(?:,\d{3})+|\d\s*원|\d{1,2}[:/.-]\d{1,2}/.test(l)); if (top) r.merchant = clean(top); }
   // 못 찾았을 때 눌러서 고를 수 있게: 한글·영어가 든 줄들 (같은 줄은 한 번만)
   const noAmt = (l) => l.replace(/\s*\d{1,3}(?:,\d{3})+\s*원?.*$/, '').replace(/\s*\d+\s*$/, '').trim(); // 줄 끝의 금액·숫자는 떼고
-  r.lines = [...new Set(lines.map((l) => noAmt(clean(l))).filter((l) => (l.match(/[가-힣A-Za-z]/g) || []).length >= 2 && l.length <= 30))].slice(0, 16);
+  r.lines = [...new Set(lines.filter((l) => !rcNoise(l)).map((l) => noAmt(clean(l))).filter((l) => (l.match(/[가-힣A-Za-z]/g) || []).length >= 2 && l.length <= 30))].slice(0, 16);
+  Object.assign(r, rcShopIds(all)); // 사업자번호 · 전화번호 (배운 가게 찾기)
   return r;
 }
 
@@ -365,20 +412,27 @@ async function readReceipt(file, force) {
   // 분류 추천: 가맹점으로 먼저, 안 되면 영수증 전체 글자로 (병원 영수증 → 병원·약국)
   const byMer = f.merchant ? classify(f.merchant, 'out') : null, byText = byMer ? null : suggestAccFromText(data.text || '', 'out');
   f.accId = (byMer || byText) ? (byMer || byText).accountId : recAccounts(f)[0] || null; f.accTouched = !!(byMer || byText);
+  // 영수증으로 배운 가게: 사업자번호(없으면 전화번호)가 같으면 예전에 고친 가맹점 이름 · 분류로 채움
+  const sk = rcShopKey(p), learned = sk ? rcShops()[sk] : null;
+  if (learned) {
+    if (learned.merchant) f.merchant = learned.merchant;
+    if (learned.accountId && accOf(learned.accountId)) { f.accId = learned.accountId; f.accTouched = true; }
+  }
   const missing = [];
   if (!p.date) missing.push('date');
   if (!p.amount) missing.push('amount');
-  if (!p.merchant) missing.push('merchant');
+  if (!f.merchant) missing.push('merchant');
   if (!pay) missing.push('pay');
   const info = [p.cash ? '현금영수증' : p.cardType === 'check' ? '체크' : p.cardType === 'credit' ? '신용' : '', p.company ? `${p.company}카드` : '', p.first4 ? `앞 ${p.first4}` : '', p.last4 ? `뒤 ${p.last4}` : '', p.instRead ? (p.inst > 1 ? `${p.inst}개월 할부` : '일시불') : '', p.time || '', p.approval ? `승인번호 ${p.approval}` : ''].filter(Boolean);
   const warns = [];
   if (pay && pay.kind === 'card' && p.cardType && (pay.cardType === 'check') !== (p.cardType === 'check')) warns.push(`영수증에는 ${p.cardType === 'check' ? '체크' : '신용'}로 적혀 있는데, 찾은 카드는 ${cardTypeTxt(pay)}카드예요. 맞는지 봐 주세요.`);
   if (!pay && (p.first4 || p.company)) warns.push(`${p.company ? p.company + '카드' : '카드'}${p.first4 ? ` 앞 ${p.first4}` : ''}에 맞는 등록 카드를 못 찾았어요. 아래 [결제]에서 골라 주세요. (설정 → 카드에서 앞 4자리를 넣어 두면 다음부터 저절로 찾아요)`);
-  if (byText && !byMer) warns.push(`영수증의 '${byText.by}' 글자로 '${byText.name}' 분류를 추천했어요. 맞는지 봐 주세요.`);
+  if (learned) warns.push(`예전에 고친 가게예요 (${p.bizNo ? '사업자번호 ' + p.bizNo : '전화 ' + p.tel}) → 가맹점 '${learned.merchant}'${learned.accountId && accOf(learned.accountId) ? ` · 분류 '${accOf(learned.accountId).name}'` : ''}로 채웠어요.`);
+  else if (byText && !byMer) warns.push(`영수증의 '${byText.by}' 글자로 '${byText.name}' 분류를 추천했어요. 맞는지 봐 주세요.`);
   if (RC.url) URL.revokeObjectURL(RC.url);
   RC.url = URL.createObjectURL(file);
   const thumb = rcPhotoOn() ? await makeThumb(file).catch(() => null) : null; // 저장할 때 붙일 작은 사진
-  f.rc = { hash, approval: p.approval || '', time: p.time || '', missing, info, warns, lines: p.lines, img: RC.url, thumb, cardBy: fc ? fc.by : '', raw: (data.text || '').slice(0, 3000) };
+  f.rc = { hash, approval: p.approval || '', time: p.time || '', missing, info, warns, lines: p.lines, img: RC.url, thumb, cardBy: fc ? fc.by : '', raw: (data.text || '').slice(0, 3000), shop: sk ? { key: sk, bizNo: p.bizNo, tel: p.tel } : null };
   S.dialog = null; S.f = f; render();
   toast(missing.length ? `영수증을 읽었어요. 못 읽은 칸 ${missing.length}곳을 채워 주세요` : '영수증을 읽었어요. 사진과 비교해 보고 저장해 주세요');
 }
@@ -436,6 +490,7 @@ function rcBanner(f, confirm) {
 
 /* ── 대화 상자 ── */
 function viewRcDlg(D) {
+  if (D.type === 'rcShop') return viewRcShopDlg(D);
   if (D.type === 'rcPick') {
     return `<div class="dlg"><h2 class="dlg-title">영수증 찍기</h2><span class="sub small">사진은 이 기기 안에서만 읽고, 어디에도 보내지 않아요. 영수증을 평평하게 펴고, 밝은 곳에서 화면 가득 찍으면 잘 읽혀요.</span>
       <div class="stack" style="gap:10px">
@@ -520,3 +575,45 @@ function viewCashRc(L) {
 }
 RC_ACT.crYear = (el) => { S.crYear = el.dataset.v; render(); };
 RC_ACT.goCashRc = () => go('현금영수증');
+
+/* ── 영수증으로 배운 가게 (2026-11-16) ──
+   확인 화면에서 저장한 가맹점 이름 · 분류를 그 영수증의 사업자등록번호(없으면 전화번호)로 기억 → 같은 가게 다음 영수증에 자동으로.
+   장부 안 meta 'rcShops'에 (백업에도 들어감). 설정 → 분류 사전 → 영수증으로 배운 가게에서 보기 · 고치기 · 지우기 */
+const rcShops = () => (Store.get('meta', 'rcShops') || {}).list || {};
+const rcShopKey = (p) => (p && p.bizNo ? 'b:' + p.bizNo : p && p.tel ? 't:' + p.tel : '');
+async function rcLearn(shop, merchant, accountId) {
+  if (!shop || !shop.key || !String(merchant || '').trim()) return;
+  const cur = Store.get('meta', 'rcShops') || { id: 'rcShops', list: {} }, old = (cur.list || {})[shop.key] || {};
+  if (old.merchant === merchant.trim() && (old.accountId || null) === (accountId || null)) return;
+  await Store.put('meta', { ...cur, list: { ...(cur.list || {}), [shop.key]: { merchant: merchant.trim(), accountId: accountId || null, bizNo: shop.bizNo || '', tel: shop.tel || '', n: (old.n || 0) + 1, at: Date.now() } } });
+}
+function rcShopsSection() {
+  const L = Object.entries(rcShops()).sort((a, b) => ko(a[1].merchant, b[1].merchant));
+  return `<section class="card card-pad" style="display:flex;flex-direction:column;gap:10px"><h2 class="h2" style="font-size:${px(17)}">영수증으로 배운 가게 <span class="sub" style="font-weight:400">${L.length}곳</span></h2>
+    <span class="sub small">영수증을 저장할 때 고친 가맹점 이름 · 분류를 사업자번호(없으면 전화번호)로 기억해요. 같은 가게 영수증을 다시 찍으면 저절로 채워요.</span>
+    ${L.length ? `<div>${L.map(([k, v]) => `<button class="row" data-act="rcShopEdit" data-k="${esc(k)}"><span class="k" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start"><b>${esc(v.merchant)}</b><span class="small sub">${k.startsWith('b:') ? '사업자 ' + esc(v.bizNo) : '전화 ' + esc(v.tel)}</span></span><span class="v">${esc((accOf(v.accountId) || {}).name || '분류 없음')}</span>${ic('chevron-right', 18, 'var(--sub)')}</button>`).join('')}</div>` : '<span class="sub">아직 없어요. 영수증 찍기로 저장하면 생겨요.</span>'}
+  </section>`;
+}
+function viewRcShopDlg(D) {
+  const accs = visibleAccs('out');
+  return `<div class="dlg"><h2 class="dlg-title">영수증으로 배운 가게</h2>
+    <span class="sub small">${D.key.startsWith('b:') ? '사업자등록번호' : '전화번호'} ${esc(D.key.slice(2))}</span>
+    <label class="field"><span class="label">가맹점 이름</span><input class="input" data-d="merchant" value="${esc(D.d.merchant)}" maxlength="30" autocomplete="off"></label>
+    <label class="field"><span class="label">분류</span><select class="input" data-d="accountId"><option value="">분류 없음</option>${accs.map((a) => `<option value="${a.id}" ${a.id === D.d.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+    <div class="err" data-err></div>
+    <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="color:var(--out)" data-act="rcShopDel">지우기</button><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="rcShopSave">저장</button></div></div>`;
+}
+RC_ACT.rcShopEdit = (el) => { const v = rcShops()[el.dataset.k]; if (!v) return; S.dialog = { type: 'rcShop', key: el.dataset.k, d: { merchant: v.merchant, accountId: v.accountId || '' } }; render(); };
+RC_ACT.rcShopSave = async () => {
+  const D = S.dialog, m = String(D.d.merchant || '').trim();
+  if (!m) { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = '가맹점 이름을 적어 주세요.'; return; }
+  const cur = Store.get('meta', 'rcShops') || { id: 'rcShops', list: {} }, before = { ...cur };
+  await Store.put('meta', { ...cur, list: { ...cur.list, [D.key]: { ...cur.list[D.key], merchant: m, accountId: D.d.accountId || null, at: Date.now() } } });
+  S.dialog = null; render(); toast(`'${m}'(으)로 기억해요`, { items: [{ col: 'meta', id: 'rcShops', before }] });
+};
+RC_ACT.rcShopDel = async () => {
+  const D = S.dialog, cur = Store.get('meta', 'rcShops') || { id: 'rcShops', list: {} }, before = { ...cur }, list = { ...cur.list };
+  const nm = (list[D.key] || {}).merchant || ''; delete list[D.key];
+  await Store.put('meta', { ...cur, list });
+  S.dialog = null; render(); toast(`'${nm}'을(를) 잊었어요`, { items: [{ col: 'meta', id: 'rcShops', before }] });
+};

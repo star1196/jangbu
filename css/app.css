@@ -837,3 +837,10 @@ button.lrow:first-of-type { border-top-color: transparent; }
 .sumrow .sk { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(15px * var(--fs)); }
 .sumrow .sv { flex: 0 1 auto; min-width: 0; white-space: nowrap; font-size: clamp(12px, 7cqi, calc(17px * var(--fs))); }
 .sumrow > .ic { flex: none; }
+
+/* 장부 관리 [⋯] (2026-11-16): 잠금 화면 장부 칩 · 장부 바꾸기 창 줄 */
+.bkchip { display: inline-flex; align-items: center; gap: 2px; }
+.bkmore { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--sub); cursor: pointer; }
+.bkmore:hover, .bkmore:focus-visible { background: var(--soft); color: var(--ink); }
+.swline { display: flex; align-items: center; gap: 2px; }
+.swline .swrow { flex: 1; min-width: 0; }

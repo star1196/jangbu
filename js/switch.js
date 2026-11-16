@@ -65,8 +65,9 @@ function viewSwitchPop(L) {
     const rows = visibleLedgers().map((l) => {
       const now = cur && l.id === cur.id, open = Store.isOpened(l.id);
       const st = now ? `${ic('check', 18)}지금` : open ? `${ic('lock-open', 18)}열림` : `<span style="color:var(--sub);display:inline-flex;align-items:center;gap:4px">${ic('lock', 18)}잠김</span>`;
-      return `<button class="swrow ${now ? 'on' : ''}" data-act="swPick" data-id="${l.id}" ${now ? 'aria-current="true"' : ''}>
-        ${bookIcon(l, 44)}<span class="swname"><b>${esc(l.name)}</b><span class="sub small">${esc(bookDesc(l))}</span></span><span class="swst">${st}</span></button>`;
+      const twin = visibleLedgers().some((x) => x.id !== l.id && sameName(x.name, l.name));
+      return `<div class="swline"><button class="swrow ${now ? 'on' : ''}" data-act="swPick" data-id="${l.id}" ${now ? 'aria-current="true"' : ''}>
+        ${bookIcon(l, 44)}<span class="swname"><b>${esc(l.name)}</b><span class="sub small">${twin ? '<span style="color:var(--warn)">이름이 같은 장부가 있어요</span>' : esc(bookDesc(l))}</span></span><span class="swst">${st}</span></button><button class="bkmore" data-act="bkMenu" data-id="${l.id}" aria-label="${esc(l.name)} 관리">${ic('ellipsis', 20)}</button></div>`;
     }).join('');
     const hid = hiddenBookCount();
     inner = `<span class="sub small" style="padding:0 14px">장부 바꾸기</span>

@@ -480,6 +480,7 @@ async function formFinal() {
   if (th) obj.photoId = Store.uid();
   S.busy = true;
   const saved = await Store.put('tx', obj);
+  if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
   if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
