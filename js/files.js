@@ -640,11 +640,15 @@ function viewPreview(L) {
       ${I.items.length > I.shown ? `<button class="morerows" data-act="impMore">나머지 ${I.items.length - I.shown}건 더 보기</button>` : ''}
     </section>
     <div class="stickyfoot"><span class="sub" style="flex:1 1 220px;font-size:${px(14)}">${st.use}건 저장 예정${clubAutoN(I) ? ` · 회비 자동 ${clubAutoN(I)}건` : ''} · 미확인 ${Math.max(0, st.unc - clubAutoN(I))}건은 저장 뒤 정리</span>
-      <button class="btn big" data-act="impReset">다시 올리기</button><button class="btn ink big" data-act="impSave" ${st.use || st.same ? '' : 'disabled'}>확인하고 저장</button></div>
+      <button class="btn big" data-act="impReset">다시 올리기</button><button class="btn ink big" data-act="impSave" ${I.items.length ? '' : 'disabled'}>확인하고 저장</button></div>
   </div>`;
 }
 
 /* ── 저장 ── */
+function impSaveRun() {
+  render();
+  saveImport().catch((e) => { S.busy = false; render(); showError(new Error('저장하지 못했어요: ' + (e && e.message || e)), () => impSaveRun()); });
+}
 async function saveImport() {
   const I = S.imp, T = I.target, impId = Store.uid(), undo = [];
   let savedN = 0, uncN = 0, archN = 0;
@@ -687,7 +691,7 @@ async function saveImport() {
       o = { kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo, accountId: it.accId || null, payMethodId: it.payId || null,
         bankId: pc && pc.kind === 'card' ? (pc.cardType === 'check' ? pc.bankId || null : null) : it.bankId || null,
         installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst, index: it.idx || 1 } : null, approval: it.approval || '', feeSaved: it.feeWaived || 0,
-        status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
+        status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, ...(it.keepUnc ? { keepUnc: true } : {}), originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
       if (it.discMemo) o.memo = [o.memo, '할인: ' + it.discMemo].filter(Boolean).join(' · ');
       // 시작점 이전(예: 지난달 카드 명세서) → '보관': 지출 합계·미확인에는 안 들어가고, 카드 대금 짝짓기·남은 할부 계산에만 씀
       if (isPreStart(it.date)) { Object.assign(o, { archived: true, archivedBy: 'start', status: '보관' }); archN++; }
@@ -894,7 +898,15 @@ const FILE_ACT = {
   impMapGo: async () => { await saveTemplate(); buildItems(); S.imp.step = 'preview'; checkAllDup(); render(); },
   impMore: () => { S.imp.shown += 50; render(); },
   impSame: (el) => { const it = S.imp.items[+el.dataset.i]; it.same.yes = el.dataset.v === '1'; it.use = !it.same.yes; render(); },
-  impSave: () => { if (!S.busy) saveImport(); },
+  // 저장: 체크를 뺀 줄이 있으면 [미확인으로 남기기] / [건너뛰기]를 먼저 물어봄. 무슨 일이 있어도 '저장 중'에 멈추지 않게.
+  impSave: () => {
+    if (S.busy) return;
+    const off = (S.imp.items || []).filter((it) => !it.use && !it.dup && !(it.same && it.same.yes));
+    if (off.length && !S.imp.offChoice) { S.dialog = { type: 'impOff', n: off.length }; render(); return; }
+    impSaveRun();
+  },
+  impOffKeep: () => { const I = S.imp; I.offChoice = 'unc'; I.items.forEach((it) => { if (!it.use && !it.dup && !(it.same && it.same.yes)) { it.use = true; it.accId = null; it.keepUnc = true; } }); S.dialog = null; impSaveRun(); },
+  impOffSkip: () => { S.imp.offChoice = 'skip'; S.dialog = null; impSaveRun(); },
   impChkAll: () => { const its = S.imp.items, on = !its.every((it) => it.use || it.dup); its.forEach((it) => { if (!it.dup) it.use = on; }); render(); },
   impBulkApply: () => {
     const a = accOf(S.impBulk); if (!a) return;
@@ -967,5 +979,6 @@ function onImpInput(el) {
   else if (k === 'accId') { it.accId = el.value || null; el.classList.toggle('unk', !it.accId); const dot = el.closest('.ptr,.pcard').querySelector('.pdot'); if (dot) dot.classList.toggle('warn', !it.accId); }
   else if (k === 'src') { if (S.imp.target.type === 'card') { it.payId = el.value; const pc = payOf(el.value); it.bankId = pc && pc.cardType === 'check' ? pc.bankId : null; } else it.bankId = el.value; }
   const st = impStats(), foot = $app.querySelector('.stickyfoot span');
-  if (foot) foot.textContent = `${st.use}건 저장 예정 · 미확인 ${st.unc}건은 저장 뒤 정리`;
+  const ca = typeof clubAutoN === 'function' ? clubAutoN(S.imp) : 0, offN = S.imp.items.filter((x) => !x.use && !x.dup).length;
+  if (foot) foot.textContent = `${st.use}건 저장 예정${ca ? ` · 회비 자동 ${ca}건` : ''} · 미확인 ${Math.max(0, st.unc - ca)}건은 저장 뒤 정리${offN ? ` · 체크 뺀 ${offN}줄은 저장할 때 물어봐요` : ''}`;
 }

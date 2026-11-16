@@ -112,7 +112,13 @@ const txHit = (x, q) => { q = norm(q); return !q || txSearchText(x).includes(q);
 /* ── 모든 목록 공통: 찾기 칸 + 기간 [1개월][2개월][3개월][6개월][1년][전체][직접 지정] ──
    key마다 따로 기억 (S.pf[key] = { q, p, from, to }). first: 맨 앞에 더 둘 칩 (예: 목록의 '월별') */
 const PF_CHIPS = ['1개월', '2개월', '3개월', '6개월', '1년', '전체', '직접 지정'];
-function pfOf(key, def) { S.pf = S.pf || {}; return S.pf[key] || (S.pf[key] = { q: '', p: def || '전체', from: '', to: '' }); }
+// 찾기 · 기간: 마지막에 고른 기간은 이 기기에 기억 (view.pf)
+function pfOf(key, def) {
+  S.pf = S.pf || {};
+  if (!S.pf[key]) { const v = (typeof view !== 'undefined' && view.pf && view.pf[key]) || null; S.pf[key] = { q: '', p: (v && v.p) || def || '전체', from: (v && v.from) || '', to: (v && v.to) || '' }; }
+  return S.pf[key];
+}
+function pfRemember(key) { try { const P = S.pf[key]; view.pf = { ...(view.pf || {}), [key]: { p: P.p, from: P.from, to: P.to } }; saveView(); } catch (e) { /* 저장 안 돼도 화면은 됨 */ } }
 function pfRange(key, def) {
   const P = pfOf(key, def), t = todayStr();
   const back = (n) => { const d = parseYmd(t); d.setMonth(d.getMonth() - n); return addDays(ymd(d), 1); };
@@ -136,7 +142,7 @@ function pfBar(key, def, first, hint) {
 // 글자 하나로 찾기 (이름·메모 등)
 const qHit = (text, q) => { q = norm(q); if (!q) return true; const n = norm(text); return n.includes(q) || cho(n).includes(q); };
 const PF_ACT = {
-  pfP: (el) => { const P = pfOf(el.dataset.k); P.p = el.dataset.p; if (P.p === '직접 지정' && !P.from) { P.to = todayStr(); P.from = P.to.slice(0, 8) + '01'; } render(); },
+  pfP: (el) => { const P = pfOf(el.dataset.k); P.p = el.dataset.p; if (P.p === '직접 지정' && !P.from) { P.to = todayStr(); P.from = P.to.slice(0, 8) + '01'; } pfRemember(el.dataset.k); render(); },
   pfClear: (el) => { pfOf(el.dataset.k).q = ''; render(); }
 };
 // 찾기 칸에 글자를 넣을 때 (커서 그대로 두고 다시 그림)
@@ -147,7 +153,7 @@ function onPfInput(el) {
     onPfInput.t = setTimeout(() => { const pos = el.selectionStart; render(); const i = $app.querySelector(`[data-pfq="${el.dataset.pfq}"]`); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { /* 그대로 */ } } }, 250);
     return true;
   }
-  if (el.dataset.pfd != null) { pfOf(el.dataset.pfd)[el.dataset.w] = el.value; render(); return true; }
+  if (el.dataset.pfd != null) { pfOf(el.dataset.pfd)[el.dataset.w] = el.value; pfRemember(el.dataset.pfd); render(); return true; }
   return false;
 }
 const pendingTx = () => Store.all('tx').filter((x) => !x.deleted && x.pending);

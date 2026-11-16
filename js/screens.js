@@ -594,6 +594,14 @@ function viewDialog() {
     body = `<div class="dlg"><h2 class="dlg-title">무엇을 할까요?</h2>
       <div class="stack" style="gap:10px">${D.ways.map((w) => `<button class="btn big" style="justify-content:flex-start;gap:14px;min-height:64px;text-align:left" data-act="plusGo" data-w="${w}">${ic(W[w][0], 26)}<span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:${px(17)}">${W[w][1]}</b><span class="sub small" style="font-weight:400">${W[w][2]}</span></span></button>`).join('')}</div>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
+  } else if (D.type === 'impOff') {
+    body = `<div class="dlg"><h2 class="dlg-title">체크를 뺀 ${D.n}줄은 어떻게 할까요?</h2>
+      <span class="sub small" style="line-height:1.55">체크한 줄은 그대로 저장해요. 체크를 뺀 줄은 둘 중 하나를 골라 주세요.</span>
+      <div class="stack" style="gap:10px">
+        <button class="btn big" style="justify-content:flex-start;text-align:left;min-height:64px" data-act="impOffKeep"><span style="display:flex;flex-direction:column;gap:2px"><b>미확인으로 남기기</b><span class="sub small" style="font-weight:400">장부에 넣되 분류 · 회비 자동 배정 없이 → 나중에 미확인 정리에서</span></span></button>
+        <button class="btn big" style="justify-content:flex-start;text-align:left;min-height:64px" data-act="impOffSkip"><span style="display:flex;flex-direction:column;gap:2px"><b>건너뛰기</b><span class="sub small" style="font-weight:400">이 줄들은 장부에 넣지 않아요 (다음에 같은 파일을 올리면 다시 보여요)</span></span></button>
+      </div>
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">돌아가기</button></div></div>`;
   } else if (D.type === 'dupFile') {
     body = `<div class="dlg"><h2 class="dlg-title">이미 올린 파일이에요</h2>
       <span style="font-size:${px(16)};line-height:1.55"><b>${esc(D.name)}</b><br>${D.n}건 모두 이미 장부에 있어서 새로 넣을 게 없어요 (중복 ${D.n}건).</span>

@@ -6,7 +6,7 @@
 'use strict';
 
 const CLUB_NAV = [['홈', 'house'], ['회원', 'users'], ['목록', 'list'], ['모임', 'coffee'], ['설정', 'sliders']];
-const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '개정·결의 기록': '회칙', '입금 정리': '목록', '처음 시작하기': '설정' };
+const CLUB_PARENT = { '회원 상세': '회원', '회비 넣기': '회원', '생일선물을 회비로': '회원', '결산표': '홈', '회칙': '설정', '개정·결의 기록': '회칙', '입금 정리': '목록', '통장 내역': '홈', '수입 목록': '홈', '지출 목록': '홈', '미수금 현황': '홈', '처음 시작하기': '설정' };
 const isClubBook = () => (Store.current() || {}).type === 'club';
 
 /* ───────── 기본 값 ───────── */
@@ -106,7 +106,7 @@ function matchMember(x) {
 }
 async function clubAfterImport(impId) {
   if (!isClubBook()) return null;
-  const list = clubTx().filter((x) => x.source === '파일:' + impId && x.kind === 'in' && !x.club).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const list = clubTx().filter((x) => x.source === '파일:' + impId && x.kind === 'in' && !x.club && !x.keepUnc).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const cfg = clubCfg(), acc = feeAccount();
   let auto = 0, hold = 0, ask = 0;
   for (const x of list) {

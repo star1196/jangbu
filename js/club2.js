@@ -276,10 +276,10 @@ function viewClubHome(L) {
       <div class="mtop"><button class="mname" data-act="clubOpenMember" data-id="${m.id}">${esc(m.name)}</button><span class="sub small">${esc(s.lastTxt)}</span><span style="flex:1"></span>${s.due ? `<span class="sub small">미수금</span>` : ''}${dueHtml(s)}</div>
       <div class="pdots">${yms.map((ym) => dotHtml(cellOf(m, ym, s.calc))).join('')}</div></div>`).join('');
     return `<div class="stack" style="gap:12px">
-      ${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
-      <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="bigamt">${balance(bankSum())}</div>
-        <span class="sub small">올해 수입 <b class="pos">+${won(st.inc)}</b>&nbsp;&nbsp; 지출 <b class="neg">−${won(st.out)}</b></span></section>
-      <section class="card" style="padding:14px 18px;display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">전체 미수금</span><b class="${dueAll ? 'duered' : ''}" style="font-size:${px(18)}">${won(dueAll)}원</b><span class="sub small">${dueN}명</span>${preAllN ? `<span class="small" style="flex:1 1 100%;color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
+      ${clubUncBand()}${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
+      <section class="card card-pad"><button class="statbtn" data-act="goClubBankLog"><span class="sub small">${bankLabel()} ›</span><div class="bigamt">${balance(bankSum())}</div></button>
+        <div class="statpair"><button class="statbtn sm" data-act="goClubIn"><span class="sub small">올해 수입 ›</span><b class="pos">+${won(st.inc)}</b></button><button class="statbtn sm" data-act="goClubOut"><span class="sub small">올해 지출 ›</span><b class="neg">−${won(st.out)}</b></button></div></section>
+      <section class="card statbtn" role="button" tabindex="0" data-act="goClubDue" style="padding:14px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span class="sub" style="flex:1">전체 미수금 ›</span><b class="${dueAll ? 'duered' : ''}" style="font-size:${px(18)}">${won(dueAll)}원</b><span class="sub small">${dueN}명</span>${preAllN ? `<span class="small" style="flex:1 1 100%;color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
       ${chips}${rows.length ? todoCard : ''}
       <div class="secrow"><h2 class="h2">회원 납부</h2>${yearNav}</div>
       ${empty || `<div class="stack" style="gap:10px">${cards}</div>`}
@@ -302,13 +302,13 @@ function viewClubHome(L) {
       ${recent.length ? recent.map((x) => `<button class="trow" data-act="clubTx" data-id="${x.id}"><span class="sub small" style="width:42px">${mmdd(x.date)}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(clubTxName(x))}${isUncClub(x) ? ' <span class="tag unc">미확인</span>' : isHold(x) ? ' <span class="tag hold">보류</span>' : ''}</span><b class="pos">+${won(x.amount)}</b></button>`).join('') : '<span class="sub small">아직 입금이 없어요.</span>'}
     </section></div>`;
   return `<div class="stack">
-    ${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
+    ${clubUncBand()}${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
     <div class="chips" style="justify-content:space-between"><span class="chip" style="pointer-events:none">${y}년</span><button class="btn" data-act="go" data-to="결산표">${ic('printer', 18)}결산표</button></div>
     <div class="statgrid">
-      <section class="card card-pad"><span class="sub small">${bankLabel()}</span><div class="statv">${balance(bankSum())}</div></section>
-      <section class="card card-pad"><span class="sub small">올해 수입</span><div class="statv pos">+${won(st.inc)}</div></section>
-      <section class="card card-pad"><span class="sub small">올해 지출</span><div class="statv neg">−${won(st.out)}</div></section>
-      <section class="card card-pad"><span class="sub small">전체 미수금 · ${dueN}명</span><div class="statv ${dueAll ? 'duered' : ''}">${won(dueAll)}원</div>${preAllN ? `<span class="small" style="color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
+      <button class="card card-pad statcard" data-act="goClubBankLog"><span class="sub small">${bankLabel()} ›</span><div class="statv">${balance(bankSum())}</div></button>
+      <button class="card card-pad statcard" data-act="goClubIn"><span class="sub small">올해 수입 ›</span><div class="statv pos">+${won(st.inc)}</div></button>
+      <button class="card card-pad statcard" data-act="goClubOut"><span class="sub small">올해 지출 ›</span><div class="statv neg">−${won(st.out)}</div></button>
+      <section class="card card-pad statcard" role="button" tabindex="0" data-act="goClubDue"><span class="sub small">전체 미수금 · ${dueN}명 ›</span><div class="statv ${dueAll ? 'duered' : ''}">${won(dueAll)}원</div>${preAllN ? `<span class="small" style="color:var(--warn)">그중 시작 전 밀린 회비 ${preAllN}개월 · ${won(preAllAmt)}원 (${ms.filter((r) => r.s.preN).map((r) => esc(r.m.name)).join(', ')})</span>` : ''}</section>
     </div>
     ${clubQuickBar()}
     ${L === 'compact' ? chips : ''}
@@ -720,6 +720,10 @@ function clubScreen(L) {
     case '회칙': return viewRuleBook(); // 회칙 책자 (club4.js)
     case '개정·결의 기록': return viewDecisions();
     case '입금 정리': return viewClubSort(L); // 입금자 이름별 정리 (club5.js)
+    case '통장 내역': return viewClubBankLog(L); // 홈 숫자 → (club6.js)
+    case '수입 목록': return viewClubFlow('in', L);
+    case '지출 목록': return viewClubFlow('out', L);
+    case '미수금 현황': return viewClubDue(L);
     case '처음 시작하기': return viewClubStart();
     default: return null;
   }

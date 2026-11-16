@@ -589,7 +589,8 @@ const ACT = {
   ...SW_ACT, // 장부 바꾸기 · 함께 열기 · 모두 잠그기 (switch.js)
   ...CLUB_ACT, // 친구회 (club.js)
   ...CLUB4_ACT,
-  ...CLUB5_ACT, // 친구회 입금 정리 (club5.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
+  ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
+  ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
   toLock: () => { S.mode = Store.isOpen() ? 'app' : 'lock'; render(); }, // 열린 장부가 있으면 그 장부로 돌아감
