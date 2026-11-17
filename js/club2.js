@@ -407,7 +407,7 @@ function viewClubMember() {
     ${feat('loans') ? `<button class="btn" style="align-self:flex-start" data-act="clubLoanNew" data-id="${m.id}">${ic('plus', 16)}대출 기록</button>` : ''}
     ${clubBdayCard(m)}
     ${wedCard}
-    <section class="card" style="overflow:hidden"><div style="padding:16px 18px 6px"><h2 class="h2" style="margin-bottom:8px">입금 · 지출 이력</h2>${pfBar('mhist', '1년', null, '내용 · 금액 찾기')}</div>${txs.length ? txs.slice(0, 60).map(clubRow).join('') : '<div class="empty" style="padding:20px">이 기간에 없어요.</div>'}</section>
+    <section class="card" style="overflow:hidden"><div style="padding:16px 18px 6px"><div class="secrow"><h2 class="h2" style="margin-bottom:8px">입금 · 지출 이력</h2>${sortBtn('mhist')}</div>${pfBar('mhist', '1년', null, '내용 · 금액 찾기')}</div>${txs.length ? applySort(txs, 'mhist').slice(0, 60).map(clubRow).join('') : '<div class="empty" style="padding:20px">이 기간에 없어요.</div>'}</section>
   </div>`;
   return `<div class="cols">${left}${right}</div>`;
 }
@@ -430,7 +430,7 @@ function viewClubList() {
   let list = clubTx().filter((x) => x.date >= from && x.date <= to && (!P.q || txHit(x, P.q)));
   const F = { all: () => true, in: (x) => x.kind === 'in', out: (x) => x.kind === 'out', unc: isUncClub, hold: isHold, inner: (x) => x.internal };
   const cnt = (k) => list.filter(F[k]).length;
-  list = list.filter(F[f]).sort(sortTx);
+  list = applySort(list.filter(F[f]).sort(sortTx), 'clist'); // 최신순 / 오래된순 (v32)
   const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '미확인'], ['hold', '보류'], ['inner', '장부에만']];
   // 미확인 지출: 같은 가맹점끼리 묶어 한 번에 정하기
   let body = '';
@@ -441,7 +441,7 @@ function viewClubList() {
   } else body = list.slice(0, 400).map(clubRow).join('') + (list.length > 400 ? `<div class="sub small" style="padding:12px 18px">외 ${list.length - 400}건 · 기간을 줄이거나 찾기를 써 주세요</div>` : '');
   return `<div class="stack">
     <div class="secrow"><span class="sub">${esc(P.p)} · ${list.length}건</span>
-      <span class="chips">${feat('files') ? `<button class="btn" data-act="clubFile">${ic('upload', 18)}통장 파일</button>` : ''}<button class="btn" data-act="clubOutNew">${ic('plus', 18)}지출</button></span></div>
+      <span class="chips">${sortBtn('clist')}${feat('files') ? `<button class="btn" data-act="clubFile">${ic('upload', 18)}통장 파일</button>` : ''}<button class="btn" data-act="clubOutNew">${ic('plus', 18)}지출</button></span></div>
     ${pfBar('clist', '1년', null, '이름 · 가맹점 · 메모 · 금액 찾기')}
     <div class="chips">${tabs.map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="clubListF" data-f="${k}">${l}${k !== 'all' && cnt(k) ? ' ' + cnt(k) : ''}</button>`).join('')}</div>
     ${f === 'unc' && list.some((x) => x.kind === 'in') ? `<button class="btn ink big" data-act="goClubSort">${ic('list-checks', 20)}미확인 입금 ${list.filter((x) => x.kind === 'in').length}건 · 입금자 이름별로 정리하기</button>` : ''}

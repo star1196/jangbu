@@ -4,7 +4,7 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
@@ -43,6 +43,9 @@ function screenBody(L) {
     case '엑셀 옮기기': return viewXl(L);
     case '처음 시작하기': return viewStart();
     case '현금영수증': return viewCashRc(L);
+    case '내역 보기': return viewDrill(L); // 홈 숫자 → 조건 걸린 내역 (home2.js)
+    case '할 일·기념일': return viewNotes();
+    case '홈 꾸미기': return viewHomeCfg();
     default: return '';
   }
 }
@@ -69,18 +72,7 @@ function txRow(x, opt) {
 }
 
 /* ───────── 홈 ───────── */
-function periodRange() {
-  const t = todayStr(), d = new Date();
-  switch (S.period) {
-    case '오늘': return [t, t, '오늘'];
-    case '3일': return [addDays(t, -2), t, '최근 3일'];
-    case '7일': return [addDays(t, -6), t, '최근 7일'];
-    case '14일': return [addDays(t, -13), t, '최근 14일'];
-    case '3개월': return [ymd(new Date(d.getFullYear(), d.getMonth() - 2, 1)), t, '최근 3개월'];
-    case '직접': return S.custom ? [S.custom.from, S.custom.to, '고른 기간'] : [t.slice(0, 8) + '01', t, '이번 달'];
-    default: return [t.slice(0, 8) + '01', t, '이번 달'];
-  }
-}
+function periodRange() { return homeRange(); } // 홈 기간 (home2.js · v32: 이번 달 기본 · 지난달 · 1/3/6개월 · 1년 · 직접)
 function rangeText(a, b) {
   const A = parseYmd(a), B = parseYmd(b);
   const ya = A.getFullYear() !== new Date().getFullYear() ? A.getFullYear() + '년 ' : '';
@@ -89,46 +81,12 @@ function rangeText(a, b) {
 }
 
 function viewHome(L) {
-  const [from, to, title] = periodRange();
-  const list = liveTx().filter((x) => counted(x) && x.date >= from && x.date <= to);
-  const sm = sumTx(list);
-  const periods = DATA.PERIODS.map((p) => `<button class="chip ${p === S.period ? 'on' : ''}" data-act="period" data-p="${p}">${p}</button>`).join('');
-  const tiles = [['수입', sm.inc], ['쓴 돈', -sm.out], ['통장에서 나간 돈', -sm.bank]].map(([l, v]) => `<div class="tile"><span class="l">${l}</span><span class="a">${money(v)}</span></div>`).join('');
   const unc = uncList().length; // 시작점 이후만
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
         <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + startTodo() + mergeTodo() + storageTodo() + pendingTodos() + cardTodos() + cardPlanTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
-  const todo = todos || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`;
-  return `<div class="stack">
-    ${homeTopAlerts()}
-    <button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">가맹점·계정·여행·메모 검색</span>${L === 'wide' ? '<span class="kbd">/</span>' : ''}</button>
-    ${homeSavedSearch()}
-    <div class="chips"><span class="sub" style="font-size:${px(14)};margin-right:4px">기간</span>${periods}</div>
-    <div class="cols">
-      <section class="card card-pad" style="flex:3 1 420px;min-width:0">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
-          <h2 class="h2">${title}</h2><span class="sub small">${rangeText(from, to)}</span>
-        </div>
-        <div class="sumgrid">${tiles}</div>
-        ${(() => {
-          const lines = [];
-          if (feat('banks') && feat('sepBanks') && banksAll().some((b) => b.type === 'sep')) {
-            const fl = sepFlows(from, to);
-            lines.push(['별도 통장에서 가져온 돈', money(fl.got)], ['별도 통장으로 보낸 돈', money(-fl.sent)]);
-          }
-          if (sm.saved) lines.push(['아낀 돈 (할인 · 포인트)', `<b>${won(sm.saved)}원</b>`]);
-          return lines.length ? `<div style="display:flex;flex-direction:column;gap:2px;margin-top:10px">${lines.map(([k, v]) => `<div class="sline"><span class="sub">${k}</span><span style="font-weight:600;white-space:nowrap">${v}</span></div>`).join('')}</div>` : '';
-        })()}
-        ${homeCardDue()}
-      </section>
-      <section class="card" style="flex:2 1 320px;min-width:0;padding:18px 22px 10px">
-        <h2 class="h2" style="margin-bottom:4px">할 일</h2>${todo}
-      </section>
-    </div>
-    ${homeBanks()}
-    ${L === 'phone' ? '' : `<div class="bigbtns"><button class="b1" data-act="input">${ic('plus', 26)}직접 입력</button>${feat('files') ? `<button class="b2" data-act="file">${ic('file-up', 26)}파일 올리기</button>` : ''}</div>`}
-  </div>`;
+  return viewHome2(L, todos); // 홈 칸 · 순서 · 켜고 끄기 (home2.js · v32)
 }
 
 // 홈의 통장 목록: 가계부 통장만(접었다 펴기) + 합계, 별도 통장은 "N개 ›" 한 줄(금액 숨김)
@@ -166,7 +124,8 @@ function bankTable(L, id) {
     else icon = catGlyph(isUnc(x) ? null : accOf(x.accountId), 16);
     return { id: x.id, x, d: dTxt(x.date), icon, m, out: r.d < 0 ? won(r.d) : '', inn: r.d > 0 ? won(r.d) : '', bal: r.bal, a: r.d };
   };
-  const ls = rows.map(line);
+  const ls0 = rows.map(line), sk = 'bank:' + id; // 표 제목 ▲▼ 정렬 (v32 · 통장마다 기억)
+  const ls = colSorted(ls0, sk, { date: (r) => (r.x ? r.x.date : '0000') + String((r.x && r.x.createdAt) || 0).padStart(15, '0'), out: (r) => (r.a < 0 ? -r.a : 0), inn: (r) => (r.a > 0 ? r.a : 0), bal: (r) => r.bal ?? 0 }, 'date');
   // 시작점 이전 '보관' 내역 (엑셀에서 옮긴 옛 기록): 잔액 계산엔 안 들어가고, 엑셀에 적힌 잔액을 그대로 보여 줌
   const arch = Store.all('tx').filter((x) => !x.deleted && x.archived && touches(x, id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0)));
   const al = S.archOpen === id ? arch.slice(0, S.archShown || 200).map((x) => { const a = bankDelta(x, id); return { id: x.id, d: dTxt(x.date), icon: ic('clock', 16, 'var(--sub)'), m: x.kind === 'tr' ? (x.fromId === id ? '→ ' : '← ') + bankName(x.fromId === id ? x.toId : x.fromId) + (x.memo ? ' · ' + x.memo : '') : txTitle(x), out: a < 0 ? won(a) : '', inn: a > 0 ? won(a) : '', bal: x.xlBal, a, arch: true }; }) : [];
@@ -178,10 +137,11 @@ function bankTable(L, id) {
       <div class="bk2a"><span class="bd">${r.d}</span>${r.icon}<span class="bm ${r.open ? 'sub' : ''}">${esc(r.m)}</span>${r.open ? '' : `<span class="amt ${clsOf(r.a)}">${moneyTxt(r.a)}</span>`}</div>
       ${r.x && r.x.bankMemo ? `<span class="bk2m">${ic('landmark', 12)}${esc(r.x.bankMemo)}</span>` : ''}
       <div class="bk2c">${r.x && !r.arch ? myMemoBtn(r.x) : ''}${r.bal == null ? '' : `<span class="bk2b">잔액 ${balTxt(r.bal)}원</span>`}</div></div>`;
-    return ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
+    return `<div class="secrow" style="padding:8px 16px"><span class="sub small">${ls.length}줄</span><button class="chip sortbtn" data-act="colSort" data-k="${sk}" data-c="date">${colSortOf(sk).c === 'date' && colSortOf(sk).d === 'asc' ? '오래된순 ↑' : '최신순 ↓'}</button></div>` + ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
   }
   const one = (r) => `<div class="bkrow ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span><span class="bkbm" title="${esc((r.x && r.x.bankMemo) || '')}">${esc((r.x && r.x.bankMemo) || '')}</span><span>${r.x && !r.arch ? myMemoBtn(r.x) : ''}</span></div>`;
-  return `<div class="bkrow head"><span>날짜</span><span>내용</span><span class="r">지출</span><span class="r">수입</span><span class="r">잔액</span><span>통장 메모</span><span>내 메모</span></div>`
+  const hs = (c, l, cls) => { const s = colSortOf(sk, 'date'), on = s.c === c; return `<button class="thsort ${on ? 'on' : ''} ${cls || ''}" data-act="colSort" data-k="${sk}" data-c="${c}">${l}<span class="ar">${on ? (s.d === 'desc' ? '▼' : '▲') : '▲▼'}</span></button>`; };
+  return `<div class="bkrow head">${hs('date', '날짜')}<span>내용</span>${hs('out', '지출', 'r')}${hs('inn', '수입', 'r')}${hs('bal', '잔액', 'r')}<span>통장 메모</span><span>내 메모</span></div>`
     + ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
 }
 
@@ -193,7 +153,7 @@ function bankHeadCard(b) {
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:${px(18)};font-weight:700">${esc(b.name)}${b.closed ? ' <span class="tag">해지</span>' : ''}</span><span class="sub small">${esc(bankSub(b) || '')}${b.memo ? ' · ' + esc(b.memo) : ''}</span></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span class="sub small">지금 잔액</span><span style="font-size:${px(26)};letter-spacing:-0.02em">${balance(bal)}</span></div>
-      <div class="chips" style="width:100%"><button class="btn" data-act="dlgAdjust" data-id="${b.id}">잔액 맞추기</button><button class="btn" data-act="editBank" data-id="${b.id}">통장 고치기</button><button class="btn" data-act="inputTr" data-id="${b.id}">${ic('arrow-left-right', 18)}이체</button></div>
+      <div class="chips" style="width:100%"><button class="btn" data-act="dlgRecon" data-id="${b.id}">잔액 맞추기</button><button class="btn" data-act="editBank" data-id="${b.id}">통장 고치기</button><button class="btn" data-act="inputTr" data-id="${b.id}">${ic('arrow-left-right', 18)}이체</button></div>
     </section>`;
 }
 
@@ -206,7 +166,8 @@ function viewBank(L) {
     <div class="chips">${list.map((x) => `<button class="chip ${x.id === b.id ? 'on' : ''}" data-act="pickBank" data-id="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip" data-act="addBank" data-type="home">${ic('plus', 14)}통장 추가</button></div>
     ${bankHeadCard(b)}
     <section class="card" style="overflow:hidden">${bankTable(L, b.id)}</section>
-    <span class="sub small">최근 거래가 위. 줄마다 그 거래 뒤 잔액이에요. 이체는 ← · → 로 보여요. 통장을 고른 내역만 들어가요.</span>
+    ${reconHistory(b)}
+    <span class="sub small">최근 거래가 위(▲▼로 바꿔요). 줄마다 그 거래 뒤 잔액이에요. 이체는 ← · → 로 보여요. 통장을 고른 내역만 들어가요.</span>
   </div>`;
 }
 
@@ -326,8 +287,9 @@ function viewList(L) {
   const list = F.unc ? liveTx().filter(isUnc).sort(sortTx) : listFiltered();
   const groups = {};
   list.forEach((x) => { (groups[x.date] = groups[x.date] || []).push(x); });
-  const g = Object.keys(groups).sort().reverse().map((d) => {
-    const xs = groups[d], s = sumTx(xs);
+  const old = sortDir('list') === 'old'; // 최신순 / 오래된순 (v32)
+  const g = (old ? Object.keys(groups).sort() : Object.keys(groups).sort().reverse()).map((d) => {
+    const xs = old ? groups[d].slice().reverse() : groups[d], s = sumTx(xs);
     return `<div class="ghead"><span style="font-weight:700;font-size:${px(14)}">${dateLabel(d, F.unc && d.slice(0, 4) !== String(new Date().getFullYear()))}</span><span style="font-size:${px(13)};display:flex;gap:10px">${s.inc ? `<span class="pos" style="font-weight:600">${moneyTxt(s.inc)}</span>` : ''}${s.out ? `<span class="neg" style="font-weight:600">${moneyTxt(-s.out)}</span>` : ''}</span></div>`
       + xs.map((x) => txRow(x, { selectable: true, detailable: wide })).join('');
   }).join('');
@@ -361,7 +323,7 @@ function viewList(L) {
   })() : `<section class="card detail"><div class="empty" style="padding:24px 8px">내역을 누르면 여기에 자세히 보여요.</div></section>`;
   return `<div class="cols">
     <div class="stack" style="flex:2 1 460px;min-width:0;gap:12px">
-      <div class="chips">${chips}<span style="flex:1"></span><button class="btn" data-act="toggleSel">${ic('list-checks', 18)}${S.selMode ? '선택 끝' : '여러 건 선택'}</button></div>
+      <div class="chips">${chips}<span style="flex:1"></span>${sortBtn('list')}<button class="btn" data-act="toggleSel">${ic('list-checks', 18)}${S.selMode ? '선택 끝' : '여러 건 선택'}</button></div>
       ${bankSubChips}${cardSubChips}
       ${F.unc ? '' : pfBar('list', '월별', '월별', '가맹점 · 메모 · 계정 · 금액 찾기')}
       <div class="calhead">
@@ -474,6 +436,7 @@ function viewSettings() {
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : '') + (twinsOf(book.id).length ? rowB('<span style="color:var(--warn)">같은 이름 장부 하나로 합치기</span>', `이 기기에 「${book.name}」 ${twinsOf(book.id).length + 1}개`, 'bkMergeHere') : '') + rowB('<span style="color:var(--out)">이 장부 완전 삭제</span>', '이 기기에서', 'bkDelHere'))}
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
+      ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('할 일 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -577,6 +540,8 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (/^(hbRecon|hnNote)$/.test(D.type)) {
+    body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
   } else if (/^c7/.test(D.type)) {

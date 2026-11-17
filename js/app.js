@@ -37,7 +37,7 @@ const S = {
   mode: 'boot',        // boot · create · lock · app
   ledgers: [], lockSel: null, createName: '',
   screen: '홈', hist: [], fwd: [],
-  period: '1개월', custom: null,
+  period: '이번 달', custom: null,
   calY: now0.getFullYear(), calM: now0.getMonth(), calSel: now0.getDate(),
   listYM: todayStr().slice(0, 7), listF: {}, detail: null, selMode: false, picked: {},
   acctKind: 'out', acctYM: todayStr().slice(0, 7),
@@ -605,6 +605,7 @@ const ACT = {
   ...CLUB_ACT, // 친구회 (club.js)
   ...CLUB4_ACT,
   ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
+  ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 할 일·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
   ...LEDGER2_ACT, // 통장 메모 · 내 메모 · 장부에만 · 짝 지우기 (ledger2.js)
   ...CLUB7_ACT, // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
   ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
@@ -690,6 +691,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
   if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
   if (onClub7Input(el)) return; // 나눠 잡기 · 맞바꿈 · 생일 처리 칸 (club7.js)
   if (onClub5Input(el)) return; // 입금 정리 칸 (club5.js)

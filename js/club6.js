@@ -20,14 +20,15 @@ function viewClubBankLog(L) {
   const id = bs.some((b) => b.id === S.cbBank) ? S.cbBank : (banksOpen()[0] || bs[0]).id;
   const P = pfOf('cbank', '1년'), [from, to] = pfRange('cbank', '1년');
   const rows = bankLedger(id);
-  const list = rows.filter((r) => !r.open && r.x.date >= from && r.x.date <= to && (!P.q || txHit(r.x, P.q))).reverse();
+  const sk = 'cbank:' + id; // 표 제목 ▲▼ (v32 · 통장마다 기억)
+  const list = colSorted(rows.filter((r) => !r.open && r.x.date >= from && r.x.date <= to && (!P.q || txHit(r.x, P.q))), sk, { date: (r) => r.x.date + String(r.x.createdAt || 0).padStart(15, '0'), in: (r) => (r.d > 0 ? r.d : 0), out: (r) => (r.d < 0 ? -r.d : 0), bal: (r) => r.bal }, 'date');
   const before = rows.filter((r) => r.open || r.x.date < from).pop();
   const inS = list.reduce((s, r) => s + (r.d > 0 ? r.d : 0), 0), outS = list.reduce((s, r) => s + (r.d < 0 ? -r.d : 0), 0);
   const name = (x) => (x.kind === 'tr' ? `${bankName(x.fromId)} → ${bankName(x.toId)}` : x.kind === 'adj' ? '잔액 맞추기' : clubTxName(x));
   const phone = L === 'phone';
   const body = list.length ? (phone
-    ? list.map((r) => `<div class="blrow" data-act="clubTx" data-id="${r.x.id}" role="button" tabindex="0"><span class="sub small">${fullD(r.x.date)}</span><span class="blm">${esc(name(r.x))} ${innerTag(r.x)}</span><b class="${r.d >= 0 ? 'pos' : 'neg'}">${r.d >= 0 ? '+' : '−'}${won(Math.abs(r.d))}</b><span class="sub small">잔액 ${won(r.bal)}</span>${r.x.bankMemo ? `<span class="blmemo">${ic('landmark', 12)}${esc(r.x.bankMemo)}</span>` : ''}<span class="blmy">${['in', 'out'].includes(r.x.kind) ? myMemoBtn(r.x) : ''}</span></div>`).join('')
-    : `<table class="bltab"><thead><tr><th>날짜</th><th>내용</th><th class="r">입금</th><th class="r">출금</th><th class="r">잔액</th><th>통장 메모</th><th>내 메모</th></tr></thead><tbody>${list.map((r) => `<tr data-act="clubTx" data-id="${r.x.id}" role="button" tabindex="0"><td>${fullD(r.x.date)}</td><td>${esc(name(r.x))}</td><td class="r pos">${r.d > 0 ? won(r.d) : ''}</td><td class="r neg">${r.d < 0 ? won(-r.d) : ''}</td><td class="r"><b>${won(r.bal)}</b></td><td class="bkbm" title="${esc(r.x.bankMemo || '')}">${esc(r.x.bankMemo || '')}</td><td>${['in', 'out'].includes(r.x.kind) ? myMemoBtn(r.x) : ''}</td></tr>`).join('')}</tbody></table>`)
+    ? `<div class="secrow" style="padding:8px 16px"><span class="sub small">${list.length}줄</span><button class="chip sortbtn" data-act="colSort" data-k="${sk}" data-c="date">${colSortOf(sk).c === 'date' && colSortOf(sk).d === 'asc' ? '오래된순 ↑' : '최신순 ↓'}</button></div>` + list.map((r) => `<div class="blrow" data-act="clubTx" data-id="${r.x.id}" role="button" tabindex="0"><span class="sub small">${fullD(r.x.date)}</span><span class="blm">${esc(name(r.x))} ${innerTag(r.x)}</span><b class="${r.d >= 0 ? 'pos' : 'neg'}">${r.d >= 0 ? '+' : '−'}${won(Math.abs(r.d))}</b><span class="sub small">잔액 ${won(r.bal)}</span>${r.x.bankMemo ? `<span class="blmemo">${ic('landmark', 12)}${esc(r.x.bankMemo)}</span>` : ''}<span class="blmy">${['in', 'out'].includes(r.x.kind) ? myMemoBtn(r.x) : ''}</span></div>`).join('')
+    : `<table class="bltab"><thead><tr>${thSort(sk, 'date', '날짜')}<th>내용</th>${thSort(sk, 'in', '입금', 'r')}${thSort(sk, 'out', '출금', 'r')}${thSort(sk, 'bal', '잔액', 'r')}<th>통장 메모</th><th>내 메모</th></tr></thead><tbody>${list.map((r) => `<tr data-act="clubTx" data-id="${r.x.id}" role="button" tabindex="0"><td>${fullD(r.x.date)}</td><td>${esc(name(r.x))}</td><td class="r pos">${r.d > 0 ? won(r.d) : ''}</td><td class="r neg">${r.d < 0 ? won(-r.d) : ''}</td><td class="r"><b>${won(r.bal)}</b></td><td class="bkbm" title="${esc(r.x.bankMemo || '')}">${esc(r.x.bankMemo || '')}</td><td>${['in', 'out'].includes(r.x.kind) ? myMemoBtn(r.x) : ''}</td></tr>`).join('')}</tbody></table>`)
     : `<div class="empty">${ic('landmark', 28, 'var(--sub)')}이 기간에 거래가 없어요.</div>`;
   return `<div class="stack">
     ${bs.length > 1 ? `<div class="chips">${bs.map((b) => `<button class="chip ${b.id === id ? 'on' : ''}" data-act="cbBank" data-id="${b.id}">${esc(b.name)}${b.closed ? ' (해지)' : ''}</button>`).join('')}</div>` : ''}
@@ -45,6 +46,7 @@ function viewClubFlow(kind, L) {
   const byMeet = {}; if (kind === 'out') all.forEach((x) => { const mt = meetOf(x); const k = mt ? mt.type || '모임' : '모임 아님'; byMeet[k] = (byMeet[k] || 0) + x.amount; });
   const pick = kind === 'in' ? S.cinAcc : S.coutAcc, pickM = S.coutMeet;
   const list = all.filter((x) => (!pick || ((accOf(x.accountId) || {}).name || '미확인') === pick) && (!pickM || ((meetOf(x) || {}).type || (meetOf(x) ? '모임' : '모임 아님')) === pickM) && (!P.q || txHit(x, P.q))).sort(sortTx);
+  const listS = applySort(list, key + 'List'); // 최신순 / 오래된순 (v32)
   const total = all.reduce((s, x) => s + x.amount, 0), lt = list.reduce((s, x) => s + x.amount, 0);
   const uncN = clubTx().filter((x) => x.kind === kind && x.date >= from && x.date <= to && isUnc(x)).length;
   const chip = (act, v, cur, label) => `<button class="chip ${cur === v ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}">${esc(label)}</button>`;
@@ -57,8 +59,8 @@ function viewClubFlow(kind, L) {
       ${kind === 'out' ? `<section class="card card-pad" style="flex:1 1 300px;min-width:0"><h2 class="h2" style="margin-bottom:8px">모임 종류별</h2>${sumRows(byMeet, total) || '<span class="sub">없어요.</span>'}</section>` : ''}</div>
     <div class="chips">${chip(kind === 'in' ? 'cinAcc' : 'coutAcc', '', pick || '', '계정 전체')}${Object.keys(byAcc).map((k) => chip(kind === 'in' ? 'cinAcc' : 'coutAcc', k, pick || '', k)).join('')}</div>
     ${kind === 'out' ? `<div class="chips">${chip('coutMeet', '', pickM || '', '모임 전체')}${Object.keys(byMeet).map((k) => chip('coutMeet', k, pickM || '', k)).join('')}</div>` : ''}
-    <section class="card" style="overflow:hidden"><div class="secrow" style="padding:12px 18px 0"><span class="sub">${list.length}건</span><b class="${kind === 'in' ? 'pos' : 'neg'}">${kind === 'in' ? '+' : '−'}${won(lt)}</b></div>
-      ${list.slice(0, 400).map((x) => clubRow(x).replace(`<span class="ls">${esc(mmdd(x.date))}`, `<span class="ls">${esc(fullD(x.date))}`)).join('') || '<div class="empty">이 기간에 없어요.</div>'}</section></div>`;
+    <section class="card" style="overflow:hidden"><div class="secrow" style="padding:12px 18px 0"><span class="sub">${list.length}건 ${sortBtn(key + 'List')}</span><b class="${kind === 'in' ? 'pos' : 'neg'}">${kind === 'in' ? '+' : '−'}${won(lt)}</b></div>
+      ${listS.slice(0, 400).map((x) => clubRow(x).replace(`<span class="ls">${esc(mmdd(x.date))}`, `<span class="ls">${esc(fullD(x.date))}`)).join('') || '<div class="empty">이 기간에 없어요.</div>'}</section></div>`;
 }
 
 /* ── 미수금 현황표 ── */

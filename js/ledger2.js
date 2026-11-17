@@ -88,7 +88,28 @@ const splitGroup = (x) => (x && x.splitId ? Store.all('tx').filter((t) => !t.del
 /* ── 짝(맞바꿈) 지우기: 하나를 지우면 "짝도 지울까요?" ── */
 const pairOf = (x) => (x && x.pairId ? Store.all('tx').find((y) => !y.deleted && y.pairId === x.pairId && y.id !== x.id) : null);
 
+/* ── 최신순 / 오래된순 (v32 · 두 장부 모든 목록) — 화면마다 이 기기에 기억 ── */
+const sortsOf = () => (typeof view !== 'undefined' && view.sorts) || {};
+const sortDir = (key) => sortsOf()[key] || 'new';
+function sortBtn(key) { const old = sortDir(key) === 'old'; return `<button class="chip sortbtn" data-act="sortFlip" data-k="${key}" aria-label="정렬 바꾸기">${old ? '오래된순 ↑' : '최신순 ↓'}</button>`; }
+// list는 최신이 위(sortTx)로 들어옴 → 오래된순이면 뒤집기
+const applySort = (list, key) => (sortDir(key) === 'old' ? list.slice().reverse() : list);
+// 표 제목 ▲▼: { c: 칸, d: 'desc' | 'asc' }
+const colSortOf = (key, def) => { const v = sortsOf()[key]; return v && typeof v === 'object' ? v : { c: def || 'date', d: 'desc' }; };
+function thSort(key, col, label, cls, def) {
+  const s = colSortOf(key, def), on = s.c === col;
+  return `<th class="${cls || ''}"><button class="thsort ${on ? 'on' : ''}" data-act="colSort" data-k="${key}" data-c="${col}" aria-label="${label} 정렬">${label}<span class="ar">${on ? (s.d === 'desc' ? '▼' : '▲') : '▲▼'}</span></button></th>`;
+}
+function colSorted(list, key, getters, def) {
+  const s = colSortOf(key, def), g = getters[s.c]; if (!g) return list;
+  const out = list.slice().sort((a, b) => { const x = g(a), y = g(b); return x < y ? -1 : x > y ? 1 : 0; });
+  return s.d === 'desc' ? out.reverse() : out;
+}
+function saveSorts(v) { try { view.sorts = v; saveView(); } catch (e) { /* 저장 안 돼도 화면은 됨 */ } }
+
 const LEDGER2_ACT = {
+  sortFlip: (el) => { const v = { ...sortsOf() }; v[el.dataset.k] = sortDir(el.dataset.k) === 'old' ? 'new' : 'old'; saveSorts(v); render(); },
+  colSort: (el) => { const v = { ...sortsOf() }, cur = colSortOf(el.dataset.k), c = el.dataset.c; v[el.dataset.k] = { c, d: cur.c === c && cur.d === 'desc' ? 'asc' : 'desc' }; saveSorts(v); render(); },
   memoFill: async () => { const r = await memoFillRun(); if (S.dialog && S.dialog.type === 'dupFile') S.dialog = null; render(); toast(`통장 메모 ${r.n}건을 채웠어요`, { items: r.items }); },
   listInner: () => { S.listF = { ...(S.listF || {}), inner: !(S.listF || {}).inner }; render(); },
   mvSet: (el) => { S.mv = { ...(S.mv || {}), [el.dataset.k]: el.dataset.v }; render(); },

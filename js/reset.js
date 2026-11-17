@@ -30,7 +30,7 @@ function resetTargets(k) {
     case 'rules': return T('rules');
     case 'templates': return [...T('templates'), ...T('imports')];
     case 'plans': return [...T('repeats'), ...T('plans')];
-    case 'misc': return [...T('savings'), ...T('trips'), ...T('reminders')];
+    case 'misc': return [...T('savings'), ...T('trips'), ...T('reminders'), ...T('notes')];
     case 'vault': return Store.get('meta', 'vault') ? [['meta', 'vault']] : [];
     default: return [];
   }

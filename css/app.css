@@ -981,3 +981,40 @@ mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; 
 .tag.bd-paid { background: color-mix(in oklab, var(--in) 14%, var(--sf)); color: var(--ink); }
 .tag.bd-defer { background: color-mix(in oklab, var(--warn) 18%, var(--sf)); color: var(--ink); }
 .chip.inner { border-style: dashed; }
+/* v32 가계부 홈 · 정렬 · 잔액 맞추기 · 할 일·기념일 */
+.homeblocks { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.homeblocks > .hblock { min-width: 0; }
+.homeblocks > .sumblk { flex: 3 1 420px; }
+.homeblocks > .todoblk { flex: 2 1 320px; }
+.homeblocks > .cmpblk, .homeblocks > .cardsblk { flex: 1 1 300px; }
+.homeblocks > .banksblk { flex: 1 1 100%; }
+.tile.hk { cursor: pointer; border-radius: 12px; }
+.tile.hk:hover { background: var(--soft); }
+.tile .d { display: block; font-size: calc(12px * var(--fs)); color: var(--sub); line-height: 1.4; }
+.tile .d2 { display: block; font-size: calc(12px * var(--fs)); color: var(--sub); }
+.tile .d2 .linkbtn, .cardline .linkbtn { font-size: inherit; padding: 0; min-height: 28px; }
+.tile .l .small { font-weight: 400; color: var(--sub); }
+.condtag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: var(--soft); font-weight: 700; font-size: calc(14px * var(--fs)); }
+button.sumline { display: flex; justify-content: space-between; width: 100%; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 2px; font: inherit; color: var(--ink); cursor: pointer; }
+button.sumline.on { background: var(--soft); font-weight: 700; }
+.sortbtn { min-height: 36px; padding: 0 12px; font-size: calc(13px * var(--fs)); white-space: nowrap; }
+.thsort { background: none; border: 0; padding: 0; font: inherit; color: inherit; font-weight: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; min-height: 32px; }
+.thsort.r { justify-content: flex-end; width: 100%; }
+.bltab th.r .thsort { justify-content: flex-end; width: 100%; }
+.thsort .ar { font-size: 10px; color: var(--sub); }
+.thsort.on { color: var(--ink); }
+.thsort.on .ar { color: var(--ink); }
+.todo.note { gap: 10px; }
+.todo.note .tm { cursor: pointer; flex: 1; min-width: 0; }
+.todo.done { opacity: .45; }
+.todo.done .tt { text-decoration: line-through; }
+.tchk { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--sf); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--sf); }
+.tchk.on { background: var(--ink); border-color: var(--ink); }
+.tag.auto { margin-right: 6px; border: 1px solid var(--line); background: none; }
+.tag.anniv { background: color-mix(in oklab, var(--in) 14%, var(--sf)); color: var(--ink); }
+.cardline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cardline .cn { flex: 1 1 100%; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.linkamt { flex: 1 1 130px; display: flex; flex-direction: column; align-items: flex-start; gap: 0; background: none; border: 0; padding: 4px 0; font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
+.drow.cand { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; gap: 8px; }
+.drow.cand.hit { background: color-mix(in oklab, var(--warn) 10%, var(--sf)); }
+.tag.auto { align-self: flex-start; font-weight: 500; }
