@@ -34,7 +34,7 @@ function editForm(x) {
   return {
     mode: 'edit', id: x.id, kind: x.kind, y, mo, d,
     amount: x.amount, merchant: x.merchant || '', accId: x.accountId || null, accTouched: true,
-    payId: x.payMethodId || lastPayId(), bankId: x.bankId || (x.kind === 'tr' ? null : lastBankId()), memo: x.memo || '',
+    payId: x.internal ? INNER_PAY : x.payMethodId || lastPayId(), bankId: x.bankId || (x.kind === 'tr' ? null : lastBankId()), memo: x.memo || '',
     fromId: x.fromId || null, toId: x.toId || null, inst: (x.installment && x.installment.months) || 1, perfEx: !!x.perfEx, savingId: x.savingId || null, tripId: x.tripId || null, tripTouched: true,
     more: !!(x.originalPrice || x.discount || x.pointUsed), orig: x.originalPrice || 0, disc: x.discount || 0, point: x.pointUsed || 0,
     catQ: '', step: 'form', again: false, dateChoices: null, merIdx: -1,
@@ -136,7 +136,7 @@ function viewSheet() {
       ['날짜', dateLabel(`${f.y}-${f.mo}-${f.d}`, true)],
       ['가맹점', f.merchant || '—'],
       ['분류', acc ? acc.name : '미확인 (나중에 정리해요)'],
-      ['결제', pay ? (pay.kind === 'card' ? `${cardLabel(pay)} · ${cardTypeTxt(pay)}` : pay.name) : '—'],
+      ['결제', f.payId === INNER_PAY ? `${innerLabel(f.kind)} · 통장·현금 잔액은 그대로, 통계에는 들어가요` : pay ? (pay.kind === 'card' ? `${cardLabel(pay)} · ${cardTypeTxt(pay)}` : pay.name) : '—'],
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),
       ...(f.perfEx ? [['실적', '카드 실적에서 빼요']] : []),
@@ -144,7 +144,7 @@ function viewSheet() {
       ...(f.tripId && Store.get('trips', f.tripId) ? [['여행', Store.get('trips', f.tripId).name]] : []),
       ...(f.savingId && Store.get('savings', f.savingId) ?[['적금', `${Store.get('savings', f.savingId).name}에 넣은 돈으로 더해요`]] : []),
       ...(needsBank(f) ? [['통장', f.bankId ? bankName(f.bankId) + (isSep(f.bankId) ? ' (별도 통장 · 가계부 합계에서 빠져요)' : '') : '정하지 않음']] : []),
-      ['메모', f.memo || '—'],
+      ...(f.id && (Store.get('tx', f.id) || {}).bankMemo ? [['통장 메모', Store.get('tx', f.id).bankMemo]] : []), ['내 메모', f.memo || '—'],
       ...(f.orig || f.disc || f.point ? [['할인', `원래 ${won(f.orig || f.amount + f.disc + f.point)}원 · 할인 ${won(f.disc)}원 · 포인트 ${won(f.point)}원`]] : [])
     ];
     inner = `${head('이대로 저장할까요?')}
@@ -164,7 +164,7 @@ function viewSheet() {
     const kinds = [['out', '지출'], ['in', '수입'], ...(feat('banks') || f.kind === 'tr' ? [['tr', '이체']] : [])].map(([k, l]) => `<button class="${k === f.kind ? 'on' : ''}" style="min-height:50px;font-size:${px(16)};${k === f.kind ? 'color:' + (k === 'out' ? 'var(--out)' : k === 'in' ? 'var(--in)' : 'var(--ink)') : ''}" data-act="fKind" data-k="${k}">${l}</button>`).join('');
     const quick = [['+1천', 1000], ['+5천', 5000], ['+1만', 10000], ['+5만', 50000], ['+10만', 100000]].map(([l, v]) => `<button class="qbtn" data-act="fQuick" data-v="${v}">${l}</button>`).join('');
     const pays = payList(f.payId)
-      .map((p) => `<button class="chip ${p.id === f.payId ? 'on' : ''}" data-act="fPay" data-id="${p.id}">${p.kind === 'card' ? ic('credit-card', 16) : ''}${esc(p.name)}${p.kind === 'card' && p.cardType === 'check' ? ' <span class="small" style="opacity:.7">체크</span>' : ''}</button>`).join('');
+      .map((p) => `<button class="chip ${p.id === f.payId ? 'on' : ''}" data-act="fPay" data-id="${p.id}">${p.kind === 'card' ? ic('credit-card', 16) : ''}${esc(p.name)}${p.kind === 'card' && p.cardType === 'check' ? ' <span class="small" style="opacity:.7">체크</span>' : ''}</button>`).join('') + (f.kind === 'tr' ? '' : `<button class="chip inner ${f.payId === INNER_PAY ? 'on' : ''}" data-act="fPay" data-id="${INNER_PAY}" title="통장·현금이 안 움직인 기록 (상품권 · 포인트 · 가족끼리 정산 등)">${innerLabel(f.kind)}</button>`);
     const fc = formCard(f);
     const cardPart = !fc || f.kind !== 'out' ? '' : `<div class="cardpart">
       ${fc.cardType !== 'check' && feat('cardBill') ? `<div class="field" style="gap:8px"><span class="label">할부</span><div class="chips">${DATA.INSTALLMENTS.map((n) => `<button class="chip ${f.inst === n ? 'on' : ''}" style="min-height:40px" data-act="fInst" data-v="${n}">${n === 1 ? '일시불' : n + '개월'}</button>`).join('')}</div></div>` : ''}
@@ -208,7 +208,8 @@ function viewSheet() {
         <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}${crBox(f)}</div>
         <div data-part="trip"></div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
-        <label class="field"><span class="label">메모</span><input class="input" data-f="memo" value="${esc(f.memo)}" placeholder="필요할 때만 적어요" autocomplete="off"></label>
+        ${f.id && (Store.get('tx', f.id) || {}).bankMemo ? `<div class="field"><span class="label">통장 메모 <span style="font-weight:400">(파일 원본 · 고치지 않음)</span></span><span class="bmemo">${ic('landmark', 14)}${esc(Store.get('tx', f.id).bankMemo)}</span></div>` : ''}
+        <label class="field"><span class="label">내 메모</span><input class="input" data-f="memo" value="${esc(f.memo)}" placeholder="필요할 때만 적어요" autocomplete="off"></label>
         ${f.kind === 'tr' || !showMore ? '' : `<button class="morebtn" data-act="fMore">${ic(f.more ? 'chevron-down' : 'chevron-right', 18)}더보기 <span class="sub" style="font-weight:400">(원래 가격 · 할인 · 포인트)</span></button>`}
         ${f.more && f.kind !== 'tr' && showMore ? `<div class="morebox">
           <div class="moregrid">
@@ -466,7 +467,7 @@ async function formFinal() {
     : {
       ...common, fromId: null, toId: null,
       merchant: f.merchant.trim(),
-      accountId: f.accId || null, payMethodId: f.payId || null,
+      accountId: f.accId || null, payMethodId: f.payId && f.payId !== INNER_PAY ? f.payId : null, internal: f.payId === INNER_PAY,
       bankId: needsBank(f) ? f.bankId || null : (formCard(f) && formCard(f).cardType === 'check' ? formCard(f).bankId || null : null),
       installment: formCard(f) && formCard(f).cardType !== 'check' && f.kind === 'out' && f.inst > 1 ? { months: f.inst } : null,
       perfEx: !!(formCard(f) && f.perfEx),
@@ -484,7 +485,7 @@ async function formFinal() {
   if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
-  if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
+  if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { if (f.payId !== INNER_PAY) S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
   const undo = { items: [{ col: 'tx', id: saved.id, before }, ...(th ? [{ col: 'photos', id: obj.photoId, before: null }] : [])] };
   if (f.again) {
     S.f = newForm({ kind: f.kind, y: f.y, mo: f.mo, d: f.d, payId: f.payId, bankId: f.bankId, fromId: f.fromId, toId: f.toId });
@@ -499,6 +500,7 @@ async function formFinal() {
 
 async function formDelete() {
   const f = S.f, x = Store.get('tx', f.id); if (!x) return;
+  if (x.pairId && pairOf(x)) { S.dialog = { type: 'pairDel', id: x.id }; render(); return; } // 맞바꿈 짝: 짝도 지울까요?
   const before = { ...x };
   await Store.put('tx', { ...x, deleted: true, deletedAt: Date.now() });
   S.f = null; S.detail = null; render();

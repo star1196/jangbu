@@ -102,7 +102,7 @@ function txSearchText(x) {
   const C = txCache(); if (!C.idx) C.idx = new Map();
   let t = C.idx.get(x.id);
   if (t == null) {
-    const n = norm([x.merchant, x.memo, (accOf(x.accountId) || {}).name, (payOf(x.payMethodId) || {}).name, x.bankId ? (bankOf(x.bankId) || {}).name : '', x.amount].filter(Boolean).join(' '));
+    const n = norm([x.merchant, x.memo, x.bankMemo, x.internal ? '장부에만' : '', (accOf(x.accountId) || {}).name, (payOf(x.payMethodId) || {}).name, x.bankId ? (bankOf(x.bankId) || {}).name : '', x.amount].filter(Boolean).join(' '));
     t = n + '\u0001' + cho(n); C.idx.set(x.id, t);
   }
   return t;
@@ -230,7 +230,7 @@ function txAmt(x, size) {
 // 신용카드로 쓴 것인지 (쓴 날과 통장에서 나가는 날이 다름)
 const isCredit = (x) => { const p = payOf(x.payMethodId); return !!p && p.kind === 'card' && p.cardType !== 'check'; };
 // 통장에서 바로 나간 돈인지: 현금·계좌이체·체크카드는 쓴 날 = 나간 날, 신용카드는 결제일에 대금으로
-function leftBank(x) { return !isCredit(x); }
+function leftBank(x) { return !isCredit(x) && !x.internal; } // 장부에만(무출금)은 통장에서 안 나감 (v31)
 function sumTx(list) {
   let inc = 0, out = 0, bank = 0, saved = 0;
   for (const x of list) {

@@ -322,7 +322,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: calc(13px * var(--fs)); }
 .foldbtn { display: flex; align-items: center; gap: 6px; min-height: 44px; border: 0; background: transparent; padding: 0; color: var(--ink); }
 .bankrow { min-height: 62px; padding: 6px 0; }
-.bkrow { display: grid; grid-template-columns: calc(64px * var(--fs)) minmax(0, 1fr) calc(104px * var(--fs)) calc(104px * var(--fs)) calc(118px * var(--fs)); gap: 8px; align-items: center; min-height: 54px; padding: 0 18px; border-top: 1px solid var(--line); font-size: calc(15px * var(--fs)); }
+.bkrow { display: grid; grid-template-columns: calc(64px * var(--fs)) minmax(0, 1fr) calc(104px * var(--fs)) calc(104px * var(--fs)) calc(118px * var(--fs)) minmax(0, .8fr) calc(120px * var(--fs)); gap: 8px; align-items: center; min-height: 54px; padding: 0 18px; border-top: 1px solid var(--line); font-size: calc(15px * var(--fs)); }
 .bkrow[data-act] { cursor: pointer; }
 .bkrow[data-act]:hover { background: var(--bg); }
 .bkrow.head { min-height: 0; padding: 12px 18px; font-size: calc(13px * var(--fs)); color: var(--sub); font-weight: 600; border-top: 0; border-bottom: 1px solid var(--ink); }
@@ -331,7 +331,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .bkrow .bm { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bkrow .bm > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .bkrow > span:first-child { font-size: calc(14px * var(--fs)); }
-.compact .bkrow { grid-template-columns: calc(52px * var(--fs)) minmax(0, 1fr) calc(88px * var(--fs)) calc(88px * var(--fs)) calc(100px * var(--fs)); gap: 6px; padding: 0 14px; font-size: calc(14px * var(--fs)); }
+.compact .bkrow { grid-template-columns: calc(52px * var(--fs)) minmax(0, 1fr) calc(88px * var(--fs)) calc(88px * var(--fs)) calc(100px * var(--fs)) minmax(0, .8fr) calc(104px * var(--fs)); gap: 6px; padding: 0 14px; font-size: calc(14px * var(--fs)); }
 .bk2 { display: flex; flex-direction: column; gap: 3px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .bk2[data-act] { cursor: pointer; }
 .bk2a { display: flex; align-items: center; gap: 8px; }
@@ -930,6 +930,9 @@ mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; 
 .blrow:first-child { border-top: 0; }
 .blrow .blm { grid-column: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .blrow > b { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; }
+.blrow .blmemo { grid-column: 1 / span 2; display: flex; align-items: center; gap: 4px; color: var(--sub); font-size: calc(13px * var(--fs)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blrow .blmy { grid-column: 1 / span 2; }
+.blrow .blmy:empty { display: none; }
 .blrow > .sub:last-child { grid-column: 2; text-align: right; }
 .sumline { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; padding: 6px 0; font-size: calc(14.5px * var(--fs)); }
 .sumline .sbar { height: 8px; }
@@ -950,3 +953,31 @@ mark { background: #F6E3CF; color: inherit; border-radius: 3px; padding: 0 1px; 
 .acclist { max-height: 46vh; overflow-y: auto; }
 /* 휴대폰: 대화 상자의 [저장] 줄은 늘 화면 아래에 */
 .compact .dlg .dlg-btns { position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); margin-bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); padding: 12px 0 max(14px, env(safe-area-inset-bottom)); background: var(--sf); border-top: 1px solid var(--line); z-index: 2; }
+
+/* v31 통장 메모 · 내 메모 · 장부에만 */
+.bkrow .bkbm, .bltab .bkbm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); font-size: calc(13px * var(--fs)); }
+.bk2m { display: flex; align-items: center; gap: 4px; padding-left: calc(52px * var(--fs)); font-size: calc(13px * var(--fs)); color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2c { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-left: calc(52px * var(--fs)); }
+.memobtn { min-height: 34px; padding: 2px 10px; border: 1px dashed var(--line); border-radius: 8px; background: none; color: var(--sub); font: inherit; font-size: calc(13px * var(--fs)); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.memobtn.has { border-style: solid; color: var(--ink); background: var(--soft); }
+.bmemo, .mmemo { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; }
+.bmemo { color: var(--sub); }
+.pnote.memo { color: var(--ink); }
+.tag.inner { background: none !important; border: 1.5px dashed var(--sub) !important; color: var(--sub) !important; }
+.lrowwrap { display: flex; align-items: stretch; border-top: 1px solid var(--line); }
+.lrowwrap > .lrow { flex: 1; min-width: 0; border-top: 0 !important; }
+.lrowwrap > .memobtn { align-self: center; margin-right: 12px; max-width: 34%; }
+.splittree { font-family: inherit; line-height: 1.7; white-space: pre-wrap; }
+.splittree .br { color: var(--sub); }
+.warnt { color: var(--warn); }
+.okbox { padding: 10px 14px; border-radius: 10px; background: var(--soft); }
+.c7brow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.c7brow:first-child { border-top: 0; }
+.c7brow > .check { flex: none; min-height: 40px; }
+.c7brow > .btn { flex: none; }
+.c7dep { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.c7srow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.bdaytab td, .bdaytab th { padding: 8px 8px; }
+.tag.bd-paid { background: color-mix(in oklab, var(--in) 14%, var(--sf)); color: var(--ink); }
+.tag.bd-defer { background: color-mix(in oklab, var(--warn) 18%, var(--sf)); color: var(--ink); }
+.chip.inner { border-style: dashed; }

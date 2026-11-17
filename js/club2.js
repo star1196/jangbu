@@ -224,7 +224,7 @@ function clubTodo() {
       if (dd >= 0 && dd <= 14 && date >= (startDate() || '0')) { const due = dueOn(m, date, b); R.gifts.push({ m, date, dd, due, ok: due === 0 }); }
     });
     R.gifts.sort((a, b2) => a.dd - b2.dd);
-    membersOn().forEach((m) => { const g = m.gifts || {}; Object.keys(g).forEach((y) => { if (g[y].ok && +y >= Y - 1 && !giftPaidTx(m, y)) R.giftPay.push({ m, y, rec: g[y] }); }); });
+    membersOn().forEach((m) => { const g = m.gifts || {}; Object.keys(g).forEach((y) => { if (g[y].ok && !g[y].st && !g[y].past && +y >= Y - 1 && !giftPaidTx(m, y)) R.giftPay.push({ m, y, rec: g[y] }); }); });
     membersOn().filter((m) => m.married === 'single').forEach((m) => {
       if (!m.birth || !m.birth.y) { R.needYear.push(m); return; }
       const a = ageOn(m, t); if (a != null && a >= 45 && !m.wed) R.wed.push({ m, age: a });
@@ -239,6 +239,8 @@ function clubTodoRows(T) {
   if (typeof clausesAll === 'function' && !clausesAll().length) out.push(`<div class="trow">${ic('book-open', 18)}<span style="flex:1">회칙 37개 조항이 아직 안 들어갔어요<br><span class="sub small">${hasOldRuleText() ? '예전에 적어 둔 회칙 글이 있어서 저절로 넣지 않았어요 (예전 글은 그대로 남아요)' : '눌러서 넣어요'}</span></span><span class="chips" style="gap:6px"><button class="btn ink" data-act="rbImport">넣기</button><button class="btn" data-act="go" data-to="회칙">보기</button></span></div>`);
   const uncIn = T.unc.filter((x) => x.kind === 'in').length;
   if (uncIn) out.push(`<button class="trow" data-act="goClubSort"><span class="odot"></span><span style="flex:1">미확인 입금 · 이름별로 정리</span><b>${uncIn}건</b></button>`);
+  if (typeof c7StuckRow === 'function') { const sr = c7StuckRow(); if (sr) out.push(sr); } // 대출로 잡았는데 미확인으로 남은 입금 (v31)
+  if (typeof bdayQueue === 'function') { const q = bdayQueue().filter((s) => s.st === 'todo' || s.st === 'defer'); if (q.length) out.push(`<button class="trow" data-act="goBday">${ic('cake', 18)}<span style="flex:1">생일 처리할 것 (처리 전 · 미룸)</span><b>${q.length}건</b></button>`); }
   if (T.unc.length - uncIn) out.push(`<button class="trow" data-act="clubListF" data-f="unc"><span class="odot"></span><span style="flex:1">미확인 지출</span><b>${T.unc.length - uncIn}건</b></button>`);
   [...new Set(T.hold.map((x) => x.club.memberId))].forEach((id) => out.push(`<button class="trow" data-act="clubListF" data-f="hold"><span class="tag hold">보류</span><span style="flex:1">${esc((memberOf(id) || {}).name || '')}</span><b>${T.hold.filter((x) => x.club.memberId === id).length}건</b></button>`));
   const mt = mergeTodo(); if (mt) out.push(`<div class="trow">${ic('file-up', 18)}<span style="flex:1">다른 기기 백업을 먼저 불러오세요<br><span class="sub small">${syncInfo().lastMerge ? '마지막으로 합친 때 ' + agoTxt(syncInfo().lastMerge.mergedAt || syncInfo().lastMerge.at) : '다른 기기에서 넣은 내역이 있어요'}</span></span><button class="btn" data-act="pickBackup">불러오기</button><input type="file" data-backup="merge" hidden></div>`);
@@ -265,7 +267,7 @@ function viewClubHome(L) {
   const chips = `<div class="chips">
     <button class="chip" data-act="clubListF" data-f="unc">${T.unc.length ? '<span class="odot"></span>' : ''}미확인 ${T.unc.length}건</button>
     <button class="chip" data-act="clubListF" data-f="hold">보류 ${T.hold.length}건</button>
-    <button class="chip" data-act="go" data-to="회원">${ic('gift', 18)}이번 달 생일 ${T.thisMonth.length}명</button>
+    <button class="chip" data-act="go" data-to="생일 처리">${ic('cake', 18)}생일 처리 · 이번 달 ${T.thisMonth.length}명</button>
     ${feat('loans') ? `<button class="chip" data-act="go" data-to="대출">${ic('hand-coins', 18)}대출 ${loanLeft ? won(loanLeft) + '원' : ''}</button>` : ''}</div>`;
   const yearNav = `<span class="ynav"><button class="iconbtn" data-act="clubY" data-n="-1" aria-label="지난해">${ic('chevron-left', 20)}</button><b>${y}</b><button class="iconbtn" data-act="clubY" data-n="1" aria-label="다음 해">${ic('chevron-right', 20)}</button></span>`;
   const yms = Array.from({ length: 12 }, (_, i) => `${y}-${pad2(i + 1)}`);
@@ -303,7 +305,7 @@ function viewClubHome(L) {
     </section></div>`;
   return `<div class="stack">
     ${clubUncBand()}${homeTopAlerts()}${startCard}<button class="searchbtn" data-act="search">${ic('search', 20)}<span class="t">메모 · 계정 · 회원 · 금액 검색</span></button>
-    <div class="chips" style="justify-content:space-between"><span class="chip" style="pointer-events:none">${y}년</span><button class="btn" data-act="go" data-to="결산표">${ic('printer', 18)}결산표</button></div>
+    <div class="chips" style="justify-content:space-between"><span class="chip" style="pointer-events:none">${y}년</span><span style="flex:1"></span><button class="btn" data-act="go" data-to="생일 처리">${ic('cake', 18)}생일 처리</button><button class="btn" data-act="go" data-to="결산표">${ic('printer', 18)}결산표</button></div>
     <div class="statgrid">
       <button class="card card-pad statcard" data-act="goClubBankLog"><span class="sub small">${bankLabel()} ›</span><div class="statv">${balance(bankSum())}</div></button>
       <button class="card card-pad statcard" data-act="goClubIn"><span class="sub small">올해 수입 ›</span><div class="statv pos">+${won(st.inc)}</div></button>
@@ -356,7 +358,7 @@ function viewClubMember() {
   const bd = bdayOf(m, y), rec = (m.gifts || {})[y], paidG = giftPaidTx(m, y);
   const giftNow = !rec && bd && feat('clubAuto') ? { due: dueOn(m, bd, giftBasis()) } : null;
   const giftTxt = !m.birth || !m.birth.m ? '<span class="sub">생일을 넣으면 대상인지 저절로 판정해요.</span>'
-    : paidG ? `${paidG.internal ? '회비로 대신함 (장부 안 처리)' : '현금·이체로 지급함'} · ${mmdd(paidG.date)}`
+    : paidG ? `${paidG.internal ? '회비로 대신함 (장부에만)' : '현금·이체로 지급함'} · ${mmdd(paidG.date)}`
       : rec ? (rec.ok ? `<b>대상</b> · ${rec.date.replace(/-/g, '.')} 미수금 0 (${rec.basis === 'prev' ? '전날' : '당일'}까지 기준)` : `<b class="warnt">대상 아님</b> · ${rec.date.replace(/-/g, '.')} 미수금 ${won(rec.due)}원`)
         : giftNow ? `${bd ? bd.replace(/-/g, '.') : ''} 생일 · 지금 미수금 ${won(giftNow.due)} → ${giftNow.due ? `${basisTxt()} 내면 대상` : '대상 ✓'}` : '';
   const giftBtns = paidG || (rec && !rec.ok) ? '' : `<div class="chips" style="margin-top:8px"><button class="btn" data-act="clubGiftCash" data-id="${m.id}" data-y="${y}">현금·이체로 지급</button><button class="btn" data-act="clubGiftGo" data-id="${m.id}" data-y="${y}">회비로 대신</button></div>`;
@@ -388,7 +390,8 @@ function viewClubMember() {
       ${startLump(m) - (s.calc.paid.start || 0) > 0 ? `<span class="sub small" style="display:block;margin-top:10px">시작 전 밀린 회비 ${won(startLump(m) - (s.calc.paid.start || 0))}원 남음${m.lastPaid ? ` (${ymTxt(m.lastPaid)}까지 냄)` : ''}</span>` : ''}
       ${s.rate != null ? `<span class="sub small" style="display:block;margin-top:6px">올해 납부율 ${s.rate}% (${s.paidN}/${s.dueN}달)</span>` : ''}
     </section>
-    ${log.length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">입금 → 채운 달</h2><table class="filltab"><tbody>${log.slice(0, 24).map((r) => `<tr class="${r.gap ? 'gaprow' : ''}"><td>${r.x.date.replace(/-/g, '.')}${r.past ? ' <span class="tag">보관</span>' : ''}</td><td class="r">${r.x.internal ? '장부 안' : r.past ? '과거 입금' : '입금'} ${won(r.x.amount)}</td><td>→ ${r.txt} 처리</td></tr>`).join('')}</tbody></table></section>` : ''}
+    ${log.length ? `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">입금 → 채운 달</h2><table class="filltab"><tbody>${log.slice(0, 24).map((r) => `<tr class="${r.gap ? 'gaprow' : ''}"><td>${r.x.date.replace(/-/g, '.')}${r.past ? ' <span class="tag">보관</span>' : ''}</td><td class="r">${r.x.internal ? '장부에만' : r.past ? '과거 입금' : '입금'} ${won(r.x.amount)}</td><td>→ ${r.txt} 처리</td></tr>`).join('')}</tbody></table></section>` : ''}
+    ${memberDepositCard(m)}
   </div>`;
   const right = `<div class="stack" style="flex:1 1 340px;min-width:0">
     <section class="card card-pad"><h2 class="h2" style="margin-bottom:10px">처리 방식</h2>
@@ -402,7 +405,7 @@ function viewClubMember() {
       <div class="lbar"><i style="width:${pct}%"></i></div>
       <span class="sub small">${l.date ? l.date.replace(/-/g, '.') + ' · ' : ''}원금 ${won(l.principal)} · 누적 상환 ${won(c.repaid)}${l.memo ? ' · ' + esc(l.memo) : ''} · 대출 화면 ›</span></button>`; }).join('')}
     ${feat('loans') ? `<button class="btn" style="align-self:flex-start" data-act="clubLoanNew" data-id="${m.id}">${ic('plus', 16)}대출 기록</button>` : ''}
-    <section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">${y} 생일선물</h2><span>${giftTxt}</span>${m.birth && m.birth.m ? giftBtns : ''}</section>
+    ${clubBdayCard(m)}
     ${wedCard}
     <section class="card" style="overflow:hidden"><div style="padding:16px 18px 6px"><h2 class="h2" style="margin-bottom:8px">입금 · 지출 이력</h2>${pfBar('mhist', '1년', null, '내용 · 금액 찾기')}</div>${txs.length ? txs.slice(0, 60).map(clubRow).join('') : '<div class="empty" style="padding:20px">이 기간에 없어요.</div>'}</section>
   </div>`;
@@ -412,7 +415,7 @@ function viewClubMember() {
 /* ───────── 목록 ───────── */
 function clubTags(x) {
   const t = [];
-  if (x.internal) t.push('<span class="tag inner">장부 안 처리</span>');
+  if (x.internal) t.push('<span class="tag inner">장부에만</span>');
   if (isHold(x)) t.push('<span class="tag hold">보류</span>');
   else if (isUnc(x)) t.push('<span class="tag unc">미확인</span>');
   if (x.club && x.club.type === 'fee') { const n = (x.club.alloc || []).length; t.push(`<span class="tag">회비 ${n}개월</span>`); }
@@ -428,7 +431,7 @@ function viewClubList() {
   const F = { all: () => true, in: (x) => x.kind === 'in', out: (x) => x.kind === 'out', unc: isUncClub, hold: isHold, inner: (x) => x.internal };
   const cnt = (k) => list.filter(F[k]).length;
   list = list.filter(F[f]).sort(sortTx);
-  const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '미확인'], ['hold', '보류'], ['inner', '장부 안 처리']];
+  const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '미확인'], ['hold', '보류'], ['inner', '장부에만']];
   // 미확인 지출: 같은 가맹점끼리 묶어 한 번에 정하기
   let body = '';
   if (f === 'unc') {
@@ -731,6 +734,7 @@ function clubScreen(L) {
     case '지출 목록': return viewClubFlow('out', L);
     case '미수금 현황': return viewClubDue(L);
     case '처음 시작하기': return viewClubStart();
+    case '생일 처리': return viewBdayScreen(L); // 🎂 (club7.js)
     default: return null;
   }
 }

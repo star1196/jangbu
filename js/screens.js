@@ -57,7 +57,7 @@ function txRow(x, opt) {
   if (!sub) {
     if (x.kind === 'tr') sub = '이체' + (x.memo ? ' · ' + x.memo : '');
     else if (x.kind === 'adj') sub = bankName(x.bankId) + (x.memo ? ' · ' + x.memo : '');
-    else sub = [x.archived ? '보관 (시작점 이전)' : isUnc(x) ? '미확인' : acc ? acc.name : '미확인', x.splitId && x.memo ? x.memo : '', x.splitId ? `나눔 ${x.splitIdx || ''}/${x.splitN || ''}` : '', x.photoId ? '영수증 사진' : '', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : ''].filter(Boolean).join(' · ');
+    else sub = [x.archived ? '보관 (시작점 이전)' : isUnc(x) ? '미확인' : acc ? acc.name : '미확인', x.splitId && x.memo ? x.memo : '', x.splitId ? `나눔 ${x.splitIdx || ''}/${x.splitN || ''}` : '', x.photoId ? '영수증 사진' : '', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : '', x.internal ? '장부에만' : '', x.bankMemo ? '통장: ' + x.bankMemo : '', !x.splitId && x.memo ? x.memo : ''].filter(Boolean).join(' · ');
   }
   const chk = S.selMode && opt.selectable ? `<span class="chk ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>` : '';
   const dot = isUnc(x) ? '<span class="undot"></span>' : '';
@@ -164,7 +164,7 @@ function bankTable(L, id) {
     if (x.kind === 'tr') { const other = x.fromId === id ? x.toId : x.fromId; m = (x.fromId === id ? '→ ' : '← ') + bankName(other) + (x.memo ? ' · ' + x.memo : ''); icon = ic('arrow-left-right', 16, 'var(--sub)'); }
     else if (x.kind === 'adj') icon = ic('landmark', 16, 'var(--sub)');
     else icon = catGlyph(isUnc(x) ? null : accOf(x.accountId), 16);
-    return { id: x.id, d: dTxt(x.date), icon, m, out: r.d < 0 ? won(r.d) : '', inn: r.d > 0 ? won(r.d) : '', bal: r.bal, a: r.d };
+    return { id: x.id, x, d: dTxt(x.date), icon, m, out: r.d < 0 ? won(r.d) : '', inn: r.d > 0 ? won(r.d) : '', bal: r.bal, a: r.d };
   };
   const ls = rows.map(line);
   // 시작점 이전 '보관' 내역 (엑셀에서 옮긴 옛 기록): 잔액 계산엔 안 들어가고, 엑셀에 적힌 잔액을 그대로 보여 줌
@@ -176,11 +176,12 @@ function bankTable(L, id) {
   if (L === 'phone') {
     const one = (r) => `<div class="bk2 ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}>
       <div class="bk2a"><span class="bd">${r.d}</span>${r.icon}<span class="bm ${r.open ? 'sub' : ''}">${esc(r.m)}</span>${r.open ? '' : `<span class="amt ${clsOf(r.a)}">${moneyTxt(r.a)}</span>`}</div>
-      ${r.bal == null ? '' : `<span class="bk2b">잔액 ${balTxt(r.bal)}원</span>`}</div>`;
+      ${r.x && r.x.bankMemo ? `<span class="bk2m">${ic('landmark', 12)}${esc(r.x.bankMemo)}</span>` : ''}
+      <div class="bk2c">${r.x && !r.arch ? myMemoBtn(r.x) : ''}${r.bal == null ? '' : `<span class="bk2b">잔액 ${balTxt(r.bal)}원</span>`}</div></div>`;
     return ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
   }
-  const one = (r) => `<div class="bkrow ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span></div>`;
-  return `<div class="bkrow head"><span>날짜</span><span>내용</span><span class="r">지출</span><span class="r">수입</span><span class="r">잔액</span></div>`
+  const one = (r) => `<div class="bkrow ${r.arch ? 'arch' : ''}" ${r.id ? `data-act="openTx" data-id="${r.id}" role="button" tabindex="0"` : ''}><span class="sub">${r.d}</span><span class="bm">${r.icon}<span class="${r.open ? 'sub' : ''}">${esc(r.m)}</span></span><span class="r neg">${r.out}</span><span class="r pos">${r.inn}</span><span class="r b">${balTxt(r.bal)}</span><span class="bkbm" title="${esc((r.x && r.x.bankMemo) || '')}">${esc((r.x && r.x.bankMemo) || '')}</span><span>${r.x && !r.arch ? myMemoBtn(r.x) : ''}</span></div>`;
+  return `<div class="bkrow head"><span>날짜</span><span>내용</span><span class="r">지출</span><span class="r">수입</span><span class="r">잔액</span><span>통장 메모</span><span>내 메모</span></div>`
     + ls.map(one).join('') + archHead + al.map(one).join('') + archMore;
 }
 
@@ -315,7 +316,8 @@ function listFiltered() {
     && (!F.accId || x.accountId === F.accId)
     && (!F.bankId || touches(x, F.bankId))
     && (!F.payId || x.payMethodId === F.payId || x.cardId === F.payId)
-    && (!F.unc || isUnc(x))).sort(sortTx);
+    && (!F.unc || isUnc(x))
+    && (!F.inner || x.internal)).sort(sortTx); // 장부에만 (v31)
 }
 function viewList(L) {
   const wide = L === 'wide';
@@ -332,7 +334,7 @@ function viewList(L) {
   const grp = F.bankGroup ? '통장별' : F.cardGroup ? '카드별' : '전체';
   const cardSubChips = F.cardGroup ? `<div class="chips" style="gap:6px">${cardsAll().map((c) => `<button class="chip ${c.id === F.payId ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="listCard" data-id="${c.id}">${esc(cardLabel(c))}${c.closed ? ' · 해지' : ''}</button>`).join('') || '<span class="sub small">등록한 카드가 없어요.</span>'}
     ${F.payId ? `<button class="linkbtn" data-act="openCard" data-id="${F.payId}">카드별 보기 (실적·대금)</button>` : ''}</div>` : '';
-  const chips = ['전체', ...(feat('banks') ? ['통장별'] : []), ...(feat('cards') ? ['카드별'] : []), ...(feat('trips') ? ['묶음'] : [])].map((k) =>`<button class="chip ${k === grp ? 'on' : ''}" data-act="listGroup" data-k="${k}">${k}</button>`).join('');
+  const chips = ['전체', ...(feat('banks') ? ['통장별'] : []), ...(feat('cards') ? ['카드별'] : []), ...(feat('trips') ? ['묶음'] : [])].map((k) =>`<button class="chip ${k === grp ? 'on' : ''}" data-act="listGroup" data-k="${k}">${k}</button>`).join('') + `<button class="chip inner ${F.inner ? 'on' : ''}" data-act="listInner">장부에만</button><button class="chip" data-act="c7SwapNew">${ic('repeat', 16)}맞바꿈 넣기</button>`;
   const fchips = [
     F.accId ? `<button class="chip on" data-act="clearF">${esc((accOf(F.accId) || {}).name || '')} ${ic('x', 14)}</button>` : '',
     F.unc ? `<button class="chip on" data-act="clearF">미확인만 ${ic('x', 14)}</button>` : ''
@@ -345,8 +347,8 @@ function viewList(L) {
     const rows = det.kind === 'tr'
       ? [['날짜', dateLabel(det.date, true)], ['보내는 통장', `${bankName(det.fromId)} −${won(det.amount)}원`], ['받는 통장', `${bankName(det.toId)} +${won(det.amount)}원`], ['메모', det.memo || '—'], ['합계', '이체는 수입·지출에 안 들어가요']]
       : det.kind === 'adj'
-        ? [['날짜', dateLabel(det.date, true)], ['통장', bankName(det.bankId)], ['메모', det.memo || '—']]
-        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ['메모', det.memo || '—'], ...(det.dev ? [['넣은 기기', det.dev]] : []),
+        ? [['날짜', dateLabel(det.date, true)], ['통장', bankName(det.bankId)], ...(det.bankMemo ? [['통장 메모', det.bankMemo]] : []), ['내 메모', det.memo || '—']]
+        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ...(det.bankMemo ? [['통장 메모', det.bankMemo]] : []), ['내 메모', det.memo || '—'], ...(det.dev ? [['넣은 기기', det.dev]] : []),
           ...(det.discount || det.pointUsed ? [['아낀 돈', `할인 ${won(det.discount || 0)}원 · 포인트 ${won(det.pointUsed || 0)}원`]] : []),
           ...(startDate() && det.date < startDate() ? [['합계', '시작점 이전이라 합계에서 빠져요']] : []),
           ...(isSep(det.bankId) ? [['합계', '별도 통장 안의 돈이라 가계부 합계에서 빠져요']] : [])];
@@ -377,7 +379,7 @@ function viewList(L) {
 // 계정별 합계. [통장 나간 날 기준]이면 신용카드는 결제일 달(할부는 나눠서)로 셈
 function acctAgg(ym, kind) {
   const agg = {}, bankBasis = S.acctBasis === 'bank' && feat('cardBill') && kind === 'out';
-  liveTx().filter((x) => counted(x) && x.kind === kind && !isUnc(x)).forEach((x) => {
+  liveTx().filter((x) => counted(x) && x.kind === kind && !isUnc(x) && moveOk(x, mvOf('acct'))).forEach((x) => { // 모두 / 통장·현금만 / 장부에만 (v31)
     if (bankBasis && isCredit(x) && (payOf(x.payMethodId) || {}).billingDay) {
       billParts(x).forEach((p) => { if (p.ym === ym) agg[x.accountId] = (agg[x.accountId] || 0) + p.amount; });
     } else if (ymOf(x.date) === ym) agg[x.accountId] = (agg[x.accountId] || 0) + x.amount;
@@ -433,6 +435,7 @@ function viewAcct(L) {
       <div class="seg" style="flex:0 1 220px">${[['out', '지출'], ['in', '수입']].map(([k, l]) => `<button class="${k === kind ? 'on' : ''}" data-act="acctKind" data-k="${k}">${l}</button>`).join('')}</div>
       <button class="btn" data-act="goYearly">${ic('chart-pie', 18)}연도별 모아보기</button>
     </div>
+    ${liveTx().some((x) => x.internal && !x.deleted) || mvOf('acct') !== 'all' ? `<div style="max-width:460px">${moveSeg('acct')}</div>` : ''}
     <div class="calmonth"><button class="iconbtn" data-act="acctMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="acctMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>
     <section class="card" style="padding:22px;display:flex;flex-wrap:wrap;align-items:center;gap:24px 36px">
       <div class="pie" style="background:${tot ? `conic-gradient(${stops.join(',')})` : 'var(--soft)'}"><div class="pie-in"><span class="sub small">${m}월 ${kl}</span><span class="amt ${clsOf(sg * tot)}" style="font-size:${px(18)}">${moneyTxt(sg * tot)}</span></div></div>
@@ -574,6 +577,10 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
+  } else if (/^(myMemo|pairDel)$/.test(D.type)) {
+    body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^c7/.test(D.type)) {
+    body = viewClub7Dlg(D); // 대출 정리 · 나눠 잡기 · 맞바꿈 · 생일 처리 (club7.js)
   } else if (/^bw/.test(D.type)) {
     body = viewBundleDlg(D); // 함께 열기 (switch.js)
   } else if (/^sf/.test(D.type)) {
@@ -596,6 +603,7 @@ function viewDialog() {
     const W = { input: ['plus', '직접 입력', '금액·가맹점을 손으로 적어요'], receipt: ['camera', '영수증 찍기', '사진을 찍으면 칸을 채워 줘요'], file: ['file-up', '파일 올리기', '카드·통장 명세서 엑셀·PDF'] };
     body = `<div class="dlg"><h2 class="dlg-title">무엇을 할까요?</h2>
       <div class="stack" style="gap:10px">${D.ways.map((w) => `<button class="btn big" style="justify-content:flex-start;gap:14px;min-height:64px;text-align:left" data-act="plusGo" data-w="${w}">${ic(W[w][0], 26)}<span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:${px(17)}">${W[w][1]}</b><span class="sub small" style="font-weight:400">${W[w][2]}</span></span></button>`).join('')}</div>
+      <button class="btn" style="justify-content:flex-start;gap:10px" data-act="c7SwapNew">${ic('repeat', 20)}맞바꿈 <span class="sub small">상품권 · 포인트 · 가족 정산 (장부에만 두 줄)</span></button>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
   } else if (D.type === 'tplEdit') {
     body = viewTplDlg(D); // 서식 고치기 (files.js)
@@ -610,6 +618,7 @@ function viewDialog() {
   } else if (D.type === 'dupFile') {
     body = `<div class="dlg"><h2 class="dlg-title">이미 올린 파일이에요</h2>
       <span style="font-size:${px(16)};line-height:1.55"><b>${esc(D.name)}</b><br>${D.n}건 모두 이미 장부에 있어서 새로 넣을 게 없어요 (중복 ${D.n}건).</span>
+      ${S.imp && S.imp.memoFill && S.imp.memoFill.length ? `<div class="infoline">${ic('landmark', 18)}그중 ${S.imp.memoFill.length}건은 장부에 통장 메모가 비어 있어요. 채울까요? (계정 · 내 메모는 그대로)</div><button class="btn ink" data-act="memoFill">통장 메모 ${S.imp.memoFill.length}건 채우기</button>` : ''}
       <div class="dlg-btns"><button class="btn" data-act="dupFileClose">닫기</button><button class="btn ink" data-act="dupFileView">${ic('list', 18)}내역 보기</button></div></div>`;
   } else if (D.type === 'rename') {
     body = `<form class="dlg" data-form="rename" autocomplete="off"><h2 class="dlg-title">장부 이름</h2>

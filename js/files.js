@@ -409,11 +409,13 @@ function buildItems() {
   items.forEach((it) => { const k = keyOf(it); seen[k] = (seen[k] || 0) + 1; it.dupKey = k + '#' + seen[k]; if (seen[k] <= (have[k] || 0)) { it.dup = true; it.use = false; } });
   // 서식을 고친 뒤 다시 읽기: 그 파일로 이미 들어간 내역(같은 날 · 같은 종류 · 같은 금액)은 중복으로
   if (I.reImp) { const got = {}; liveTx().filter((x) => x.source === '파일:' + I.reImp).forEach((x) => { const k = `${x.date}|${x.kind}|${x.amount}`; got[k] = (got[k] || 0) + 1; }); items.forEach((it) => { const k = `${it.date}|${it.kind}|${it.amount}`; if (!it.dup && got[k] > 0) { got[k]--; it.dup = true; it.use = false; } }); }
+  // v31 중복 줄인데 장부의 그 내역에 통장 메모가 비어 있으면 → [통장 메모 채우기] (계정 · 내 메모는 그대로)
+  I.memoFill = memoFillOf(items);
   // 직접 입력한 것과 같은 건? (금액 같음 + 날짜 ±1일 + 같은 카드 또는 승인번호)
   const near1 = (a, b) => Math.abs(parseYmd(a) - parseYmd(b)) <= 86400000;
   // 이름도 봄(손으로 넣은 가맹점 · 친구회는 회원 이름과 입금자 별칭). 한 건은 한 번만 짝지음. 이미 짝지은 손 입력은 같은 파일 줄하고만.
   const usedSame = new Set();
-  const namesOf = (x) => { const out = [x.merchant, x.memo]; const mid = (x.club && x.club.memberId) || x.advBy; if (mid && typeof memberOf === 'function') { const mm = memberOf(mid); if (mm) out.push(mm.name, ...(mm.aliases || [])); } return out.map(norm).filter(Boolean); };
+  const namesOf = (x) => { const out = [x.merchant, x.memo, x.bankMemo]; const mid = (x.club && x.club.memberId) || x.advBy; if (mid && typeof memberOf === 'function') { const mm = memberOf(mid); if (mm) out.push(mm.name, ...(mm.aliases || [])); } return out.map(norm).filter(Boolean); };
   const nameHit = (x, it) => { const t = norm(it.merchant) + '|' + norm(it.memo); return namesOf(x).some((n) => n.length >= 2 && (t.includes(n) || n.includes(norm(it.merchant)))); };
   const club = typeof isClubBook === 'function' && isClubBook();
   items.filter((it) => !it.dup).forEach((it) => {
@@ -647,7 +649,7 @@ function viewMap(L) {
 
 function viewPreview(L) {
   const I = S.imp, st = impStats(), phone = L === 'phone', T = I.target;
-  const accOpts = (kind, cur) => `<option value="">미확인</option>` + visibleAccs(kind).map((a) => `<option value="${a.id}" ${a.id === cur ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
+  const accOpts = (kind, cur) => `<option value="">미확인</option>` + accOptions(kind, cur, (a) => visibleAccs(kind).includes(a)); // ☆ 자주 쓰는 먼저 (v31)
   const srcOpts = (it) => T.type === 'card'
     ? cardsAll().map((c) => `<option value="${c.id}" ${c.id === it.payId ? 'selected' : ''}>${esc(cardLabel(c))}</option>`).join('')
     : banksAll().map((b) => `<option value="${b.id}" ${b.id === it.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('') || '<option>통장 없음</option>';
@@ -662,6 +664,7 @@ function viewPreview(L) {
             : clubPreviewNote(it) ? clubPreviewNote(it)
             : isPreStart(it.date) && !it.bill ? `<span class="pnote">${ic('clock', 12)}시작점 이전 · 보관 (지출 합계엔 안 넣고 ${T.type === 'card' ? '카드 대금·남은 할부 계산에만 써요' : '기록으로만 둬요'})</span>` : '';
   const amtCls = (it) => (it.kind === 'in' || it.amount < 0 ? 'pos' : 'neg');
+  const memoN = (it) => (it.memo ? `<span class="pnote memo">${ic('landmark', 12)}통장 메모: ${esc(it.memo)}</span>` : '');
   const row = (it) => {
     const dot = `<span class="pdot ${!it.accId && !it.bill ? 'warn' : ''}"></span>`;
     const use = `<input type="checkbox" class="puse" data-imp="use" data-i="${it.i}" ${it.use ? 'checked' : ''} aria-label="저장하기">`;
@@ -669,13 +672,13 @@ function viewPreview(L) {
     if (phone) {
       return `<div class="pcard ${it.use ? '' : 'off'}"><div class="prow">${use}${dot}<input class="pin" style="width:${px(118)};flex:none" type="date" data-imp="date" data-i="${it.i}" value="${it.date}" aria-label="날짜"><input class="pin b" style="flex:1;min-width:0" data-imp="merchant" data-i="${it.i}" value="${esc(it.merchant)}" aria-label="가맹점"></div>
         <div class="prow" style="padding-left:30px"><input class="pin r ${amtCls(it)}" style="width:${px(110)};flex:none" data-imp="amount" data-i="${it.i}" value="${(it.amount < 0 ? '−' : '') + comma(Math.abs(it.amount))}" inputmode="numeric" aria-label="금액"><div style="flex:1;min-width:0">${cat}</div></div>
-        <div class="prow" style="padding-left:30px"><select class="pin" style="flex:1" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select></div>${cardNotes(it)}${note(it)}</div>`;
+        <div class="prow" style="padding-left:30px"><select class="pin" style="flex:1" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select></div>${memoN(it)}${cardNotes(it)}${note(it)}</div>`;
     }
     return `<div class="ptr ${it.use ? '' : 'off'}">${use}<span style="display:flex;align-items:center;gap:4px;min-width:0">${dot}<input class="pin" type="date" data-imp="date" data-i="${it.i}" value="${it.date}" aria-label="날짜"></span>
       <input class="pin b" data-imp="merchant" data-i="${it.i}" value="${esc(it.merchant)}" aria-label="가맹점">
       <input class="pin r ${amtCls(it)}" data-imp="amount" data-i="${it.i}" value="${(it.amount < 0 ? '−' : '') + comma(Math.abs(it.amount))}" inputmode="numeric" aria-label="금액">
       ${cat}<select class="pin" data-imp="src" data-i="${it.i}" aria-label="${T.type === 'card' ? '카드' : '통장'}">${srcOpts(it)}</select>
-      ${note(it) || cardNotes(it) ? `<div class="pnotes">${cardNotes(it)}${note(it)}</div>` : ''}</div>`;
+      ${note(it) || cardNotes(it) || it.memo ? `<div class="pnotes">${memoN(it)}${cardNotes(it)}${note(it)}</div>` : ''}</div>`;
   };
   return `<div class="stack" style="gap:12px">
     <section class="card card-pad" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">${ic('file-spreadsheet', 28, 'var(--sub)')}
@@ -684,9 +687,10 @@ function viewPreview(L) {
     <span class="sub" style="font-size:${px(14)}">칸을 눌러 바로 고칠 수 있어요. 왼쪽 네모를 끄면 그 줄은 저장하지 않아요. [확인하고 저장]을 누르기 전에는 장부에 들어가지 않아요.</span>
     ${I.flowDrop ? `<div class="infoline">${ic('info', 18)}${flowTxt(I.target.flow)} 파일이라 ${I.target.flow === 'in' ? '출금' : '입금'} ${I.flowDrop}줄은 뺐어요. 둘 다 넣으려면 [다시 올리기] → 「입출금 모두」.</div>` : ''}
     ${balCheckHtml(I)}
+    ${memoFillBand(I)}
     <section class="card impbulk"><span class="sub small" style="flex:1 1 100%">한 번에: 체크한 줄의 분류를 한꺼번에 바꾸거나, 아래 줄마다 하나씩 고쳐도 돼요.</span>
       <button class="btn" data-act="impChkAll">${I.items.every((it) => it.use || it.dup) ? '모두 끄기' : '모두 체크'}</button>
-      <select class="input" style="flex:1 1 180px" data-impbulk aria-label="체크한 줄 분류"><option value="">체크한 줄 분류 고르기…</option>${['in', 'out'].map((k) => visibleAccs(k).map((a) => `<option value="${a.id}" ${S.impBulk === a.id ? 'selected' : ''}>${k === 'in' ? '수입 · ' : '지출 · '}${esc(a.name)}</option>`).join('')).join('')}</select>
+      <select class="input" style="flex:1 1 180px" data-impbulk aria-label="체크한 줄 분류"><option value="">체크한 줄 분류 고르기…</option>${['in', 'out'].map((k) => pinFirst(visibleAccs(k)).map((a) => `<option value="${a.id}" ${S.impBulk === a.id ? 'selected' : ''}>${k === 'in' ? '수입 · ' : '지출 · '}${a.pin ? '☆ ' : ''}${esc(a.name)}</option>`).join('')).join('')}</select>
       <button class="btn ink" data-act="impBulkApply" ${S.impBulk ? '' : 'disabled'}>체크한 ${st.use}건에 적용</button></section>
     <section class="card" style="overflow:hidden">
       ${phone ? '' : `<div class="ptr head"><span></span><span style="padding-left:16px">날짜</span><span>가맹점</span><span class="r">금액</span><span>분류</span><span>${T.type === 'card' ? '카드' : '통장'}</span></div>`}
@@ -723,7 +727,7 @@ async function saveImport() {
     }
     if (it.same && it.same.yes) { // 같은 건: 새로 만들지 않고 할부·승인번호만 보충 (사람이 고친 분류는 그대로)
       const x = Store.get('tx', it.same.id);
-      if (x) { undo.push({ col: 'tx', id: x.id, before: { ...x } }); await Store.put('tx', { ...x, installment: it.inst > 1 ? { months: it.inst, index: it.idx || 1 } : x.installment || null, approval: x.approval || it.approval, dupKey: x.dupKey || it.dupKey, feeSaved: x.feeSaved || it.feeWaived || 0 }); }
+      if (x) { undo.push({ col: 'tx', id: x.id, before: { ...x } }); await Store.put('tx', { ...x, installment: it.inst > 1 ? { months: it.inst, index: it.idx || 1 } : x.installment || null, approval: x.approval || it.approval, dupKey: x.dupKey || it.dupKey, feeSaved: x.feeSaved || it.feeWaived || 0, ...(it.memo && !x.bankMemo ? { bankMemo: it.memo } : {}) }); }
       continue;
     }
     if (!it.use) continue;
@@ -731,7 +735,7 @@ async function saveImport() {
       const x = Store.get('tx', it.pend);
       undo.push({ col: 'tx', id: x.id, before: { ...x } });
       const fromFile = T.type === 'card' ? { payMethodId: it.payId || x.payMethodId, bankId: it.bankId || null } : x.bankId ? {} : { payMethodId: it.payId || x.payMethodId, bankId: it.bankId || null };
-      await Store.put('tx', { ...x, ...fromFile, date: it.date, amount: it.amount, merchant: x.merchant || it.merchant, accountId: it.accId || x.accountId || null, pending: false, status: (it.accId || x.accountId) ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, approval: it.approval || '' });
+      await Store.put('tx', { ...x, ...fromFile, date: it.date, amount: it.amount, merchant: x.merchant || it.merchant, accountId: it.accId || x.accountId || null, pending: false, status: (it.accId || x.accountId) ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, approval: it.approval || '', ...(it.memo && !x.bankMemo ? { bankMemo: it.memo } : {}) });
       if (!(it.accId || x.accountId)) uncN++;
       savedN++; continue;
     }
@@ -742,7 +746,7 @@ async function saveImport() {
       if (!b) continue;
     } else {
       const pc = payOf(it.payId);
-      o = { kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, memo: it.memo, accountId: it.accId || null, payMethodId: it.payId || null,
+      o = { kind: it.kind, date: it.date, amount: it.amount, merchant: it.merchant, memo: '', bankMemo: it.memo || '', accountId: it.accId || null, payMethodId: it.payId || null,
         bankId: pc && pc.kind === 'card' ? (pc.cardType === 'check' ? pc.bankId || null : null) : it.bankId || null,
         installment: it.inst > 1 && pc && pc.cardType !== 'check' ? { months: it.inst, index: it.idx || 1 } : null, approval: it.approval || '', feeSaved: it.feeWaived || 0,
         status: it.accId ? '확인' : '미확인', source: '파일:' + impId, dupKey: it.dupKey, ...(it.keepUnc ? { keepUnc: true } : {}), originalPrice: it.disc ? it.amount + it.disc : 0, discount: it.disc || 0, pointUsed: 0, deleted: false };
@@ -802,7 +806,7 @@ function viewUnc(L) {
   const G = groups.find((gr) => !skip.includes(gr.key)) || groups[0];
   const done = S.uncTotal - left, x = G.items[0];
   const recs = recAccounts({ kind: G.kind, merchant: G.merchant }).map(accOf);
-  const all = visibleAccs(G.kind);
+  const all = pinFirst(visibleAccs(G.kind)); // ☆ 먼저 (v31)
   const many = G.items.length > 1;
   const sum = G.items.reduce((t, i) => t + signed(i), 0), dates = G.items.map((i) => i.date).sort();
   const pay = payOf(x.payMethodId);
@@ -821,10 +825,10 @@ function viewUnc(L) {
     <span style="font-size:${px(15)};font-weight:700">${many ? `${G.items.length}건 모두 이 분류로` : '추천 분류'}</span>
     <div class="recgrid">${recs.map((a) => `<button class="recbtn" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catIcon(a, 26, 52)}${esc(a.name)}</button>`).join('')}</div>
     <div class="chips"><button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="uncAll">${S.uncAll ? '다른 분류 닫기' : '다른 분류'}</button>${!many && isMoney(x) ? `<button class="btn" style="flex:1 1 140px;min-height:52px;font-size:${px(15)}" data-act="splitOpen" data-id="${x.id}">${ic('columns', 18)}나누기</button>` : ''}</div>
-    ${S.uncAll ? `<div class="chips">${all.map((a) => `<button class="chip" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catGlyph(a, 18)}${esc(a.name)}</button>`).join('')}</div>` : ''}
+    ${S.uncAll ? `<div class="chips">${all.map((a) => `<button class="chip" data-act="uncPick" data-k="${esc(G.key)}" data-acc="${a.id}">${catGlyph(a, 18)}${esc(a.name)}${a.pin ? ' <span class="star">☆</span>' : ''}</button>`).join('')}</div>` : ''}
     ${G.merchant && !G.mall ? `<button class="autochk" data-act="uncAuto" role="checkbox" aria-checked="${S.uncAuto !== false}"><span class="chk ${S.uncAuto !== false ? 'on' : ''}">${S.uncAuto !== false ? ic('check', 16) : ''}</span><span style="font-size:${px(15)}">이 가맹점은 다음에도 자동으로</span></button>` : ''}
     ${many ? `<button class="btn" data-act="uncOpen" aria-expanded="${!!S.uncOpen}">${ic(S.uncOpen ? 'chevron-down' : 'chevron-right', 16)}${S.uncOpen ? '접기' : `펼쳐서 하나씩 (${G.items.length}건)`}</button>` : ''}
-    ${many && S.uncOpen ? `<section class="card" style="padding:4px 16px">${G.items.map((i) => `<div class="ugitem"><span class="sub">${shortDate(i.date)}</span><b class="${clsOf(signed(i))}">${moneyTxt(signed(i))}</b><select class="input" style="flex:1 1 160px" data-uncone="${i.id}" aria-label="이 건 분류"><option value="">이 건만 분류…</option>${all.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>`).join('')}</section>` : ''}
+    ${many && S.uncOpen ? `<section class="card" style="padding:4px 16px">${G.items.map((i) => `<div class="ugitem"><span class="sub">${shortDate(i.date)}</span><b class="${clsOf(signed(i))}">${moneyTxt(signed(i))}</b><select class="input" style="flex:1 1 160px" data-uncone="${i.id}" aria-label="이 건 분류"><option value="">이 건만 분류…</option>${accOptions(G.kind, '', (a) => all.includes(a))}</select></div>`).join('')}</section>` : ''}
     <div style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" data-act="uncPrev" ${S.uncLast ? '' : 'disabled'}>이전</button><button class="btn ghost" data-act="uncSkip" data-k="${esc(G.key)}">건너뛰기</button></div>
     ${(S.uncDone || []).length ? `<section class="card card-pad"><div class="secrow"><h2 class="h2" style="font-size:${px(16)}">방금 정리한 것 ${S.uncDone.length}건</h2><button class="btn ghost" data-act="uncDoneClear">비우기</button></div><span class="sub small">몇 건만 골라 다시 고칠 수 있어요.</span>${S.uncDone.map((id) => Store.get('tx', id)).filter(Boolean).slice(0, 30).map((t) => `<div class="ugitem"><span class="sub">${shortDate(t.date)}</span><span style="flex:1 1 140px;min-width:0">${esc(t.merchant || '')} <b class="${clsOf(signed(t))}">${moneyTxt(signed(t))}</b><br><span class="sub small">${esc((accOf(t.accountId) || {}).name || '미확인')}</span></span><button class="btn" data-act="openTx" data-id="${t.id}">고치기</button></div>`).join('')}</section>` : ''}
   </div>`;
@@ -848,7 +852,7 @@ function viewSplitDlg(D) {
   return `<div class="dlg" style="max-width:560px"><h2 class="dlg-title">나누기 · ${esc(x.merchant || '내역')}</h2>
     <span class="sub small">${dateLabel(x.date)} · ${esc((payOf(x.payMethodId) || {}).name || '')} · 원래 금액 <b style="color:var(--ink)">${won(D.total)}원</b>. 줄마다 분류·금액·산 물건을 적어요.</span>
     ${D.rows.map((r, i) => `<div class="splitrow">
-      <select class="input" data-split="accountId" data-i="${i}" aria-label="분류">${optHtml('', r.accountId, '분류 고르기')}${accs.map((a) => optHtml(a.id, r.accountId, a.name)).join('')}</select>
+      <select class="input" data-split="accountId" data-i="${i}" aria-label="분류">${optHtml('', r.accountId, '분류 고르기')}${accOptions(D.kind, r.accountId, (a) => accs.includes(a))}</select>
       <input class="input r" data-split="amount" data-i="${i}" value="${esc(r.amount)}" inputmode="numeric" placeholder="금액" aria-label="금액" autocomplete="off">
       <input class="input" data-split="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="산 물건 (예: 기저귀)" aria-label="메모" autocomplete="off">
       ${D.rows.length > 1 ? `<button class="iconbtn" data-act="splitDel" data-i="${i}" aria-label="이 줄 빼기">${ic('x', 18)}</button>` : ''}</div>`).join('')}

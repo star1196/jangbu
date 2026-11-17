@@ -605,6 +605,8 @@ const ACT = {
   ...CLUB_ACT, // 친구회 (club.js)
   ...CLUB4_ACT,
   ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
+  ...LEDGER2_ACT, // 통장 메모 · 내 메모 · 장부에만 · 짝 지우기 (ledger2.js)
+  ...CLUB7_ACT, // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
   ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
@@ -688,6 +690,8 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
+  if (onClub7Input(el)) return; // 나눠 잡기 · 맞바꿈 · 생일 처리 칸 (club7.js)
   if (onClub5Input(el)) return; // 입금 정리 칸 (club5.js)
   if (onClub4Input(el)) return; // 회칙 · 결의 · 과거 입금 칸 (club4.js)
   if (onClubInput(el)) return; // 친구회 칸 (club.js)

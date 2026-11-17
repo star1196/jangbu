@@ -11,9 +11,9 @@ const BANK_WORDS = /^(타행|당행|인터넷|인터넷뱅킹|모바일|스마�
 function payerName(x) {
   const parts = String(x.merchant || '').split(/\s+/).filter(Boolean);
   const keep = parts.filter((w) => !BANK_WORDS.test(w.replace(/[()]/g, '')));
-  return (keep.length ? keep : parts).join(' ') || String(x.memo || '').trim();
+  return (keep.length ? keep : parts).join(' ') || String(x.bankMemo || x.memo || '').trim();
 }
-const ugKey = (x) => normName(payerName(x)) || normName(x.memo) || '(이름 없음)';
+const ugKey = (x) => normName(payerName(x)) || normName(x.bankMemo || x.memo) || '(이름 없음)';
 const ugTxs = () => clubTx().filter((x) => x.kind === 'in' && isUncClub(x));
 // 이름 후보: 이름·별칭이 같음(3) > 입금자 이름 안에 회원 이름이 들어 있음 「홍길동(국민)」(2) > 파일 올릴 때 이름이 맞았던 회원(3)
 function ugCands(key, xs) {

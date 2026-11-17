@@ -314,6 +314,17 @@ const Store = (() => {
         const extra = st.dict.filter(([w, a]) => !home.has(w) && accs.has(a) && !DATA.CLUB_DICT.some(([w2]) => w2 === w));
         if (st.dict.filter(([w]) => home.has(w)).length > 20) await put('meta', { ...st, dictOld: st.dict, dict: [...DATA.CLUB_DICT, ...extra] }, true);
       }
+    }],
+    [8, async () => { // 2026-11-17 v31 통장 메모 따로: v30에서 파일의 송금메모를 메모 칸에 넣었던 것 → 통장 메모(bankMemo)로 옮김 (지우지 않음). 내 메모는 비워 둠
+      const imps = {}; for (const i of all('imports')) imps[i.id] = i;
+      for (const x of all('tx')) {
+        if (x.bankMemo || !x.memo || !String(x.source || '').startsWith('파일:')) continue;
+        const imp = imps[String(x.source).slice(3)], m = String(x.memo).trim();
+        if (!imp || !imp.rows || /^할인: /.test(m)) continue;
+        if (imp.rows.some((r) => (r || []).some((c) => String(c ?? '').trim() === m))) await put('tx', { ...x, bankMemo: m, memo: '', memoMoved: true }, true);
+      }
+      // 「통장 기록 없이 · 장부 안 처리」 → 「무출금 · 무입금 (장부에만)」 이름만 바꿈 (내용 · 금액 그대로)
+      for (const x of all('tx')) if (x.memo && /장부 안 처리/.test(x.memo)) await put('tx', { ...x, memo: x.memo.replace(/장부 안 처리/g, '장부에만') }, true);
     }]
   ];
   const LATEST = MIGRATIONS[MIGRATIONS.length - 1][0];
