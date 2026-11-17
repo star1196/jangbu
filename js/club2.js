@@ -239,6 +239,8 @@ function clubTodoRows(T) {
   if (typeof clausesAll === 'function' && !clausesAll().length) out.push(`<div class="trow">${ic('book-open', 18)}<span style="flex:1">회칙 37개 조항이 아직 안 들어갔어요<br><span class="sub small">${hasOldRuleText() ? '예전에 적어 둔 회칙 글이 있어서 저절로 넣지 않았어요 (예전 글은 그대로 남아요)' : '눌러서 넣어요'}</span></span><span class="chips" style="gap:6px"><button class="btn ink" data-act="rbImport">넣기</button><button class="btn" data-act="go" data-to="회칙">보기</button></span></div>`);
   const uncIn = T.unc.filter((x) => x.kind === 'in').length;
   if (uncIn) out.push(`<button class="trow" data-act="goClubSort"><span class="odot"></span><span style="flex:1">미확인 입금 · 이름별로 정리</span><b>${uncIn}건</b></button>`);
+  if (typeof bdayDoubles === 'function') { const n = bdayDoubles().length; if (n) out.push(`<div class="trow">${ic('circle-alert', 18, 'var(--warn)')}<span style="flex:1">통장 출금과 겹치는 생일 처리 <b>${n}건</b></span><button class="btn ink" data-act="b2Dbl">정리하기</button></div>`); }
+  if (typeof dupTodoRow === 'function') { const dr = dupTodoRow(true); if (dr) out.push(dr); } // 중복 의심 (v33)
   if (typeof c7StuckRow === 'function') { const sr = c7StuckRow(); if (sr) out.push(sr); } // 대출로 잡았는데 미확인으로 남은 입금 (v31)
   if (typeof bdayQueue === 'function') { const q = bdayQueue().filter((s) => s.st === 'todo' || s.st === 'defer'); if (q.length) out.push(`<button class="trow" data-act="goBday">${ic('cake', 18)}<span style="flex:1">생일 처리할 것 (처리 전 · 미룸)</span><b>${q.length}건</b></button>`); }
   if (T.unc.length - uncIn) out.push(`<button class="trow" data-act="clubListF" data-f="unc"><span class="odot"></span><span style="flex:1">미확인 지출</span><b>${T.unc.length - uncIn}건</b></button>`);
@@ -246,7 +248,7 @@ function clubTodoRows(T) {
   const mt = mergeTodo(); if (mt) out.push(`<div class="trow">${ic('file-up', 18)}<span style="flex:1">다른 기기 백업을 먼저 불러오세요<br><span class="sub small">${syncInfo().lastMerge ? '마지막으로 합친 때 ' + agoTxt(syncInfo().lastMerge.mergedAt || syncInfo().lastMerge.at) : '다른 기기에서 넣은 내역이 있어요'}</span></span><button class="btn" data-act="pickBackup">불러오기</button><input type="file" data-backup="merge" hidden></div>`);
   if (S.storWarn) out.push(`<button class="trow" data-act="goStorage">${ic('circle-alert', 18, 'var(--warn)')}<span style="flex:1">저장 공간 ${Math.round(S.storWarn.usage / S.storWarn.quota * 100)}% 찼어요</span>${ic('chevron-right', 16)}</button>`);
   T.gifts.forEach((g) => out.push(`<button class="trow" data-act="clubOpenMember" data-id="${g.m.id}">${ic('cake', 18)}<span style="flex:1">${esc(g.m.name)} 생일 ${g.dd === 0 ? '오늘' : g.dd <= 7 ? 'D-' + g.dd : g.date.slice(5).replace('-', '.')} · 미수금 ${won(g.due)} → ${g.ok ? '<b>생일선물 대상 ✓</b>' : `<b class="warnt">${basisTxt()} 내야 대상</b>`}</span></button>`));
-  T.giftPay.forEach((g) => out.push(`<div class="trow">${ic('gift', 18)}<span style="flex:1">${esc(g.m.name)} 생일선물 대상 (${g.rec.date.slice(5).replace('-', '.')} · 미수금 0) · ${won(giftAt(g.rec.date.slice(0, 7)))}원</span><span class="chips" style="gap:6px"><button class="btn" data-act="clubGiftCash" data-id="${g.m.id}" data-y="${g.y}">현금·이체</button><button class="btn" data-act="clubGiftGo" data-id="${g.m.id}" data-y="${g.y}">회비로</button></span></div>`));
+  T.giftPay.forEach((g) => out.push(`<div class="trow">${ic('gift', 18)}<span style="flex:1">${esc(g.m.name)} 생일선물 대상 (${g.rec.date.slice(5).replace('-', '.')} · 미수금 0) · ${won(giftAt(g.rec.date.slice(0, 7)))}원</span><button class="btn" data-act="c7BdayDo" data-id="${g.m.id}" data-y="${g.y}">처리하기</button></div>`)); // 통장 출금에 연결 · 현금 · 맞바꿈 · 기록만 (v33)
   T.wed.forEach((w) => out.push(`<div class="trow">${ic('heart', 18)}<span style="flex:1">${esc(w.m.name)} 만 ${w.age}세 · 결혼축의금 선지급 대상${wedAmount() ? ` · ${won(wedAmount())}원` : ''}</span><span class="chips" style="gap:6px"><button class="btn" data-act="clubWedCash" data-id="${w.m.id}">현금·이체</button><button class="btn" data-act="clubWedFee" data-id="${w.m.id}">회비로</button></span></div>`));
   T.needYear.forEach((m) => out.push(`<button class="trow" data-act="clubMemberEdit" data-id="${m.id}">${ic('info', 18, 'var(--warn)')}<span style="flex:1">${esc(m.name)} 태어난 연도를 넣어 주세요 <span class="sub small">(만 45세 판정)</span></span>${ic('chevron-right', 16)}</button>`));
   T.adv.forEach((a) => out.push(`<div class="trow">${ic('rotate-ccw', 18)}<span style="flex:1">${esc(a.m.name)}에게 돌려줄 돈 <b>${won(a.owed)}원</b></span><button class="btn" data-act="clubAdvPair" data-id="${a.m.id}">짝 맞추기</button></div>`));
@@ -272,7 +274,7 @@ function viewClubHome(L) {
   const yearNav = `<span class="ynav"><button class="iconbtn" data-act="clubY" data-n="-1" aria-label="지난해">${ic('chevron-left', 20)}</button><b>${y}</b><button class="iconbtn" data-act="clubY" data-n="1" aria-label="다음 해">${ic('chevron-right', 20)}</button></span>`;
   const yms = Array.from({ length: 12 }, (_, i) => `${y}-${pad2(i + 1)}`);
   const empty = !ms.length ? `<div class="empty">${ic('users', 32, 'var(--sub)')}아직 회원이 없어요.<button class="btn ink" data-act="clubMemberNew">${ic('user-plus', 18)}회원 추가</button></div>` : '';
-  const todoCard = `<section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">할 일</h2>${rows.join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}</section>`;
+  const todoCard = `<section class="card card-pad"><div class="secrow" style="margin-bottom:8px"><h2 class="h2">할 일</h2><button class="btn" data-act="goDup">중복 점검</button></div>${rows.join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}</section>`;
   if (L === 'phone') {
     const cards = ms.map(({ m, s }) => `<div class="mcard">
       <div class="mtop"><button class="mname" data-act="clubOpenMember" data-id="${m.id}">${esc(m.name)}</button><span class="sub small">${esc(s.lastTxt)}</span><span style="flex:1"></span>${s.due ? `<span class="sub small">미수금</span>` : ''}${dueHtml(s)}</div>
@@ -420,6 +422,7 @@ function clubTags(x) {
   else if (isUnc(x)) t.push('<span class="tag unc">미확인</span>');
   if (x.club && x.club.type === 'fee') { const n = (x.club.alloc || []).length; t.push(`<span class="tag">회비 ${n}개월</span>`); }
   if (x.club && x.club.type === 'loan') t.push('<span class="tag">대출 상환</span>');
+  if (x.club && x.club.type === 'gift' && typeof giftYearsOf === 'function' && giftYearsOf(x).length) t.push(`<span class="tag gifty">${giftYearsOf(x).map((g) => g.y).join('·')} 생일</span>`);
   if (x.club && x.club.type === 'advRepay') t.push('<span class="tag">돌려준 돈</span>');
   if (x.advBy) t.push(`<span class="tag">${esc((memberOf(x.advBy) || {}).name || '')} 대신 냄</span>`);
   if (x.meet && x.meet.name && !x.internal) t.push(`<span class="tag">${esc(x.meet.type || '모임')}</span>`);
@@ -431,6 +434,7 @@ function viewClubList() {
   const F = { all: () => true, in: (x) => x.kind === 'in', out: (x) => x.kind === 'out', unc: isUncClub, hold: isHold, inner: (x) => x.internal };
   const cnt = (k) => list.filter(F[k]).length;
   list = applySort(list.filter(F[f]).sort(sortTx), 'clist'); // 최신순 / 오래된순 (v32)
+  S.clubVisible = list.map((x) => x.id); // [이 화면 모두] 고르기용 (v33)
   const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '미확인'], ['hold', '보류'], ['inner', '장부에만']];
   // 미확인 지출: 같은 가맹점끼리 묶어 한 번에 정하기
   let body = '';
@@ -441,7 +445,7 @@ function viewClubList() {
   } else body = list.slice(0, 400).map(clubRow).join('') + (list.length > 400 ? `<div class="sub small" style="padding:12px 18px">외 ${list.length - 400}건 · 기간을 줄이거나 찾기를 써 주세요</div>` : '');
   return `<div class="stack">
     <div class="secrow"><span class="sub">${esc(P.p)} · ${list.length}건</span>
-      <span class="chips">${sortBtn('clist')}${feat('files') ? `<button class="btn" data-act="clubFile">${ic('upload', 18)}통장 파일</button>` : ''}<button class="btn" data-act="clubOutNew">${ic('plus', 18)}지출</button></span></div>
+      <span class="chips">${sortBtn('clist')}<button class="btn" data-act="toggleSel">${ic('list-checks', 18)}${S.selMode ? '고르기 끝' : '고르기'}</button>${S.selMode ? '<button class="btn" data-act="clubPickAll">이 화면 모두</button>' : ''}${feat('files') ? `<button class="btn" data-act="clubFile">${ic('upload', 18)}통장 파일</button>` : ''}<button class="btn" data-act="clubOutNew">${ic('plus', 18)}지출</button></span></div>
     ${pfBar('clist', '1년', null, '이름 · 가맹점 · 메모 · 금액 찾기')}
     <div class="chips">${tabs.map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="clubListF" data-f="${k}">${l}${k !== 'all' && cnt(k) ? ' ' + cnt(k) : ''}</button>`).join('')}</div>
     ${f === 'unc' && list.some((x) => x.kind === 'in') ? `<button class="btn ink big" data-act="goClubSort">${ic('list-checks', 20)}미확인 입금 ${list.filter((x) => x.kind === 'in').length}건 · 입금자 이름별로 정리하기</button>` : ''}
@@ -642,6 +646,7 @@ function viewClubSettings() {
         + row('결혼 축의금', wedAmount() ? won(wedAmount()) + '원 (만 45세 미혼 선지급)' : '정하지 않음', 'clubWedAmt')
         + segRow('회비 배정 기본 방식', modes, cfg.allocMode, 'clubAllocMode')
         + segRow('생일선물 대상 판정 (미수금 0 기준일)', [['day', '생일 당일까지 낸 돈'], ['prev', '생일 전날까지 낸 돈']], giftBasis(), 'clubGiftBasis'))}
+      ${sec('자료 점검', row('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + row('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('분류 · 기능', row('계정과목 편집', `${Store.all('accounts').filter((a) => !a.hidden && !a.sys).length}개`, 'goAcctEdit') + row('모임 종류', meetTypes().join(' · '), 'clubMeetTypes') + row('계정 · 모임 옮기기', '예전 지출을 새 계정으로', 'moveOpen', 'data-v=""') + row('모임 종류로 정리하기', `제각각인 모임 ${clubTx().filter((x) => x.kind === 'out' && !x.internal && !nonStat(x) && meetNeedsFix(x)).length}건`, 'moveOpen', 'data-v="meet"') + row('사용할 기능', '이 장부만', 'goFeatures') + row('결산표', '인쇄 · PDF', 'go', 'data-to="결산표"') + (feat('loans') ? row('대출', `${loansAll().filter((l) => loanCalc(l).left > 0).length}건 진행 중`, 'go', 'data-to="대출"') : '') + (feat('instView') ? row('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('interest') ? row('이자로 모임비 맞추기', '간단 계산', 'clubInterest') : '') + (feat('savings') ? row('적금·예금', `${savingsActive().length}개`, 'goSavings') : ''))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">

@@ -481,7 +481,7 @@ async function formFinal() {
   const th = f.rc && f.rc.thumb && rcPhotoOn() && !(before && before.photoId) ? f.rc.thumb : null;
   if (th) obj.photoId = Store.uid();
   S.busy = true;
-  const saved = await Store.put('tx', obj);
+  const saved = await Store.put('tx', keepOrig(before, obj)); // 파일 줄: 금액 · 날짜 바꾸면 「원본과 다름」 (v33)
   if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
@@ -500,6 +500,7 @@ async function formFinal() {
 
 async function formDelete() {
   const f = S.f, x = Store.get('tx', f.id); if (!x) return;
+  S.f = null; S.dialog = { type: 'rmDel', id: x.id }; render(); return; // 「지울까요?」 → 휴지통 · 짝 · 나눔 함께 (edit3.js · v33)
   if (x.pairId && pairOf(x)) { S.dialog = { type: 'pairDel', id: x.id }; render(); return; } // 맞바꿈 짝: 짝도 지울까요?
   const before = { ...x };
   await Store.put('tx', { ...x, deleted: true, deletedAt: Date.now() });

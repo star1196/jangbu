@@ -103,7 +103,7 @@ function homeTodoBlock(autoHtml) {
   const ns = notesAll().flatMap((n) => noteOccs(n, from, to).map((o) => ({ date: o, n, html: noteRow(n, o) })));
   const items = [...autos, ...ns].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.auto ? -1 : 1)));
   const shown = S.todoAll ? items : items.slice(0, C.n);
-  return `<section class="card hblock todoblk" style="padding:18px 22px 10px"><div class="secrow"><h2 class="h2">할 일 · 기념일</h2><span class="chips" style="gap:6px"><button class="btn" data-act="noteNew">${ic('plus', 16)}넣기</button><button class="btn" data-act="go" data-to="할 일·기념일">기록</button></span></div>
+  return `<section class="card hblock todoblk" style="padding:18px 22px 10px"><div class="secrow"><h2 class="h2">할 일 · 기념일</h2><span class="chips" style="gap:6px"><button class="btn" data-act="goDup">중복 점검</button><button class="btn" data-act="noteNew">${ic('plus', 16)}넣기</button><button class="btn" data-act="go" data-to="할 일·기념일">기록</button></span></div>
     ${shown.map((i) => i.html).join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}
     ${items.length > C.n ? `<button class="linkbtn" data-act="todoMore">${S.todoAll ? '접기' : `더 보기 (${items.length - C.n}개 더)`}</button>` : ''}
     <span class="sub small" style="display:block;margin-top:4px">앞뒤 ${C.span} · 최대 ${C.n}개 (설정 → 홈 꾸미기)</span></section>`;
@@ -238,8 +238,8 @@ function viewReconDlg(D) {
 function reconHistory(b) {
   const rs = (b.recons || []).slice().sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : y.at - x.at));
   if (!rs.length) return '';
-  return `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">잔액 맞춘 기록</h2><div style="overflow-x:auto"><table class="bltab"><thead><tr><th>날짜</th><th class="r">실제 잔액</th><th class="r">앱 잔액</th><th class="r">차이</th><th>조정</th><th>메모</th></tr></thead><tbody>
-    ${rs.map((r) => `<tr><td>${r.date.replace(/-/g, '.')}</td><td class="r">${won(r.real)}</td><td class="r">${won(r.app)}</td><td class="r ${r.diff ? clsOf(r.diff) : ''}">${r.diff ? moneyTxt(r.diff) : '맞음 ✓'}</td><td>${r.adjId ? '<span class="tag inner">조정 기록</span>' : ''}</td><td class="small">${esc(r.memo || '')}</td></tr>`).join('')}</tbody></table></div></section>`;
+  return `<section class="card card-pad"><h2 class="h2" style="margin-bottom:6px">잔액 맞춘 기록</h2><div style="overflow-x:auto"><table class="bltab"><thead><tr><th>날짜</th><th class="r">실제 잔액</th><th class="r">앱 잔액</th><th class="r">차이</th><th>조정</th><th>메모</th><th></th></tr></thead><tbody>
+    ${rs.map((r) => `<tr><td>${r.date.replace(/-/g, '.')}</td><td class="r">${won(r.real)}</td><td class="r">${won(r.app)}</td><td class="r ${r.diff ? clsOf(r.diff) : ''}">${r.diff ? moneyTxt(r.diff) : '맞음 ✓'}</td><td>${r.adjId ? '<span class="tag inner">조정 기록</span>' : ''}</td><td class="small">${esc(r.memo || '')}</td><td><button class="btn" data-act="hbRecEdit" data-b="${b.id}" data-id="${r.id}">고치기 · 지우기</button></td></tr>`).join('')}</tbody></table></div></section>`;
 }
 async function reconSave(adj) {
   const D = S.dialog, d = D.d, b = bankOf(D.id), real = toInt(d.real) * (d.neg ? -1 : 1), date = d.date || todayStr(), app = balAt(b.id, date), diff = real - app, items = [];
@@ -253,6 +253,14 @@ async function reconSave(adj) {
 /* ───────── 대화 상자 · 칸 · 누르기 ───────── */
 function viewHome2Dlg(D) {
   if (D.type === 'hbRecon') return viewReconDlg(D);
+  if (D.type === 'hbRecRec') {
+    const b = bankOf(D.b), r = (b.recons || []).find((v) => v.id === D.id); if (!r) return '';
+    return `<div class="dlg" style="max-width:480px"><h2 class="dlg-title">잔액 맞춘 기록</h2>
+      <div class="drow" style="border-top:0"><span class="sub">${r.date.replace(/-/g, '.')} · 실제 ${won(r.real)}</span><b>${r.diff ? moneyTxt(r.diff) : '맞음 ✓'}</b></div>
+      <label class="field"><span class="label">메모</span><input class="input" data-rr="memo" value="${esc(D.memo ?? r.memo ?? '')}"></label>
+      ${r.adjId && Store.get('tx', r.adjId) && !Store.get('tx', r.adjId).deleted ? '<span class="sub small">이 기록으로 넣은 「잔액 조정」도 같이 지울 수 있어요.</span>' : ''}
+      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button><button class="btn" style="color:var(--out)" data-act="hbRecDel">지우기${r.adjId ? ' (조정 기록도)' : ''}</button><button class="btn ink" data-act="hbRecSave">저장</button></div></div>`;
+  }
   if (D.type === 'hnNote') {
     const d = D.d;
     return `<div class="dlg" style="max-width:500px"><h2 class="dlg-title">${D.id ? '할 일 · 기념일 고치기' : '할 일 · 기념일 넣기'}</h2>
@@ -271,6 +279,7 @@ function onHome2Input(el) {
   const D = S.dialog, ds = el.dataset || {};
   if (!D) return false;
   if (ds.rc && D.type === 'hbRecon') { if (ds.rc === 'neg') D.d.neg = el.checked; else if (ds.rc === 'real') { D.d.real = el.value === '' ? '' : comma(toInt(el.value)); el.value = D.d.real; } else D.d[ds.rc] = el.value; if (ds.rc !== 'memo') render(); return true; }
+  if (ds.rr && D.type === 'hbRecRec') { D.memo = el.value; return true; }
   if (ds.hn && D.type === 'hnNote') { D.d[ds.hn] = ds.hn === 'yearly' ? el.checked : el.value; return true; }
   return false;
 }
@@ -311,5 +320,13 @@ const HOME2_ACT = {
   hbReSave: () => reconSave(false),
   hbReAdjAsk: () => { S.dialog.step = 'adj'; render(); },
   hbReBack: () => { S.dialog.step = null; render(); },
-  hbReAdj: () => reconSave(true)
+  hbReAdj: () => reconSave(true),
+  hbRecEdit: (el) => { S.dialog = { type: 'hbRecRec', b: el.dataset.b, id: el.dataset.id }; render(); },
+  hbRecSave: async () => { const D = S.dialog, b = bankOf(D.b), before = { ...b }; await Store.put('banks', { ...b, recons: (b.recons || []).map((r) => (r.id === D.id ? { ...r, memo: String(D.memo ?? r.memo ?? '').trim() } : r)) }); S.dialog = null; render(); toast('고쳤어요', { items: [{ col: 'banks', id: b.id, before }] }); },
+  hbRecDel: async () => {
+    const D = S.dialog, b = bankOf(D.b), before = { ...b }, r = (b.recons || []).find((v) => v.id === D.id), items = [{ col: 'banks', id: b.id, before }];
+    await Store.put('banks', { ...b, recons: (b.recons || []).filter((v) => v.id !== D.id) });
+    const a = r && r.adjId ? Store.get('tx', r.adjId) : null; if (a && !a.deleted) { items.push({ col: 'tx', id: a.id, before: { ...a } }); await Store.put('tx', { ...a, deleted: true, deletedAt: Date.now() }); }
+    S.dialog = null; render(); toast(`기록을 지웠어요${a ? ' · 잔액 조정은 휴지통으로' : ''}`, { items });
+  }
 };

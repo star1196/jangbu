@@ -1018,3 +1018,53 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .drow.cand { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; gap: 8px; }
 .drow.cand.hit { background: color-mix(in oklab, var(--warn) 10%, var(--sf)); }
 .tag.auto { align-self: flex-start; font-weight: 500; }
+/* v33 고치기 · 지우기 · 중복 점검 */
+.rowmore { flex: none; width: 36px; height: 36px; margin-left: 2px; border: 0; border-radius: 8px; background: none; color: var(--sub); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.rowmore:hover { background: var(--soft); color: var(--ink); }
+.phone .rowmore { display: none; }
+.tag.origdiff { background: none; border: 1px solid var(--warn); color: var(--warn); }
+.lrow { -webkit-touch-callout: none; user-select: none; }
+.dupcard .duppair { display: flex; flex-wrap: wrap; gap: 10px; }
+.dupside { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.okcheck { display: flex; align-items: center; gap: 12px; }
+/* v33 생일 표 */
+.bdgridwrap { overflow-x: auto; }
+.bdgrid { border-collapse: collapse; font-size: calc(13px * var(--fs)); }
+.bdgrid th { padding: 6px 6px; color: var(--sub); font-weight: 600; white-space: nowrap; text-align: center; }
+.bdgrid tbody th { text-align: left; position: sticky; left: 0; background: var(--sf); }
+.bdgrid td { padding: 3px; text-align: center; }
+.bdc { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: calc(54px * var(--fs)); min-height: 44px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--sf); font: inherit; color: var(--ink); cursor: pointer; }
+.bdc b { font-size: calc(15px * var(--fs)); line-height: 1.1; position: relative; }
+.bdc span { font-size: calc(10.5px * var(--fs)); color: var(--sub); white-space: nowrap; }
+.bdc.paid b { color: #3f8a55; } .bdc.paid { border-color: #9cc9a8; }
+.bdc.swap b { color: #6fae3c; } .bdc.swap { border-color: #c4e2a8; }
+.bdc.rec b { font-size: calc(12px * var(--fs)); color: #3f8a55; }
+.bdc.defer b, .bdc.todo b { color: var(--warn); } .bdc.defer, .bdc.todo { border-color: var(--warn); }
+.bdc.na b, .bdc.base b { color: var(--sub); } .bdc.base { background: var(--soft); border-style: dashed; }
+.bdc.base b { font-size: calc(11px * var(--fs)); }
+.bdc.future { border-style: dashed; }
+.bdc.sm { min-width: 0; min-height: 0; padding: 0 6px; display: inline-flex; flex-direction: row; cursor: default; }
+.latedot { position: absolute; top: -2px; right: -8px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.bdlegend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: calc(12px * var(--fs)); color: var(--sub); }
+.bdlegend span { display: inline-flex; align-items: center; gap: 4px; }
+.bdrow { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.bdrc { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tag.gifty { background: color-mix(in oklab, var(--in) 12%, var(--sf)); color: var(--ink); }
+.bdc.none { background: var(--soft); border-style: dashed; } .bdc.none b { color: var(--sub); }
+/* v33 보안: 화면 가림 · 비밀번호 도우미 · 점검 */
+#cover { position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center; background: var(--bg); }
+#cover.on { display: flex; }
+#cover .covermid { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--sub); text-align: center; }
+#cover .covermid b { color: var(--ink); font-size: calc(18px * var(--fs)); }
+.pwhelp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; }
+.pwbar { flex: 1 1 120px; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.pwbar i { display: block; height: 100%; width: 0; background: var(--out); transition: width .2s; }
+.pwbar i.lv2 { background: var(--warn); } .pwbar i.lv3 { background: #3f8a55; }
+.pwlv { flex: 1 1 100%; }
+.capsnote { display: none; color: var(--warn); font-size: calc(12px * var(--fs)); font-weight: 600; }
+.capsnote.on { display: inline; }
+.pwshow { display: inline-flex; align-items: center; gap: 4px; font-size: calc(13px * var(--fs)); color: var(--sub); margin-left: auto; }
+.okc, .ngc { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+.okc { background: color-mix(in oklab, #3f8a55 18%, var(--sf)); color: #3f8a55; }
+.ngc { background: color-mix(in oklab, var(--warn) 22%, var(--sf)); color: var(--warn); }
+.dupside .tag { align-self: flex-start; }

@@ -161,8 +161,11 @@ function clubTxName(x) {
 function clubRow(x) {
   const a = accOf(x.accountId);
   const sub = [mmdd(x.date), x.internal ? '' : x.bankId ? bankName(x.bankId) : '현금', a && !isUnc(x) ? a.name : '', x.meet && x.meet.people ? x.meet.people + '명' : '', x.bankMemo ? '통장: ' + x.bankMemo : '', x.memo || ''].filter(Boolean).join(' · ');
-  const title = x.club && x.club.memberId ? `${clubTxName(x)}${x.merchant && normName(x.merchant) !== normName(clubTxName(x)) ? ' · ' + x.merchant : ''}` : txTitle(x);
-  return `<button class="lrow" data-act="clubTx" data-id="${x.id}">${txIcon(x, 20, 40)}<span class="lmid"><span class="lt">${esc(title)} ${clubTags(x)}</span><span class="ls">${esc(sub)}</span></span>${txAmt(x, 16)}</button>`;
+  // 이름이 두 번 나오지 않게: 「김영진 · 김영진 생일선물」 → 「김영진 · 생일선물」 (v33)
+  const nm = clubTxName(x), rest = x.merchant ? String(x.merchant).replace(nm, '').replace(/^[\s·]+|[\s·]+$/g, '') : '';
+  const title = x.club && x.club.memberId ? `${nm}${rest && normName(x.merchant) !== normName(nm) ? ' · ' + rest : ''}` : txTitle(x);
+  const on = S.selMode && S.picked && S.picked[x.id], chk = S.selMode ? `<span class="chk ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>` : '';
+  return `<div class="lrow ${on ? 'hl' : ''}" role="button" tabindex="0" data-act="clubTx" data-id="${x.id}">${chk}${txIcon(x, 20, 40)}<span class="lmid"><span class="lt">${esc(title)} ${clubTags(x)}${typeof origTag === 'function' ? origTag(x) : ''}</span><span class="ls">${esc(sub)}</span></span>${txAmt(x, 16)}${S.selMode || typeof rowMore !== 'function' ? '' : rowMore(x)}</div>`;
 }
 
 
@@ -372,7 +375,7 @@ function viewClubDlg(D) {
       <div class="stack" style="gap:4px">${(x.club.alloc || []).map((a) => `<div class="drow"><span>${a.ym === 'start' ? '시작 전 밀린 회비' : ymTxt(a.ym)}</span><b>${won(a.amt)}</b></div>`).join('')}</div>
       ${x.club.extra ? `<div class="drow"><span>기타 수입</span><b>${won(x.club.extra)}</b></div>` : ''}
       ${x.internal ? '<span class="sub small">맞바꿈 짝이 있어요. 지우면 "짝도 지울까요?" 물어봐요.</span>' : '<span class="sub small">[다시 배정]을 누르면 이 입금을 미확인으로 돌린 뒤 회비 넣기 화면을 열어요.</span>'}
-      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button>${x.internal ? `<button class="btn" style="color:var(--out)" data-act="cfDelInner" data-id="${x.id}">지우기</button>` : `<button class="btn" data-act="cfUndo" data-id="${x.id}">미확인으로 돌리기</button><button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button><button class="btn ink" data-act="cfRedo" data-id="${x.id}">다시 배정</button>`}</div></div>`;
+      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button>${x.internal ? `<button class="btn" style="color:var(--out)" data-act="cfDelInner" data-id="${x.id}">지우기</button>` : `<button class="btn" style="color:var(--out)" data-act="rmDelAsk" data-id="${x.id}">지우기</button><button class="btn" data-act="cfUndo" data-id="${x.id}">미확인으로 돌리기</button><button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button><button class="btn ink" data-act="cfRedo" data-id="${x.id}">다시 배정</button>`}</div></div>`;
   }
   if (D.type === 'clubCell') {
     const m = memberOf(D.memberId), calc = memberCalc(m), c = cellOf(m, D.ym, calc);

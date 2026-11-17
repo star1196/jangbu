@@ -33,10 +33,10 @@ async function makeBackupText(opt) {
   const at = Date.now(), cols = opt.cols || Store.snapshot();
   if (opt.noPhotos) delete cols.photos;
   const payload = { app: 'jangbu', v: 1, createdAt: at, device: deviceName(), schema: Store.LATEST, ledger: { ...Store.current(), salt: undefined, iter: undefined }, counts: { tx: liveCount(cols) }, cols };
-  const sealed = await Store.sealBackup(payload);
   // 겉에는 열기 전에 보여 줄 것만 (만든 시각·기기·장부 종류·장부 이름). 내용은 모두 잠김.
-  // 장부 이름은 파일 이름에도 들어가는 것 → 다른 장부 백업을 잘못 고르면 열기 전에 이름으로 알려 주려고 겉에 둠
-  const file = { app: 'jangbu', kind: 'backup', v: 1, ledgerId: Store.current().id, type: Store.current().type, name: Store.current().name, createdAt: at, device: deviceName(), photos: !opt.noPhotos, part: opt.part || '', ...sealed };
+  const head = { app: 'jangbu', kind: 'backup', v: 2, ledgerId: Store.current().id, type: Store.current().type, name: Store.current().name, createdAt: at, device: deviceName(), photos: !opt.noPhotos, part: opt.part || '' }; // v2 (v33): 이 머리는 암호에 묶여서 고치면 안 열림
+  const sealed = await Store.sealBackup(payload, head);
+  const file = { ...head, ...sealed };
   return { at, text: JSON.stringify(file), n: payload.counts.tx };
 }
 async function prepareBackup() {

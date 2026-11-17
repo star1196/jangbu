@@ -181,7 +181,7 @@ function viewBdayScreen(L) {
       <span style="flex:1;min-width:0"><b>${esc(s.m.name)}</b> <span class="sub small">${s.y} · ${s.date.slice(5).replace('-', '.')} ${s.dd === 0 ? '오늘' : s.dd > 0 ? 'D-' + s.dd : `${-s.dd}일 지남`}</span><br>
       <span class="tag bd-${s.st}">${BDAY_ST[s.st]}</span> ${okBadge(s)} <span class="sub small">${won(giftAt(s.date.slice(0, 7)))}원</span>${s.memo ? ` <span class="sub small">· ${esc(s.memo)}</span>` : ''}</span>
       <button class="btn ink" data-act="c7BdayDo" data-id="${s.m.id}" data-y="${s.y}">지금 처리</button></div>`).join('') : `<div class="todo-done">${ic('check', 22)}보낼 생일이 없어요</div>`;
-  const bulk = Q.length ? `<div class="chips" style="align-items:center"><span class="sub small">체크한 ${nChk}명 한 번에:</span>${[['bank', '통장 출금'], ['cash', '현금'], ['inner', '무출금'], ['swap', '회비로 대신(맞바꿈)'], ['defer', '미룸'], ['na', '대상 아님']].map(([k, l]) => `<button class="btn" data-act="c7BdayBulk" data-v="${k}" ${nChk ? '' : 'disabled'}>${l}</button>`).join('')}
+  const bulk = Q.length ? `<div class="chips" style="align-items:center"><span class="sub small">체크한 ${nChk}명 한 번에:</span>${[['record', '기록만'], ['swap', '회비로 대신(맞바꿈)'], ['defer', '미룸'], ['na', '대상 아님'], ['exempt', '면제']].map(([k, l]) => `<button class="btn" data-act="c7BdayBulk" data-v="${k}" ${nChk ? '' : 'disabled'}>${l}</button>`).join('')}
     <button class="linkbtn" data-act="c7BdayChkAll">${nChk === Q.length ? '모두 끄기' : '모두 체크'}</button></div>` : '';
   // 아래: 처리한 기록
   const P = pfOf('cbday', '전체'), [from, to] = pfRange('cbday', '전체');
@@ -313,7 +313,7 @@ function viewClub7Dlg(D) {
     const x = Store.get('tx', D.id); if (!x) return '';
     return `<div class="dlg" style="max-width:540px"><h2 class="dlg-title">${x.kind === 'in' ? '입금' : '출금'} 나눔 보기</h2>${splitTreeHtml(x, { link: true })}
       <span class="sub small">줄을 누르면 그 줄을 열어요. [고치기]로 나눈 금액 · 종류를 바꿔요 (합계는 입금과 같아야 해요).</span>
-      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button><button class="btn ink" data-act="c7SplitOpen" data-id="${x.id}">고치기</button></div></div>`;
+      <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button><button class="btn" style="color:var(--out)" data-act="rmDelAsk" data-id="${x.id}">지우기</button><button class="btn ink" data-act="c7SplitOpen" data-id="${x.id}">고치기</button></div></div>`;
   }
   if (D.type === 'c7Bday') {
     const m = memberOf(D.memberId), s = bdayStatus(m, D.y), d = D.d;
@@ -498,8 +498,9 @@ let C7_BASE_TX = null;
 (function hook() {
   // 친구회 내역 누르기: 나눈 입금이면 나눔 보기
   C7_BASE_TX = CLUB_ACT.clubTx;
-  CLUB_ACT.clubTx = (el) => { const x = Store.get('tx', el.dataset.id); if (x && x.splitId && splitGroup(x).length > 1 && !(S.dialog && S.dialog.type === 'c7Tree')) { S.dialog = { type: 'c7Tree', id: x.id }; render(); return; } C7_BASE_TX(el); };
+  CLUB_ACT.clubTx = (el) => { if (S.selMode) { const id = el.dataset.id; S.picked = S.picked || {}; if (S.picked[id]) delete S.picked[id]; else S.picked[id] = 1; render(); return; } const x = Store.get('tx', el.dataset.id); if (x && x.splitId && splitGroup(x).length > 1 && !(S.dialog && S.dialog.type === 'c7Tree')) { S.dialog = { type: 'c7Tree', id: x.id }; render(); return; } C7_BASE_TX(el); };
   CLUB_ACT.c7Part = C7_ACT.c7Part;
+  CLUB_ACT.csRepayFix = (el) => { const x = Store.get('tx', el.dataset.id), mb = mainBank(); S.dialog = { type: 'clubRepay', memberId: (x.club && x.club.memberId) || '', loanId: x.club && x.club.loanId, txId: x.id, fixedTx: true, d: { date: x.date, amount: '', bankId: x.bankId || (mb ? mb.id : '') } }; render(); }; // 대출 상환 고치기: 다른 대출로 다시 정하기
   // 맞바꿈 지우기: 짝도 지울까요?
   CLUB_ACT.cfDelInner = (el) => { S.dialog = { type: 'pairDel', id: el.dataset.id }; render(); };
   // 대출 상환 저장: 통장에 이미 들어온 입금이 있으면 그 줄에 연결 · 계정이 없으면 만듦 · 남은 대출보다 많으면 나누기

@@ -161,7 +161,7 @@ function viewClubDlgX(D) {
         ${d.src === 'bank' && banksOpen().length > 1 ? `<select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>` : ''}
         ${d.src === 'inner' ? `<span class="sub small">통장에서 돈이 나가지 않는 지출이에요. ${isGift ? '생일선물을 회비로 대신하면 다음 화면에서 채울 달을 보여 줘요.' : isWed ? '결혼축의금을 회비로 대신하면 다음 화면에서 채울 달을 보여 줘요.' : '통장·현금 잔액은 그대로, 통계에는 들어가요. 「장부에만」으로 적혀요.'}</span>` : ''}</div>`}
       <label class="field"><span class="label">내 메모 <span style="font-weight:400">(선택 · 가게 이름, 대신 낸 사람 등 · 찾기에 나와요)</span></span><input class="input" data-co="memo" list="clubMemoList" value="${esc(d.memo)}" placeholder="예: ○○식당, 나○○ 대신 냄"><datalist id="clubMemoList">${memos.map((v) => `<option value="${esc(v)}">`).join('')}</datalist></label>
-      <div class="err" data-err></div>${btns('다음')}</form>`;
+      <div class="err" data-err></div>${D.txId ? `<button class="btn ghost" type="button" style="align-self:flex-start;color:var(--out)" data-act="rmDelAsk" data-id="${D.txId}">${ic('trash-2', 18)}이 지출 지우기</button>` : ''}${btns('다음')}</form>`;
   }
 
   if (D.type === 'clubSort') {
@@ -174,7 +174,7 @@ function viewClubDlgX(D) {
       return `<div class="dlg" style="max-width:520px"><h2 class="dlg-title">이 지출은 무엇인가요?</h2><div class="drow" style="border-top:0"><span>${mmdd(x.date)} ${esc(x.merchant || '')}</span><b class="neg">−${won(x.amount)}</b></div>${memoLine(x) ? `<div class="sub small">${memoLine(x)}</div>` : ''}
         ${askM ? `<div class="bigwarn soft">${ic('rotate-ccw', 24)}<div><b>${esc(askM.name)} 회원에게 보낸 돈 같아요. 돌려준 돈인가요?</b><br><span style="font-weight:400">돌려줄 돈 ${won(owedOf(askM.id))}원</span><div class="chips" style="margin-top:8px"><button class="btn ink" data-act="csAdvYes" data-id="${askM.id}">예, 돌려준 돈</button><button class="btn" data-act="coFromTx" data-id="${x.id}">아니요, 지출이에요</button></div></div></div>` : ''}
         ${rec ? `<span class="sub small">추천 계정: <b>${esc(rec.name)}</b> (${lastAccFor(x.merchant, x.id) ? '지난번 같은 가맹점' : '분류 사전'})</span>` : ''}
-        <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button><button class="btn ink" data-act="coFromTx" data-id="${x.id}">지출로 정하기</button><button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button>${feat('loans') ? `<button class="btn" data-act="csLoanOut" data-id="${x.id}">대출로 빌려줌</button>` : ''}${owedMs.length && !askM ? `<button class="btn" data-act="csAdvMode">회원에게 돌려준 돈</button>` : ''}</div>
+        <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" data-act="closeDlg">닫기</button><button class="btn ink" data-act="coFromTx" data-id="${x.id}">지출로 정하기</button><button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button><button class="btn" style="color:var(--out)" data-act="rmDelAsk" data-id="${x.id}">지우기</button>${feat('loans') ? `<button class="btn" data-act="csLoanOut" data-id="${x.id}">대출로 빌려줌</button>` : ''}${owedMs.length && !askM ? `<button class="btn" data-act="csAdvMode">회원에게 돌려준 돈</button>` : ''}</div>
         ${D.loanOut ? `<span class="label">누구에게?</span><div class="chips">${memChips(null, 'csLoanOutM')}</div><div style="display:flex;gap:8px"><input class="input" data-co="loName" placeholder="회원이 아니면 이름" value="${esc((D.d || {}).loName || '')}"><button class="btn" data-act="csLoanOutN">회원 아님으로</button></div>` : ''}
         ${D.adv ? `<span class="label">누구에게 돌려준 돈인가요?</span><div class="chips">${owedMs.map((m) => `<button class="chip" data-act="csAdvYes" data-id="${m.id}">${esc(m.name)} · ${won(owedOf(m.id))}</button>`).join('')}</div>` : ''}</div>`;
     }
@@ -197,7 +197,7 @@ function viewClubDlgX(D) {
         <button class="btn big" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button>
       </div>
       ${feat('loans') && !hasLoan ? `<span class="sub small">${m ? '이 회원은' : '회원 아닌 사람의'} 남은 대출이 없어요.</span>` : ''}
-      <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
+      <div class="dlg-btns"><button class="btn" style="color:var(--out)" data-act="rmDelAsk" data-id="${x.id}">지우기</button><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
   }
 
   if (D.type === 'clubMeet') {
@@ -264,7 +264,7 @@ function viewClubDlgX(D) {
     const x = Store.get('tx', D.id); if (!x) return '';
     const kind = x.club.type === 'loan' ? `대출 상환 · ${esc(loanWho(loansAll().find((l) => l.id === x.club.loanId) || {}))}` : `${esc((memberOf(x.club.memberId) || {}).name || '')}에게 돌려준 돈`;
     return `<div class="dlg"><h2 class="dlg-title">${kind}</h2><div class="drow" style="border-top:0"><span>${x.date.replace(/-/g, '.')} ${x.bankId ? esc(bankName(x.bankId)) : '현금'}${x.merchant ? ' · ' + esc(x.merchant) : ''}</span><b>${x.kind === 'in' ? '+' : '−'}${won(x.amount)}</b></div>
-      <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button><button class="btn" data-act="ctUndo" data-id="${x.id}">${x.source === '직접' ? '지우기' : '미확인으로 돌리기'}</button><button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button></div></div>`;
+      <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button><button class="btn" style="color:var(--out)" data-act="rmDelAsk" data-id="${x.id}">지우기</button>${x.source === '직접' ? '' : `<button class="btn" data-act="ctUndo" data-id="${x.id}">미확인으로 돌리기</button>`}${x.club.type === 'loan' ? `<button class="btn ink" data-act="csRepayFix" data-id="${x.id}">고치기</button>` : ''}<button class="btn" data-act="c7SplitOpen" data-id="${x.id}">나눠 잡기</button></div></div>`;
   }
   return '';
 }
@@ -380,7 +380,7 @@ Object.assign(CLUB_ACT, {
     const o = { ...base, date: d.date, amount, accountId: a.id, status: '확인', memo: d.memo.trim(), merchant: d.fromFile ? base.merchant : nm ? `${nm} ${a.name}` : '',
       bankId: src === 'bank' ? (d.fromFile ? base.bankId : d.bankId || (mainBank() || {}).id || null) : null, payMethodId: src === 'bank' ? bankPayId() : src === 'cash' ? cashPayId() : null,
       internal: src === 'inner' ? true : base.internal && !base.pairId ? false : base.internal || false, advBy: null, meet, club, autoAcc: false };
-    const s = await Store.put('tx', o), items = [{ col: 'tx', id: s.id, before }];
+    const s = await Store.put('tx', keepOrig(before, o)), items = [{ col: 'tx', id: s.id, before }]; // 파일 줄 원본 보호 (v33)
     if (isWed) { const m = memberOf(d.memberId); items.push({ col: 'members', id: m.id, before: { ...m } }); await Store.put('members', { ...m, wed: { date: d.date, amount, how: src === 'inner' ? 'inner' : 'cash', txId: s.id } }); }
     S.dialog = null; render(); toast(before ? '지출을 고쳤어요' : `${a.name} ${won(amount)}원을 넣었어요${src === 'inner' ? ' · 장부에만' : ''}`, { items });
   },
@@ -663,7 +663,7 @@ function viewMeetTypesDlg(D) {
   return `<form class="dlg" data-form="clubMeetTypes" autocomplete="off" style="max-width:520px"><h2 class="dlg-title">모임 종류</h2>
     <span class="sub small">지출을 넣을 때는 이 목록에서 고르기만 해요. 이름을 바꾸면 이미 넣은 지출도 함께 바뀌어요.</span>
     ${L.map((r, i) => `<div style="display:flex;gap:6px;align-items:center"><input class="input" style="flex:1;min-width:0" data-mt="${i}" value="${esc(r.name)}" maxlength="12" aria-label="모임 종류 ${i + 1}">
-      <button type="button" class="iconbtn" data-act="mtMove" data-i="${i}" data-n="-1" aria-label="위로" ${i ? '' : 'disabled'}>${ic('chevron-up', 18)}</button><button type="button" class="iconbtn" data-act="mtMove" data-i="${i}" data-n="1" aria-label="아래로" ${i < L.length - 1 ? '' : 'disabled'}>${ic('chevron-down', 18)}</button></div>`).join('')}
+      <button type="button" class="iconbtn" data-act="mtMove" data-i="${i}" data-n="-1" aria-label="위로" ${i ? '' : 'disabled'}>${ic('chevron-up', 18)}</button><button type="button" class="iconbtn" data-act="mtMove" data-i="${i}" data-n="1" aria-label="아래로" ${i < L.length - 1 ? '' : 'disabled'}>${ic('chevron-down', 18)}</button><button type="button" class="iconbtn" data-act="mtDel" data-i="${i}" aria-label="${esc(r.name)} 지우기">${ic('trash-2', 18)}</button></div>`).join('')}
     <button type="button" class="btn" style="align-self:flex-start" data-act="mtAdd">${ic('plus', 16)}모임 종류 더하기</button>
     <div class="err" data-err></div>
     <div class="dlg-btns"><button class="btn" type="button" data-act="closeDlg">취소</button><button class="btn ink" type="submit">저장</button></div></form>`;
@@ -672,6 +672,7 @@ document.addEventListener('input', (e) => { const el = e.target; if (el.dataset 
 Object.assign(CLUB_ACT, {
   clubMeetTypes: () => { S.dialog = { type: 'clubMeetTypes', list: meetTypes().map((n) => ({ name: n, orig: n })) }; render(); },
   mtMove: (el) => { const L = S.dialog.list, i = +el.dataset.i, j = i + +el.dataset.n; if (j < 0 || j >= L.length) return; [L[i], L[j]] = [L[j], L[i]]; render(); },
+  mtDel: (el) => { const D = S.dialog, r = D.list[+el.dataset.i], used = r.orig && clubTx().some((x) => x.meet && x.meet.type === r.orig); const e = $app.querySelector('.dlg [data-err]'); if (used) { if (e) e.textContent = `「${r.orig}」 모임을 쓴 지출이 있어서 지울 수 없어요. 이름을 바꾸거나 [계정 · 모임 옮기기]로 옮긴 뒤 지워요.`; return; } if (D.list.length <= 1) { if (e) e.textContent = '모임 종류는 하나는 있어야 해요.'; return; } D.list.splice(+el.dataset.i, 1); render(); },
   mtAdd: () => { S.dialog.list.push({ name: '', orig: '' }); render(); const ins = $app.querySelectorAll('[data-mt]'); if (ins.length) ins[ins.length - 1].focus(); },
   moveOpen: (el) => { S.moveMode = el.dataset.v || ''; S.movePick = {}; S.moveAcc = ''; go('지출 옮기기'); },
   moveMode: (el) => { S.moveMode = el.dataset.v || ''; S.movePick = {}; S.moveAcc = ''; render(); }

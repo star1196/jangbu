@@ -164,6 +164,7 @@ function viewSecurity() {
         <button class="row" data-act="dlgPw"><span class="k">이 장부 비밀번호 변경</span><span class="v">${esc(Store.current().name)}</span>${ic('chevron-right', 18, 'var(--sub)')}</button>
         <button class="row" data-act="lockAll"><span class="k">${ic('lock', 18)} 모두 잠그기</span>${ic('chevron-right', 18, 'var(--sub)')}</button>
       </section>
+      ${typeof coverSettingCard === 'function' ? coverSettingCard() : ''}
     </div>
   </div>`;
 }

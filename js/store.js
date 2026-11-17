@@ -65,24 +65,31 @@ const Store = (() => {
   }
 
   async function deriveKey(pw, salt, iter) {
-    const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const pb = enc.encode(pw), base = await crypto.subtle.importKey('raw', pb, 'PBKDF2', false, ['deriveKey']);
+    pb.fill(0); // 비밀번호 바이트는 쓴 뒤 바로 지움 (열쇠는 내보낼 수 없게 non-extractable)
     return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   }
   // 같은 열쇠를 날 값(32바이트)으로 (함께 열기 묶음에 감싸 넣을 때만 잠깐 쓰고 바로 0으로 지움)
   async function deriveRaw(pw, salt, iter) {
-    const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    const pb = enc.encode(pw), base = await crypto.subtle.importKey('raw', pb, 'PBKDF2', false, ['deriveBits']); pb.fill(0);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, 256));
   }
   function keyFromRaw(raw) { return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']); }
-  async function encryptWith(k, obj) {
+  // aad: AES-GCM 추가 인증 자료 (v33). 겉 정보(장부 · 묶음 · 번호 / 백업 머리)를 묶어 두면 그 겉을 바꿨을 때 열리지 않음
+  const gcm = (iv, aad) => (aad ? { name: 'AES-GCM', iv, additionalData: enc.encode(aad) } : { name: 'AES-GCM', iv });
+  async function encryptWith(k, obj, aad) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, enc.encode(JSON.stringify(obj)));
+    const ct = await crypto.subtle.encrypt(gcm(iv, aad), k, enc.encode(JSON.stringify(obj)));
     return { iv, ct };
   }
-  async function decryptWith(k, box) {
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: box.iv }, k, box.ct);
+  async function decryptWith(k, box, aad) {
+    const pt = await crypto.subtle.decrypt(gcm(box.iv, aad), k, box.ct);
     return JSON.parse(dec.decode(pt));
   }
+  // 저장 줄 하나: 장부 id · 묶음 · 번호를 추가 인증 자료로 (a: 1). 예전 줄(a 없음)은 그대로 읽고, 다시 저장할 때 새 방식
+  const recAad = (lid, col, id) => `jangbu|rec|1|${lid}|${col}|${id}`;
+  async function sealRec(k, lid, col, o) { const box = await encryptWith(k, o, recAad(lid, col, o.id)); return { k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct, a: 1 }; }
+  const openRec = (k, r) => decryptWith(k, r, r.a ? recAad(r.lid, r.col, r.id) : null);
 
   async function listLedgers() {
     const db = await openDB();
@@ -121,10 +128,7 @@ const Store = (() => {
     const k = await deriveKey(password, salt, ITER);
     const id = wantId || uid();
     const check = await encryptWith(k, CHECK_TEXT);
-    const rows = await inBatches(records || defaultRecords(type, preset), async ([col, obj]) => {
-      const box = await encryptWith(k, obj);
-      return { k: id + '|' + col + '|' + obj.id, lid: id, col, id: obj.id, iv: box.iv, ct: box.ct };
-    });
+    const rows = await inBatches(records || defaultRecords(type, preset), ([col, obj]) => sealRec(k, id, col, obj));
     for (let i = 0; i < rows.length; i += 5000) {
       const t = db.transaction('recs', 'readwrite');
       rows.slice(i, i + 5000).forEach((r) => t.objectStore('recs').put(r));
@@ -142,9 +146,9 @@ const Store = (() => {
     const db = await openDB();
     const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(meta.id));
     const m = {};
-    const objs = await inBatches(rows, (r) => decryptWith(k, r));
-    rows.forEach((r, i) => { (m[r.col] = m[r.col] || new Map()).set(r.id, objs[i]); });
-    opened.set(meta.id, { key: k, mem: m, ledger: { id: meta.id, type: meta.type, name: meta.name, salt: meta.salt, iter: meta.iter } });
+    const BAD = {}, objs = await inBatches(rows, (r) => openRec(k, r).catch(() => BAD)); // 겉 정보가 바뀐(변조 의심) 줄은 빼고 엶
+    let bad = 0; rows.forEach((r, i) => { if (objs[i] === BAD) { bad++; return; } (m[r.col] = m[r.col] || new Map()).set(r.id, objs[i]); });
+    opened.set(meta.id, { bad, key: k, mem: m, ledger: { id: meta.id, type: meta.type, name: meta.name, salt: meta.salt, iter: meta.iter } });
     switchTo(meta.id);
   }
   async function getMeta(id) { const db = await openDB(); return reqP(db.transaction('ledgers').objectStore('ledgers').get(id)); }
@@ -202,10 +206,10 @@ const Store = (() => {
     (mem[col] = mem[col] || new Map()).set(o.id, o); ver++;
     const k = key, lid = ledger.id;
     chain = chain.then(async () => {
-      const box = await encryptWith(k, o);
+      const row = await sealRec(k, lid, col, o);
       const db = await openDB();
       const t = db.transaction('recs', 'readwrite');
-      t.objectStore('recs').put({ k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct });
+      t.objectStore('recs').put(row);
       await txDone(t);
     });
     return chain.then(() => o);
@@ -221,7 +225,7 @@ const Store = (() => {
       (mem[col] = mem[col] || new Map()).set(o.id, o); out.push([col, o]);
     }
     ver++;
-    const rows = await inBatches(out, async ([col, o]) => { const box = await encryptWith(k, o); return { k: lid + '|' + col + '|' + o.id, lid, col, id: o.id, iv: box.iv, ct: box.ct }; });
+    const rows = await inBatches(out, ([col, o]) => sealRec(k, lid, col, o));
     await chain;
     const db = await openDB();
     for (let i = 0; i < rows.length; i += 2000) {
@@ -363,8 +367,7 @@ const Store = (() => {
     const rows = [];
     for (const col of Object.keys(mem)) {
       for (const obj of mem[col].values()) {
-        const box = await encryptWith(k, obj);
-        rows.push({ k: ledger.id + '|' + col + '|' + obj.id, lid: ledger.id, col, id: obj.id, iv: box.iv, ct: box.ct });
+        rows.push(await sealRec(k, ledger.id, col, obj));
       }
     }
     const check = await encryptWith(k, CHECK_TEXT);
@@ -532,11 +535,16 @@ const Store = (() => {
     }
     return cols;
   }
-  async function sealBackup(payload) {
+  // 백업 머리(앱 · 형식 · 장부 번호 · 종류 · 이름 · 만든 시각 · 기기 · 소금 · 반복 · iv)를 추가 인증 자료로 묶음 (v33 · 형식 v: 2)
+  const BK_FIELDS = ['app', 'kind', 'v', 'ledgerId', 'type', 'name', 'createdAt', 'device', 'photos', 'part', 'salt', 'iter', 'iv'];
+  const backupAad = (f) => 'jangbu|backup|' + JSON.stringify(BK_FIELDS.map((k) => (f[k] === undefined ? null : f[k])));
+  async function sealBackup(payload, head) {
     if (!key) throw new Error('잠겨 있어요');
     await chain;
-    const box = await encryptWith(key, payload);
-    return { salt: toB64(new Uint8Array(ledger.salt)), iter: ledger.iter, iv: toB64(box.iv), ct: toB64(new Uint8Array(box.ct)) };
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const outer = { ...(head || {}), salt: toB64(new Uint8Array(ledger.salt)), iter: ledger.iter, iv: toB64(iv), aad: 1 };
+    const ct = await crypto.subtle.encrypt(gcm(iv, backupAad(outer)), key, enc.encode(JSON.stringify(payload)));
+    return { salt: outer.salt, iter: outer.iter, iv: outer.iv, aad: 1, ct: toB64(new Uint8Array(ct)) };
   }
   // pw가 없으면 지금 장부 열쇠로 열어 봄(같은 기기·같은 비밀번호로 만든 백업). 못 열면 null.
   async function openBackup(file, pw) {
@@ -546,7 +554,7 @@ const Store = (() => {
       if (!key || !ledger || file.salt !== toB64(new Uint8Array(ledger.salt)) || file.iter !== ledger.iter) return null;
       k = key;
     } else k = await deriveKey(pw, fromB64(file.salt), file.iter);
-    try { return await decryptWith(k, { iv, ct }); } catch (e) { return null; }
+    try { return await decryptWith(k, { iv, ct }, file.aad ? backupAad(file) : null); } catch (e) { return null; } // 예전 백업(aad 없음)은 옛 방식으로 읽기만
   }
   async function hasLedger(id) {
     const db = await openDB();
@@ -600,6 +608,20 @@ const Store = (() => {
     if (ledger && ledger.id === id) ledger.name = name;
     return true;
   }
+  // 보안 자체 점검 (설정 → 보안 점검): 실제 장부는 건드리지 않고 시험용 열쇠로
+  async function selfTest() {
+    const R = [], ok = (name, pass, note) => R.push({ name, pass: !!pass, note: note || '' });
+    const salt = crypto.getRandomValues(new Uint8Array(16)), it = 1000, k1 = await deriveKey('시험-비밀번호-1', salt, it), k2 = await deriveKey('시험-비밀번호-2', salt, it);
+    const sample = { 금액: 12345, 메모: '점검' }, aad = recAad('t', 'tx', '1');
+    let box = null;
+    try { box = await encryptWith(k1, sample, aad); const back = await decryptWith(k1, box, aad); ok('암호화 → 해제 왕복', back.금액 === 12345 && back.메모 === '점검'); } catch (e) { ok('암호화 → 해제 왕복', false, e.message); }
+    try { await decryptWith(k2, box, aad); ok('틀린 비밀번호 거부', false); } catch (e) { ok('틀린 비밀번호 거부', true); }
+    try { const ct = new Uint8Array(box.ct.slice(0)); ct[3] ^= 1; await decryptWith(k1, { iv: box.iv, ct }, aad); ok('내용 변조 거부', false); } catch (e) { ok('내용 변조 거부', true); }
+    try { await decryptWith(k1, box, recAad('t', 'tx', '2')); ok('머리(겉 정보) 변조 거부', false); } catch (e) { ok('머리(겉 정보) 변조 거부', true); }
+    try { const f = { app: 'jangbu', kind: 'backup', v: 2, ledgerId: 'x', iv: toB64(box.iv) }; const c = await crypto.subtle.encrypt(gcm(box.iv, backupAad(f)), k1, enc.encode('{}')); await crypto.subtle.decrypt(gcm(box.iv, backupAad({ ...f, ledgerId: 'y' })), k1, c); ok('백업 머리 변조 거부', false); } catch (e) { ok('백업 머리 변조 거부', true); }
+    try { await crypto.subtle.exportKey('raw', key || k1); ok('열쇠 내보내기 막힘 (non-extractable)', false); } catch (e) { ok('열쇠 내보내기 막힘 (non-extractable)', true); }
+    return R;
+  }
   // 다른 장부를 열지 않고 내용만 읽기 (새 장부에 카드·통장 등을 가져올 때). 비밀번호가 틀리면 null
   async function readLedger(id, password, cols) {
     const db = await openDB();
@@ -609,7 +631,7 @@ const Store = (() => {
     try { if ((await decryptWith(k, meta.check)) !== CHECK_TEXT) return null; } catch (e) { return null; }
     const rows = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAll(id));
     const out = {};
-    for (const r of rows) { if (cols && !cols.includes(r.col)) continue; (out[r.col] = out[r.col] || []).push(await decryptWith(k, r)); }
+    for (const r of rows) { if (cols && !cols.includes(r.col)) continue; (out[r.col] = out[r.col] || []).push(await openRec(k, r)); }
     return out;
   }
 
@@ -633,5 +655,5 @@ const Store = (() => {
   return { switchTo, isOpened, openedIds, checkPassword, usage, ver: () => ver,
     bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
     hasBundleKey: () => !!bundleKey,
-    removeMany, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+    badRows: () => { const o = opened.get(ledger && ledger.id); return o ? o.bad || 0 : 0; }, selfTest, removeMany, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

@@ -158,6 +158,7 @@ function render() {
   const sb2 = $app.querySelector('.sheet-body');
   if (sb2) sb2.scrollTop = keepSheet;
   if (S.f) fillSheet();
+  enhancePw($app); // 비밀번호 칸: 강도 · Caps Lock · 보기 (sec.js)
   enhanceDates($app); // 날짜 칸을 [연][월][일] 자동 이동 칸으로 (datebox.js)
   if (sb2) sb2.scrollTop = keepSheet; // 입력 시트 내용을 다 채운 뒤 다시 맞춤 (채우기 전엔 짧아서 위로 잘렸음)
   placeSwitchPop();
@@ -291,7 +292,7 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right">${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
+      <div class="top-right">${isHome ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
     ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
@@ -299,7 +300,7 @@ function viewApp(L) {
   </main>
   ${showFab ? `<button class="fab ${isClub ? 'club' : ''}" data-act="${isClub ? 'clubPlus' : phone ? 'plus' : 'input'}" aria-label="입력">${ic('plus', 28)}</button>` : ''}
   ${showSel ? `<div class="selbar"><span style="font-size:${px(15)};font-weight:700">${pickedN}건 선택됨</span><span style="flex:1"></span>
-    ${[['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ...(feat('trips') ? [['trip', '묶음 붙이기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']].map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
+    ${(isClub ? [['cat', '계정 바꾸기'], ['date', '날짜 바꾸기'], ['del', '지우기']] : [['cat', '분류 바꾸기'], ['pay', '결제수단 바꾸기'], ...(feat('banks') ? [['bank', '통장 바꾸기']] : []), ...(feat('trips') ? [['trip', '묶음 붙이기']] : []), ['date', '날짜 바꾸기'], ['del', '삭제']]).map(([k, l]) => `<button data-act="bulk" data-w="${k}">${l}</button>`).join('')}</div>` : ''}`;
 }
 
 /* ───────── 이동 (← 홈 →, 기기 뒤로가기) ───────── */
@@ -506,7 +507,7 @@ const ACT = {
     for (const id of ids) {
       const x = Store.get('tx', id); if (!x) continue;
       let nx = null;
-      if (D.what === 'cat') { const a = accOf(D.val); if (x.kind === a.kind) nx = { ...x, accountId: a.id, status: '확인' }; }
+      if (D.what === 'cat') { const a = accOf(D.val); if (x.kind === a.kind && !(x.club && ['fee', 'loan', 'gift'].includes(x.club.type))) nx = { ...x, accountId: a.id, status: '확인' }; } // 친구회 회비 · 대출 · 생일 줄은 그대로
       else if (D.what === 'pay') { if (isMoney(x)) nx = { ...x, payMethodId: D.val, bankId: (payOf(D.val) || {}).kind === 'bank' ? x.bankId : null }; }
       else if (D.what === 'bank') {
         const pk = (payOf(x.payMethodId) || {}).kind;
@@ -516,7 +517,7 @@ const ACT = {
         }
       }
       else if (D.what === 'date') nx = { ...x, date: D.val };
-      else if (D.what === 'del') nx = { ...x, deleted: true, deletedAt: Date.now() };
+      else if (D.what === 'del') { nx = { ...x, deleted: true, deletedAt: Date.now() }; await markGone(x); }
       else if (D.what === 'trip') { if (isMoney(x)) nx = { ...x, tripId: D.val === 'none' ? null : D.val }; }
       if (nx) { items.push({ col: 'tx', id, before: { ...x } }); await Store.put('tx', nx); }
     }
@@ -580,6 +581,7 @@ const ACT = {
   restore: async (el) => {
     const x = Store.get('tx', el.dataset.id), before = { ...x };
     await Store.put('tx', { ...x, deleted: false, deletedAt: null });
+    await unmarkGone(x); // 지운 원본 기억도 풀기 (v33)
     render(); toast('되살렸어요', { items: [{ col: 'tx', id: x.id, before }] });
   },
   dlgEmptyTrash: () => { S.dialog = { type: 'emptyTrash' }; render(); },
@@ -605,9 +607,12 @@ const ACT = {
   ...CLUB_ACT, // 친구회 (club.js)
   ...CLUB4_ACT,
   ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
+  ...SEC_ACT, // 화면 가림 · 보안 점검 (sec.js · v33)
+  ...EDIT3_ACT, // 고치기 · 지우기 · 중복 점검 (edit3.js · v33)
   ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 할 일·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
   ...LEDGER2_ACT, // 통장 메모 · 내 메모 · 장부에만 · 짝 지우기 (ledger2.js)
-  ...CLUB7_ACT, // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
+  ...CLUB7_ACT,
+  ...B2_ACT, // 생일 처리 다시 설계 (bday2.js · v33) // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
   ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
@@ -691,8 +696,10 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
   if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
   if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
+  if (onB2Input(el)) return; // 생일 처리 칸 (bday2.js)
   if (onClub7Input(el)) return; // 나눠 잡기 · 맞바꿈 · 생일 처리 칸 (club7.js)
   if (onClub5Input(el)) return; // 입금 정리 칸 (club5.js)
   if (onClub4Input(el)) return; // 회칙 · 결의 · 과거 입금 칸 (club4.js)
@@ -913,7 +920,7 @@ async function boot() {
     navigator.serviceWorker.ready
       .then(() => new Promise((r) => setTimeout(r, 500)))
       .then(() => caches.keys())
-      .then((keys) => { S.version = keys.filter((k) => /^jangbu-v\d+$/.test(k)).sort((a, b) => +a.slice(8) - +b.slice(8)).pop() || ''; if (S.mode === 'app' && S.screen === '설정' && !S.dialog && !S.f) render(); })
+      .then((keys) => { S.version = keys.filter((k) => /^jangbu-v\d+$/.test(k)).sort((a, b) => +a.slice(8) - +b.slice(8)).pop() || ''; if (typeof secAutoCheck === 'function') secAutoCheck(); if (S.mode === 'app' && S.screen === '설정' && !S.dialog && !S.f) render(); })
       .catch(() => {});
   }
   try {

@@ -4,7 +4,7 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
@@ -46,6 +46,8 @@ function screenBody(L) {
     case '내역 보기': return viewDrill(L); // 홈 숫자 → 조건 걸린 내역 (home2.js)
     case '할 일·기념일': return viewNotes();
     case '홈 꾸미기': return viewHomeCfg();
+    case '중복 점검': return viewDup(); // (edit3.js)
+    case '보안 점검': return viewSecChk(); // (sec.js)
     default: return '';
   }
 }
@@ -66,8 +68,8 @@ function txRow(x, opt) {
   const dot = isUnc(x) ? '<span class="undot"></span>' : '';
   return `<div class="lrow ${on || det ? 'hl' : ''}" data-act="${opt.act || 'rowTap'}" data-id="${x.id}" role="button" tabindex="0">
     ${chk}<span style="position:relative;flex:none">${txIcon(x, 20, 40)}${dot}</span>
-    <div class="lmid"><span class="lt">${esc(txTitle(x))}</span><span class="ls">${esc(sub)}</span></div>
-    ${opt.right || ''}${txAmt(x, 16)}
+    <div class="lmid"><span class="lt">${esc(txTitle(x))} ${origTag(x)}${x.internal ? innerTag(x) : ''}</span><span class="ls">${esc(sub)}</span></div>
+    ${opt.right || ''}${txAmt(x, 16)}${!S.selMode && opt.act !== 'noop' && !opt.noMore ? rowMore(x) : ''}
   </div>`;
 }
 
@@ -85,7 +87,7 @@ function viewHome(L) {
   const todos = (unc
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
-        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + startTodo() + mergeTodo() + storageTodo() + pendingTodos() + cardTodos() + cardPlanTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
+        <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + dupTodoRow(false) + startTodo() + mergeTodo() + storageTodo() + pendingTodos() + cardTodos() + cardPlanTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
   return viewHome2(L, todos); // 홈 칸 · 순서 · 켜고 끄기 (home2.js · v32)
 }
 
@@ -318,7 +320,7 @@ function viewList(L) {
       <span style="font-size:${px(20)};font-weight:700">${esc(txTitle(det))}</span>
       <span style="font-size:${px(30)};letter-spacing:-0.03em">${txAmt(det)}</span>
       <div>${rows.map(([k, v]) => `<div class="drow"><span class="sub">${k}</span><span style="font-weight:600;text-align:right">${esc(v)}</span></div>`).join('')}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn ink" style="flex:1 1 120px;min-height:50px;font-size:${px(15)}" data-act="openTx" data-id="${det.id}">고치기</button><button class="btn" style="flex:1 1 140px;min-height:50px;font-size:${px(15)}" data-act="repeatSoon">${ic('repeat', 18)}반복으로 만들기</button></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn ink" style="flex:1 1 120px;min-height:50px;font-size:${px(15)}" data-act="openTx" data-id="${det.id}">고치기</button><button class="btn" style="flex:1 1 100px;min-height:50px;font-size:${px(15)};color:var(--out)" data-act="rmDelAsk" data-id="${det.id}">지우기</button><button class="btn" style="flex:1 1 140px;min-height:50px;font-size:${px(15)}" data-act="repeatSoon">${ic('repeat', 18)}반복으로 만들기</button></div>
     </section>`;
   })() : `<section class="card detail"><div class="empty" style="padding:24px 8px">내역을 누르면 여기에 자세히 보여요.</div></section>`;
   return `<div class="cols">
@@ -436,6 +438,7 @@ function viewSettings() {
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : '') + (twinsOf(book.id).length ? rowB('<span style="color:var(--warn)">같은 이름 장부 하나로 합치기</span>', `이 기기에 「${book.name}」 ${twinsOf(book.id).length + 1}개`, 'bkMergeHere') : '') + rowB('<span style="color:var(--out)">이 장부 완전 삭제</span>', '이 기기에서', 'bkDelHere'))}
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
+      ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('할 일 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
@@ -540,10 +543,14 @@ function viewDialog() {
       <span class="sub small">입력한 내용과 장부 자료는 지워지지 않았어요. [다시 시도]를 눌러 보고, 그래도 안 되면 [오류 내용 복사]를 눌러 Claude에게 붙여 넣어 주세요.</span>
       <div class="warnbox" style="word-break:break-all">${esc(D.msg)}</div>
       <div class="dlg-btns" style="flex-wrap:wrap"><button class="btn" style="flex:1 1 40%" data-act="closeDlg">닫기</button><button class="btn" style="flex:1 1 40%" data-act="errCopy">${ic('copy', 18)}오류 내용 복사</button>${D.canRetry ? `<button class="btn ink" style="flex:1 1 100%" data-act="errRetry">${ic('rotate-ccw', 18)}다시 시도</button>` : ''}</div></div>`;
-  } else if (/^(hbRecon|hnNote)$/.test(D.type)) {
+  } else if (/^(rmMenu|rmDel)$/.test(D.type)) {
+    body = viewRmDlg(D); // 고치기 · 지우기 (edit3.js)
+  } else if (/^(hbRecon|hnNote|hbRecRec)$/.test(D.type)) {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^b2/.test(D.type)) {
+    body = /^(b2Do|b2Cell)$/.test(D.type) ? viewB2Dlg(D) : viewB2Global(D); // 생일 처리 (bday2.js)
   } else if (/^c7/.test(D.type)) {
     body = viewClub7Dlg(D); // 대출 정리 · 나눠 잡기 · 맞바꿈 · 생일 처리 (club7.js)
   } else if (/^bw/.test(D.type)) {
