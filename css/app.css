@@ -1080,3 +1080,48 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .btag::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--bc, var(--sub)); }
 .bankline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; font-size: calc(14px * var(--fs)); }
 .linkamt2 { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font: inherit; color: var(--ink); cursor: pointer; }
+/* v35 생일 표: 칸 하나 = 색 하나 + 글자 한 줄 */
+.b4c { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: calc(66px * var(--fs)); min-height: 38px; padding: 2px 6px; border-radius: 8px; border: 1px solid transparent; font: inherit; font-size: calc(12px * var(--fs)); font-weight: 600; white-space: nowrap; cursor: pointer; background: transparent; color: #BDBDB8; }
+.b4c.sent { background: #E8EEF5; color: #3B5F8F; }
+.b4c.due { background: #fff; border: 1.5px solid #C27A2C; color: #A3621F; }
+.b4c.na { background: #E7E6E3; color: #1F1F1F; }
+.b4c.ex { background: repeating-linear-gradient(135deg, #F0F0EC 0 6px, #E2E2DD 6px 8px); color: #77767A; }
+.b4c.none { border: 1px dashed #E2E2DD; }
+.b4c.picked { outline: 2px solid #1F1F1F; }
+.b4c .late { font-style: normal; font-size: 10px; font-weight: 700; color: #C27A2C; margin-left: 3px; }
+.b4c.sm { display: inline-block; min-width: 18px; min-height: 12px; width: 18px; height: 12px; padding: 0; vertical-align: middle; cursor: default; }
+.b4legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; font-size: calc(12.5px * var(--fs)); color: #77767A; }
+.b4legend span { display: inline-flex; align-items: center; gap: 5px; }
+.b4dueline { display: flex; align-items: center; gap: 8px; width: 100%; margin: 8px 0 2px; padding: 10px 12px; border: 1.5px solid #C27A2C; border-radius: 10px; background: #fff; color: #A3621F; font: inherit; cursor: pointer; text-align: left; }
+.b4dueline.on { background: #FBF2E7; }
+.b4dim { color: #E2E2DD; }
+.b4grid td { padding: 3px; }
+/* v35 되돌리기 */
+.undotop { width: auto; padding: 0 10px; gap: 4px; font-size: calc(18px * var(--fs)); font-weight: 700; }
+.undotop .ut { font-size: calc(13px * var(--fs)); font-weight: 600; }
+.undotop:disabled { opacity: .35; }
+.phone .undotop .ut { display: none; }
+/* v35 친구회 색 — 디자인 규칙 v2 (바탕 #F7F7F5 · 카드 #FFFFFF · 글자 #1F1F1F/#77767A · 수입 #B5473F · 지출 #3B5F8F · 주의 #C27A2C · 세이지)
+   제각각 들어간 초록(#3f8a55 · #4f7a5d · #2F5E3A · #6fae3c …) · 금색 · 진한 살구색을 아래 몇 가지로 맞춤 */
+:root { --sage: #7FA38A; --sage-ink: #3F6A4D; --sage-soft: #E8F0EA; }
+[data-book="club"] .tag.inner { border-color: var(--sage); color: var(--sage-ink); }
+[data-book="club"] .tag.ok, [data-book="club"] .pg.ok, [data-book="club"] .bd.ok { background: var(--sage-soft); color: var(--sage-ink); }
+[data-book="club"] .pg.ok b, [data-book="club"] .prep { color: var(--sage-ink); }
+[data-book="club"] .balchk.ok { background: var(--sage-soft); color: var(--sage-ink); }
+[data-book="club"] .bigwarn { background: var(--warn-soft); }
+[data-book="club"] mark { background: var(--warn-soft); }
+[data-book="club"] .pinbtn.on, [data-book="club"] .chip .star { color: var(--warn); }
+[data-book="club"] .cldiff del { background: #F7E7E5; color: #B5473F; }
+[data-book="club"] .cldiff ins { background: var(--sage-soft); color: var(--sage-ink); }
+[data-book="club"] .okc { background: var(--sage-soft); color: var(--sage-ink); }
+[data-book="club"] .pwbar i.lv3 { background: var(--sage); }
+[data-book="club"] .bd.part { background: #F7E7E5; color: #B5473F; }
+[data-book="club"] .pd.miss { border-color: #C27A2C; }
+[data-book="club"] .tag.gifty { background: #E8EEF5; color: #3B5F8F; }
+[data-book="club"] .tag.anniv { background: #F7E7E5; color: #B5473F; }
+.undotop:not(:disabled) { color: var(--ink); }
+.undotop { font-size: calc(22px * var(--fs)); }
+.phone .b4c { min-width: calc(54px * var(--fs)); padding: 2px 4px; font-size: calc(11px * var(--fs)); }
+.phone .b4grid th { font-size: calc(12px * var(--fs)); padding: 4px 2px; }
+.phone .b4grid td { padding: 2px; }
+.phone .b4c.sm, .b4c.sm { min-width: 18px; width: 18px; padding: 0; }

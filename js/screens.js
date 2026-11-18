@@ -4,7 +4,7 @@
 const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정', '최근 한 일': '홈' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
@@ -48,6 +48,7 @@ function screenBody(L) {
     case '홈 꾸미기': return viewHomeCfg();
     case '중복 점검': return viewDup(); // (edit3.js)
     case '보안 점검': return viewSecChk(); // (sec.js)
+    case '최근 한 일': return viewUndoList(); // (undo2.js)
     default: return '';
   }
 }
@@ -359,7 +360,7 @@ function viewAcct(L) {
   const sl = [...top, ...(restV ? [['나머지', restV]] : [])];
   const tot = sl.reduce((s, e) => s + e[1], 0);
   // 색 겹침 규칙: 상위 7개 안에서 같은 색 번호면 순위 낮은 쪽만 안 쓴 번호로
-  const P = DATA.PALETTES[view.pal], used = new Set(), idx = {};
+  const P = DATA.PALETTES[lv('pal')], used = new Set(), idx = {};
   sl.forEach(([id]) => { let k = id === '나머지' ? 7 : ((accOf(id) || {}).color ?? 7); if (k !== 7) { if (used.has(k)) k = [0, 1, 2, 3, 4, 5, 6].find((x) => !used.has(x)) ?? 7; used.add(k); } idx[id] = k; });
   const colOf = (id, i) => (P ? P[idx[id]] : `color-mix(in oklab, var(--ink) ${DATA.INK_STEPS[i]}%, var(--sf))`);
   let acc0 = 0;
@@ -424,7 +425,7 @@ function viewSettings() {
   const typeLabel = (DATA.LEDGER_TYPES.find((t) => t.type === book.type) || {}).label || '';
   const rowB = (k, v, act) => `<button class="row" ${act ? `data-act="${act}"` : 'disabled style="cursor:default"'}><span class="k">${k}</span><span class="v">${esc(v)}</span>${act ? ic('chevron-right', 18, 'var(--sub)') : ''}</button>`;
   const segOf = (list, cur, act) => `<div class="seg">${list.map(([k, l]) => `<button class="${k === cur ? 'on' : ''}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const P = DATA.PALETTES[view.pal];
+  const P = DATA.PALETTES[lv('pal')];
   const sw = (P || DATA.INK_STEPS.map((p) => `color-mix(in oklab, var(--ink) ${p}%, var(--sf))`)).map((c) => `<span class="sw" style="background:${c}"></span>`).join('');
   const colorOpts = (opts, cur, act, sample) => opts.map(([c, l]) => `<button class="coloropt ${c === cur ? 'on' : ''}" data-act="${act}" data-v="${c}"><span class="s" style="background:${c}"></span><span class="t" style="color:${c}">${sample}</span><span class="small sub">${l}</span></button>`).join('');
   const sec = (title, body) => `<section class="card" style="padding:16px 22px 4px"><h2 class="h2" style="font-size:${px(17)};margin-bottom:4px">${title}</h2>${body}</section>`;
@@ -454,18 +455,18 @@ function viewSettings() {
         <span class="sub" style="font-size:${px(14)}">글자 크기 <span class="small">(이 기기에만 적용)</span></span>
         ${segOf([['작게', '작게'], ['보통', '보통'], ['크게', '크게']], view.fs, 'setFs')}
         <span class="sub" style="font-size:${px(14)}">색 조합</span>
-        ${segOf([['먹색', '먹색'], ['회갈색', '회갈색'], ['남회색', '남회색']], view.theme, 'setTheme')}
+        ${segOf([['먹색', '먹색'], ['회갈색', '회갈색'], ['남회색', '남회색']], lv('theme'), 'setTheme')}
         <span class="sub" style="font-size:${px(14)}">색 테마 <span class="small">(그래프 · 계정 아이콘 · 여행 막대에만)</span></span>
-        ${segOf([['세이지 뮤트', '세이지 뮤트(기본)'], ['로즈 웜', '로즈 웜'], ['기본', '먹색']], view.pal, 'setPal')}
+        ${segOf([['세이지 뮤트', '세이지 뮤트(기본)'], ['로즈 웜', '로즈 웜'], ['기본', '먹색']], lv('pal'), 'setPal')}
         <div class="sw-row">${sw}</div>
         <span class="sub" style="font-size:${px(14)}">장부 종류 보이기 <span class="small">(이 기기에만 · 잠금 화면과 새 장부 만들기)</span></span>
         <div class="chips">${DATA.LEDGER_TYPES.map((t) => `<button class="chip ${typeVisible(t.type) ? 'on' : ''}" data-act="toggleType" data-t="${t.type}" aria-pressed="${typeVisible(t.type)}">${typeVisible(t.type) ? ic('check', 14) : ''}${esc(t.defaultName)}</button>`).join('')}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="sub" style="font-size:${px(14)}">수입 · 지출 색 <span class="small">(이 기기에만)</span></span>
-          <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-act="swapColors">${ic('arrow-left-right', 16)}서로 바꾸기</button>${view.inC !== DATA.DEFAULT_IN || view.outC !== DATA.DEFAULT_OUT ? '<button class="btn" data-act="resetColors">기본으로</button>' : ''}</span></div>
+          <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-act="swapColors">${ic('arrow-left-right', 16)}서로 바꾸기</button>${lv('inC') !== DATA.DEFAULT_IN || lv('outC') !== DATA.DEFAULT_OUT ? '<button class="btn" data-act="resetColors">기본으로</button>' : ''}</span></div>
         <span class="sub small">수입</span>
-        <div class="chips">${colorOpts(colorFamily(view.inC, view.outC), view.inC, 'setIn', '+12,000원')}</div>
+        <div class="chips">${colorOpts(colorFamily(lv('inC'), lv('outC')), lv('inC'), 'setIn', '+12,000원')}</div>
         <span class="sub small">지출</span>
-        <div class="chips">${colorOpts(colorFamily(view.outC, view.inC), view.outC, 'setOut', '−12,000원')}</div>
+        <div class="chips">${colorOpts(colorFamily(lv('outC'), lv('inC')), lv('outC'), 'setOut', '−12,000원')}</div>
       </section>
     </div>
   </div>`;
@@ -549,6 +550,10 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (D.type === 'u2Ask') {
+    body = viewUndoDlg(D); // 되돌릴까요? (undo2.js)
+  } else if (D.type === 'b4Cell') {
+    body = viewB4Dlg(D); // 생일 칸 작은 창 (bday4.js)
   } else if (D.type === 'e8Start') {
     body = viewE8Dlg(D); // 다른 통장 시작 잔액 (club8.js)
   } else if (/^b3/.test(D.type)) {

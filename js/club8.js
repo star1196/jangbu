@@ -5,7 +5,7 @@
 // - 통장 간 이체는 수입 · 지출 아님 · 잔액 맞추기는 통장별 · 다른 통장 시작 잔액(대출 상환금이 든 경우 고르기)
 'use strict';
 
-const BANK_COLORS = ['#3B5F8F', '#5E8C8C', '#8A7F6A', '#B5473F'];
+const BANK_COLORS = ['#3B5F8F', '#7FA38A', '#77767A', '#C27A2C']; // 디자인 규칙 v2 (v35)
 const bankColor = (b) => (b && b.color) || BANK_COLORS[Math.max(0, banksAll().findIndex((v) => v.id === (b && b.id))) % BANK_COLORS.length];
 const bankShort = (b) => (b ? String(b.bank || b.name || '').replace(/은행$/, '').replace(/\s*통장$/, '') || b.name : '');
 const bankTag = (id) => { const b = bankOf(id); return b && banksAll().length > 1 ? `<span class="btag" style="--bc:${bankColor(b)}">${esc(bankShort(b))}</span>` : ''; };

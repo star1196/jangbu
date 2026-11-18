@@ -225,6 +225,7 @@ function viewClubFee() {
     ${P && P.left ? `<span class="label">남는 돈 ${won(P.left)}원 →</span>
       <div class="btn2"><button class="opt ${!['other', 'loan'].includes(C.left) ? 'on' : ''}" data-act="cfLeft" data-v="credit">${!['other', 'loan'].includes(C.left) ? ic('check', 18) : ''}적립금(선납)으로</button><button class="opt ${C.left === 'other' ? 'on' : ''}" data-act="cfLeft" data-v="other">${C.left === 'other' ? ic('check', 18) : ''}기타 수입으로</button>${feat('loans') && typeof c7OpenLoans === 'function' && c7OpenLoans(m.id).length ? `<button class="opt ${C.left === 'loan' ? 'on' : ''}" data-act="cfLeft" data-v="loan">${C.left === 'loan' ? ic('check', 18) : ''}대출 상환으로 (남은 ${won(c7OpenLoans(m.id)[0] ? loanCalc(c7OpenLoans(m.id)[0]).left : 0)})</button>` : ''}</div>` : ''}
     ${P && P.partLast ? `<div class="infoline">마지막 달(${P.alloc[P.alloc.length - 1].ym === 'start' ? '밀린 회비' : mTxt(P.alloc[P.alloc.length - 1].ym)})은 부분 납부(${won(P.alloc[P.alloc.length - 1].amt)}/${won(P.alloc[P.alloc.length - 1].need)})로, 나머지는 미수금으로 남아요.</div>` : ''}
+    <label class="field"><span class="label">메모${C.src === 'record' && !C.txId ? ' <span class="warnt" style="font-weight:400">(꼭 · 어떻게 처리했는지)</span>' : ' <span style="font-weight:400">(선택 · 목록 · 찾기에 보여요)</span>'}</span><input class="input" data-pwmemo="cf" value="${esc(C.memo || '')}" placeholder="${C.src === 'record' ? '예: 현금으로 직접 받음, 회비에서 차감' : '선택'}"></label>
     <div class="err" data-err></div>
     ${C.mode === 'pick' && !C.picks.length ? '<div class="infoline">채울 달을 눌러 주세요.</div>' : ''}
     <div class="cfbar"><button class="btn ink big" style="width:100%" data-act="cfSave" ${P && P.alloc.length ? '' : 'disabled'}>확인하고 저장</button></div>
@@ -351,7 +352,7 @@ function viewClubDlg(D) {
   const d = D.d || {};
   const btns = (ok, attr) => `<div class="dlg-btns"><button class="btn" type="button" data-act="closeDlg">취소</button><button class="btn ink" ${attr || 'type="submit"'}>${ok}</button></div>`;
   if (D.type === 'clubPlus') {
-    const W = [['clubFeeNew', 'plus', '#B5473F', '회비 넣기', '회원 고르고 밀린 달부터 채우기'], ['clubOutNew', 'arrow-down', '#3B5F8F', '지출 입력', '모임 · 생일선물 · 우정맞춤'], ...(feat('files') ? [['clubFile', 'upload', '#5E8C8C', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []), ...(feat('receipt') ? [['receipt', 'camera', '#CDB38B', '영수증 찍기', '사진으로 지출 넣기']] : [])];
+    const W = [['clubFeeNew', 'plus', '#B5473F', '회비 넣기', '회원 고르고 밀린 달부터 채우기'], ['clubOutNew', 'arrow-down', '#3B5F8F', '지출 입력', '모임 · 생일선물 · 우정맞춤'], ...(feat('files') ? [['clubFile', 'upload', '#77767A', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []), ...(feat('receipt') ? [['receipt', 'camera', '#77767A', '영수증 찍기', '사진으로 지출 넣기']] : [])];
     return `<div class="dlg"><span class="sub small">무엇을 넣을까요?</span><div class="stack" style="gap:6px">${W.map(([a, i, c, t, s]) => `<button class="plusrow" data-act="${a}"><span class="circ" style="width:${px(48)};height:${px(48)};background:${c};color:#fff">${ic(i, 24)}</span><span style="display:flex;flex-direction:column;gap:2px;text-align:left"><b style="font-size:${px(17)}">${t}</b><span class="sub small">${s}</span></span></button>`).join('')}</div><div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button></div></div>`;
   }
   if (D.type === 'clubMemberDel') {

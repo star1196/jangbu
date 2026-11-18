@@ -6,6 +6,9 @@
 // 마지막에 고른 방식은 화면마다 이 기기에 기억. 후보가 있으면 [통장 기록에 연결]을 먼저 추천.
 'use strict';
 
+// 메모 칸: 어느 방식이든 보이고, [기록만]이면 꼭 (v35)
+const memoField = (way, v, attr) => `<label class="field"><span class="label">메모${way === 'record' ? ' <span class="warnt" style="font-weight:400">(꼭 · 어떻게 처리했는지)</span>' : ' <span style="font-weight:400">(선택 · 목록 · 찾기에 보여요)</span>'}</span><input class="input" ${attr === 'co' ? 'data-co="memo"' : `data-pwmemo="${attr}"`} value="${esc(v || '')}" placeholder="${way === 'record' ? '예: 현금으로 직접 받음, 회비에서 차감' : '선택'}"></label>`;
+const MEMO_NEED = '어떻게 처리했는지 적어 주세요.';
 const PW = { link: '통장 기록에 연결', bank: '통장(새로)', cash: '현금', inner: '장부에만', record: '기록만' };
 const pwOf = (key) => ((typeof view !== 'undefined' && view.pw) || {})[key];
 function pwRemember(key, v) { try { view.pw = { ...(view.pw || {}), [key]: v }; saveView(); } catch (e) { /* 그대로 */ } }
@@ -46,6 +49,7 @@ function viewRepayDlg(D) {
     ${ls.length > 1 ? `<span class="label">어느 대출?</span><div class="chips">${ls.map((l) => `<button type="button" class="chip ${l.id === lsel ? 'on' : ''}" data-act="crLoan" data-id="${l.id}">${esc(loanWho(l))} · ${l.date ? l.date.slice(2).replace(/-/g, '.') : ''} · 남은 ${won(loanCalc(l).left)}</button>`).join('')}</div>` : `<span>${esc(loanWho(L0))} · 남은 원금 <b>${won(loanCalc(L0).left)}원</b></span>`}
     ${fixed ? '' : `<div class="field"><span class="label">어떻게 받았나요?</span>${pwSeg('dlg', 'repay', d.way, ['link', 'bank', 'cash', 'inner', 'record'])}</div>`}
     ${body}
+    ${memoField(d.way, d.memo, 'co')}
     <div class="err" data-err></div><div class="dlg-btns"><button class="btn" type="button" data-act="closeDlg">취소</button><button class="btn ink" type="submit">상환으로 저장</button></div></form>`;
 }
 
@@ -64,8 +68,10 @@ function loanOutBlock(D) {
   // 대출 상환
   const repayBase = CLUB_FORM.clubRepay;
   CLUB_FORM.clubRepay = async function (f) {
-    const D = S.dialog, d = D.d, w = D.fixedTx ? 'link' : d.way || 'bank';
+    const D = S.dialog, d = D.d, w = D.fixedTx ? 'link' : d.way || 'bank', memo = String(d.memo || '').trim();
+    if (w === 'record' && !memo) return showErr(f, MEMO_NEED);
     if (!D.fixedTx) pwRemember('repay', w);
+    const n0 = liveTx().length, patchMemo = async () => { if (!memo) return; const t = D.txId ? Store.get('tx', D.txId) : liveTx().filter((x) => x.club && x.club.type === 'loan').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]; if (t && (D.txId || liveTx().length > n0)) await Store.put('tx', { ...t, memo }); };
     if (w === 'link') {
       if (!D.txId && toInt(d.amount)) { // 금액만 넣고 안 골랐으면: 맞는 입금이 하나면 그것으로 (v31 C-1처럼)
         const ls0 = loansAll().filter((l) => loanCalc(l).left > 0 && (!D.memberId || l.memberId === D.memberId) && (D.memberId !== '' || !l.memberId));
@@ -73,18 +79,17 @@ function loanOutBlock(D) {
         if (c) D.txId = c.id;
       }
       if (!D.txId) return showErr(f, '연결할 통장 입금을 골라 주세요. (없으면 [통장(새로)] · [현금])');
-      D.fixedTx = true; return repayBase(f);
+      D.fixedTx = true; const tid = D.txId; await repayBase(f); if (memo) { const t = Store.get('tx', tid); if (t) await Store.put('tx', { ...t, memo }); } return;
     }
     D.txId = null;
-    if (w === 'bank') { d.src = 'bank'; return repayBase(f); }
-    if (w === 'cash') { d.src = 'cash'; return repayBase(f); }
+    if (w === 'bank' || w === 'cash') { d.src = w; await repayBase(f); return patchMemo(); }
     // 장부에만 · 기록만: 돈 줄 없이 원금만 줄임
     const amt = toInt(d.amount); if (!amt) return showErr(f, '금액을 넣어 주세요.');
     const ls = loansAll().filter((l) => loanCalc(l).left > 0 && (!D.memberId || l.memberId === D.memberId) && (D.memberId !== '' || !l.memberId));
     const L0 = loansAll().find((l) => l.id === (ls.some((l) => l.id === D.loanId) ? D.loanId : (ls[0] || {}).id)); if (!L0) return showErr(f, '남은 대출이 없어요.');
     if (amt > loanCalc(L0).left) return showErr(f, `남은 원금(${won(loanCalc(L0).left)}원)보다 많아요.`);
     const acc = await ensureLoanRepayAcc();
-    const s = await Store.put('tx', { kind: 'in', date: d.date || todayStr(), amount: amt, merchant: loanWho(L0), memo: w === 'record' ? '기록만 (다른 곳에서 처리)' : '장부에만', accountId: acc.id, bankId: null, payMethodId: null, internal: true, ...(w === 'record' ? { recordOnly: true } : {}), status: '확인', source: '직접', club: { memberId: L0.memberId || null, type: 'loan', loanId: L0.id }, deleted: false });
+    const s = await Store.put('tx', { kind: 'in', date: d.date || todayStr(), amount: amt, merchant: loanWho(L0), memo: memo || (w === 'record' ? '기록만' : '장부에만'), accountId: acc.id, bankId: null, payMethodId: null, internal: true, ...(w === 'record' ? { recordOnly: true } : {}), status: '확인', source: '직접', club: { memberId: L0.memberId || null, type: 'loan', loanId: L0.id }, deleted: false });
     const lf = loanCalc(L0).left; S.dialog = null; render(); toast(`대출 상환 ${won(amt)}원 · ${PW[w]} · 남은 원금 ${won(lf)}원${lf === 0 ? ' · 완납' : ''}`, { items: [{ col: 'tx', id: s.id, before: null }] });
   };
   // 대출 지급
@@ -92,6 +97,7 @@ function loanOutBlock(D) {
   CLUB_FORM.clubLoan = async function (f) {
     const D = S.dialog, d = D.d; if (D.id) return loanBase(f);
     const w = d.way || 'record'; pwRemember('loanOut', w);
+    if (w === 'record' && !String(d.memo || '').trim()) return showErr(f, MEMO_NEED);
     if (w === 'link' && !d.linkId) return showErr(f, '연결할 출금을 골라 주세요.');
     d.out = w === 'bank' || w === 'cash' || w === 'inner' ? 'now' : 'before';
     if (d.out === 'now' && !d.bankId) d.bankId = (mainBank() || {}).id || '';
@@ -149,6 +155,7 @@ function billWayBlock(D) {
   const c = payOf(D.card), b = cardBills(c.id)[D.ym], cands = pwCands({ kind: 'out', amount: b.amount, date: b.date, bankId: c.bankId || undefined, names: [c.company || c.name, '카드'], any: true });
   if (!D.way) D.way = cands.length ? 'link' : 'bank';
   return `<div class="field"><span class="label">어떻게 나갔나요?</span>${pwSeg('bill', 'bill', D.way, ['link', 'bank', 'record'])}
+    ${memoField(D.way, D.memo, 'bill')}
     ${D.way === 'link' ? pwList('bill', cands, D.linkId, '같은 금액 출금 줄이 없어요.') + '<span class="sub small">고른 출금 줄은 「카드 대금」으로 바뀌어요(지출로 두 번 안 셈).</span>' : D.way === 'record' ? '<span class="sub small">다른 곳에서 낸 대금 · 결제 완료로 표시만(통장 잔액 그대로).</span>' : '<span class="sub small">아직 통장 파일이 없을 때 · 나중에 파일이 오면 결제 완료로 합쳐요.</span>'}</div>`;
 }
 
@@ -181,15 +188,23 @@ const PW_ACT = {
   },
   pwRefresh: () => render(),
   billPaidYes: async () => {
-    const D = S.dialog, c = payOf(D.card), b = cardBills(c.id)[D.ym], w = D.way || 'bank', items = [];
+    const D = S.dialog, c = payOf(D.card), b = cardBills(c.id)[D.ym], w = D.way || 'bank', items = [], memo = String(D.memo || '').trim();
+    if (w === 'record' && !memo) { toast(MEMO_NEED); const e = $app.querySelector('.dlg [data-pwmemo]'); if (e) e.focus(); return; }
     if (w === 'link') {
       const x = Store.get('tx', D.linkId); if (!x) { toast('연결할 출금 줄을 골라 주세요'); return; }
-      const s = await Store.put('tx', { kind: 'bill', cardId: c.id, bankId: x.bankId || c.bankId || null, billYM: D.ym, amount: b.amount, date: x.date, memo: x.bankMemo || '', source: x.source, dupKey: x.dupKey, status: '확인', deleted: false, fromTx: x.id });
+      const s = await Store.put('tx', { kind: 'bill', cardId: c.id, bankId: x.bankId || c.bankId || null, billYM: D.ym, amount: b.amount, date: x.date, memo: memo, bankMemo: x.bankMemo || '', source: x.source, dupKey: x.dupKey, status: '확인', deleted: false, fromTx: x.id });
       items.push({ col: 'tx', id: s.id, before: null }); await delTx(x, items); // 출금 줄 → 카드 대금 한 건 (지운 원본 기억 → 같은 파일을 또 올려도 안 생김)
     } else {
-      const s = await Store.put('tx', { kind: 'bill', cardId: c.id, bankId: w === 'record' ? null : c.bankId || null, billYM: D.ym, amount: b.amount, date: b.date, memo: w === 'record' ? '기록만 (다른 곳에서 냄)' : '', source: '직접', status: '확인', ...(w === 'record' ? { recordOnly: true } : {}), deleted: false });
+      const s = await Store.put('tx', { kind: 'bill', cardId: c.id, bankId: w === 'record' ? null : c.bankId || null, billYM: D.ym, amount: b.amount, date: b.date, memo: memo || (w === 'record' ? '기록만' : ''), source: '직접', status: '확인', ...(w === 'record' ? { recordOnly: true } : {}), deleted: false });
       items.push({ col: 'tx', id: s.id, before: null });
     }
     S.dialog = null; render(); toast(`결제 완료로 바꿨어요 · ${PW[w]}`, { items });
   }
 };
+
+// 메모 칸 글자 (회비 넣기 · 카드값 결제)
+function onPwInput(el) {
+  const k = el.dataset && el.dataset.pwmemo; if (!k) return false;
+  if (k === 'cf' && S.cf) S.cf.memo = el.value; else if (k === 'bill' && S.dialog) S.dialog.memo = el.value;
+  return true;
+}

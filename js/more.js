@@ -185,7 +185,7 @@ function searchRun() {
     }
     return P.terms.every((t) => textHit(x.merchant, t) || textHit(x.memo, t) || textHit((accOf(x.accountId) || {}).name, t) || textHit((Store.get('trips', x.tripId) || {}).name, t) || (/^\d+$/.test(t) && String(x.amount).includes(t)));
   };
-  const tx = liveTx().filter(okTx).sort(sortTx);
+  const tx = liveTx().filter(okTx).filter((x) => !(typeof isClubBook === 'function' && isClubBook() && typeof cBankOk === 'function') || cBankOk(x)).sort(sortTx); // 친구회 [전체 / 국민 / 대구] (v35)
   const words = P.terms;
   const trips = feat('trips') ? tripsAll().filter((t) => (C.some((c) => c.k === 'trip') && C.find((c) => c.k === 'trip').v.includes(t.id)) || (words.length && words.every((w) => textHit(t.name, w) || textHit(t.memo, w))) || (words.length && tx.some((x) => x.tripId === t.id))) : [];
   const memos = feat('reminders') && words.length ? remindersAll().filter((r) => words.every((w) => textHit(r.title, w) || textHit(r.body, w))) : [];
@@ -219,11 +219,12 @@ function searchResults(L) {
   }
   const R = searchRun(), tab = S.qTab || '통합';
   const chips = R.P.conds.length ? `<div class="chips" style="gap:6px"><span class="sub small" style="margin-right:2px">알아들은 조건</span>${R.P.conds.map((c) => `<button class="chip on" style="min-height:36px" data-act="qRm" data-tok="${esc(c.tok)}">${esc(c.label)}${ic('x', 14)}</button>`).join('')}</div>` : '';
+  const bankChipsQ = typeof isClubBook === 'function' && isClubBook() && typeof cBankChips === 'function' ? cBankChips() : '';
   // 메모 탭: 기억할 것 + 메모 칸에 찾는 말이 있는 내역 (2026-11 v25)
   const txMemo = R.P.terms.length ? R.tx.filter((x) => x.memo && R.P.terms.every((t) => textHit(x.memo, t))) : [];
   const counts = { 통합: R.tx.length + R.trips.length + R.memos.length + R.places.length, 내역: R.tx.length, 여행: R.trips.length, 메모: R.memos.length + txMemo.length, '통장·카드': R.places.length };
   const tabs = `<div class="stabs">${Object.keys(counts).filter((k) => k === '통합' || k === '내역' || counts[k]).map((k) => `<button class="${tab === k ? 'on' : ''}" data-act="qTab" data-t="${k}">${k} <span class="sub">${counts[k]}</span></button>`).join('')}</div>`;
-  if (!counts.통합) return chips + tabs + `<p class="sub" style="margin:0;padding:28px 0;text-align:center;font-size:${px(15)}">맞는 결과가 없어요. 기간이나 낱말을 바꿔 보세요.${!R.hasDate && S.qPeriod !== '전체' ? ' <button class="linkbtn" data-act="qPeriod" data-p="전체">기간 전체로 찾기</button>' : ''}</p>`;
+  if (!counts.통합) return bankChipsQ + chips + tabs + `<p class="sub" style="margin:0;padding:28px 0;text-align:center;font-size:${px(15)}">맞는 결과가 없어요. 기간이나 낱말을 바꿔 보세요.${!R.hasDate && S.qPeriod !== '전체' ? ' <button class="linkbtn" data-act="qPeriod" data-p="전체">기간 전체로 찾기</button>' : ''}</p>`;
   const sm = sumTx(R.tx.filter(counted));
   const rowTx = (x) => txRow(x, { act: 'openTx', sub: `${dateLabel(x.date, x.date.slice(0, 4) !== String(new Date().getFullYear()))} · ${isUnc(x) ? '미확인' : (accOf(x.accountId) || {}).name || txTitle(x)}${x.tripId && Store.get('trips', x.tripId) ? ' · ' + Store.get('trips', x.tripId).name : ''}` });
   const tripRow = (t) => `<button class="srow" data-act="openTrip" data-id="${t.id}"><span class="circ" style="width:40px;height:40px">${ic('luggage', 20, 'var(--ink)')}</span><span style="flex:1 1 140px;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><b>${esc(t.name)}</b><span class="sub small">${tripPeriod(t)} · ${tripDays(t)}일</span></span><span style="display:flex;flex-direction:column;align-items:flex-end"><b class="neg" style="white-space:nowrap">${won(tripSpent(t))}원</b><span class="sub small">${t.budget ? '예산 ' + won(t.budget) : ''}</span></span>${ic('chevron-right', 16, 'var(--sub)')}</button>`;
@@ -250,7 +251,7 @@ function searchResults(L) {
   else if (tab === '여행') body = sec('여행', R.trips.map(tripRow).join(''));
   else if (tab === '메모') body = (txMemo.length ? sec(`메모가 맞는 내역 ${txMemo.length}건`, txMemo.slice(0, S.qShown || 60).map((x) => txRow(x, { act: 'openTx', sub: `메모: ${x.memo} · ${dateLabel(x.date, true)}` })).join('')) : '') + (R.memos.length ? sec('기억할 것', R.memos.map(memoRow).join('')) : '');
   else body = sec('통장·카드', R.places.map(placeRow).join(''));
-  return chips + tabs + `<div class="stack" style="gap:12px">${body}</div>`;
+  return bankChipsQ + chips + tabs + `<div class="stack" style="gap:12px">${body}</div>`;
 }
 let qTimer = null;
 function onSearchInput(el) {

@@ -30,14 +30,14 @@ const meetTypes = () => { const t = clubCfg().meetTypes; return t && t.length ? 
 const autoMeetName = (date, type) => `${String(date || '').slice(0, 7).replace('-', '.')} ${type}`;
 // 손으로 넣기 메뉴 (휴대폰 ＋ · 탭/노트북 홈 버튼): [action, 아이콘, 색, 이름, 설명]
 function clubQuickList() {
-  return [['clubFeeNew', 'hand-coins', '#7FA38A', '회비 넣기', '회원 고르기 → 날짜·금액·통장 → 밀린 달부터 채우기'],
+  return [['clubFeeNew', 'hand-coins', '#B5473F', '회비 넣기', '회원 고르기 → 날짜·금액·통장 → 밀린 달부터 채우기'],
     ['clubInNew', 'coins', '#B5473F', '수입 넣기', '이자 · 찬조금 · 기타 수입'],
     ['clubOutNew', 'arrow-down', '#3B5F8F', '지출 넣기', '계정 · 모임 · 돈 나간 곳'],
-    ...(banksOpen().length > 1 ? [['clubTrNew', 'arrow-left-right', '#5E8C8C', '통장 간 이체', '국민 ↔ 대구 · 수입 · 지출로 안 셈']] : []),
-    ['c7SwapNew', 'repeat', '#7A8B6F', '맞바꿈', '생일선물·축의금을 회비로 등 · 장부에만 두 줄 짝'],
-    ...(feat('loans') ? [['clubRepayAny', 'rotate-ccw', '#8A7F6A', '대출 상환 넣기', '대출 고르기 → 날짜·금액·통장']] : []),
-    ...(feat('files') ? [['clubFile', 'upload', '#5E8C8C', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []),
-    ...(feat('receipt') ? [['receipt', 'camera', '#CDB38B', '영수증 찍기', '사진으로 지출 넣기']] : [])];
+    ...(banksOpen().length > 1 ? [['clubTrNew', 'arrow-left-right', '#77767A', '통장 간 이체', '국민 ↔ 대구 · 수입 · 지출로 안 셈']] : []),
+    ['c7SwapNew', 'repeat', '#7FA38A', '맞바꿈', '생일선물·축의금을 회비로 등 · 장부에만 두 줄 짝'],
+    ...(feat('loans') ? [['clubRepayAny', 'rotate-ccw', '#7FA38A', '대출 상환 넣기', '대출 고르기 → 날짜·금액·통장']] : []),
+    ...(feat('files') ? [['clubFile', 'upload', '#77767A', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []),
+    ...(feat('receipt') ? [['receipt', 'camera', '#77767A', '영수증 찍기', '사진으로 지출 넣기']] : [])];
 }
 function clubQuickBar() {
   return `<div class="quickbar">${clubQuickList().map(([a, i, , t]) => `<button class="btn" data-act="${a}">${ic(i, 18)}${t}</button>`).join('')}</div>`;

@@ -253,6 +253,7 @@ const B2_ACT = {
     const pay = ['link', 'bank', 'cash', 'swap'].includes(d.how);
     if (pay && s.ok === false && !String(d.reason || '').trim()) return err('대상 아님이에요. 처리하는 이유를 적어 주세요.');
     if (d.how === 'na' && !String(d.memo || '').trim()) return err('대상 아님 사유를 메모에 적어 주세요.');
+    if (d.how === 'record' && !String(d.memo || '').trim()) return err('어떻게 처리했는지 메모에 적어 주세요.');
     const override = pay && s.ok === false ? { ok: true, reason: d.reason.trim(), at: todayStr() } : null;
     const cur = memberOf(m.id), rec = (cur.gifts || {})[D.y] || {};
     if (s.tx && !(d.how === 'link' && d.txId === s.tx.id)) { // 방식을 바꾸면 예전 연결은 풀기 (만든 현금 줄은 지울지 따로)

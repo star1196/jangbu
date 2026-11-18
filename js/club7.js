@@ -527,8 +527,10 @@ let C7_BASE_TX = null;
   // 회비 넣기 저장: 남는 돈을 대출 상환으로 / 손으로 넣을 때 현금 · 무입금
   const baseCf = cfSaveNow;
   cfSaveNow = async function () {
-    const C = S.cf, m = C && memberOf(C.memberId);
+    const C = S.cf, m = C && memberOf(C.memberId), cmemo = C ? String(C.memo || '').trim() : '';
     if (!C || !m) return baseCf();
+    if (!C.txId && C.src === 'record' && !cmemo) { const e = $app.querySelector('[data-err]'); if (e) e.textContent = '어떻게 처리했는지 메모에 적어 주세요.'; return; }
+    if (cmemo) { const tid = C.txId, n0 = liveTx().length; const r = await cfSaveMemo(C, m, baseCf, cmemo, tid, n0); if (r !== 'go') return; }
     const P = cfPlan(); if (!P || !P.alloc.length) return baseCf();
     const items = [];
     const done = (msg) => { const back = C.back; S.cf = null; S.clubMember = m.id; S.hist = S.hist.filter((s) => s !== '회비 넣기'); S.screen = back || '회원 상세'; S.fwd = []; render(); toast(msg, { items }); };
@@ -541,15 +543,25 @@ let C7_BASE_TX = null;
       return done(`${m.name} 회비 ${P.alloc.length}개월 + 대출 상환 ${won(lp)}원${loanCalc(L).left === 0 ? ' (완납)' : ''} · ${out.length}줄로 나눔`);
     }
     if (!C.txId && C.src === 'record') {
-      const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: '기록만 (다른 곳에서 받음)', accountId: feeAccount().id, payMethodId: null, bankId: null, internal: true, recordOnly: true, status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
+      const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: cmemo || '기록만', accountId: feeAccount().id, payMethodId: null, bankId: null, internal: true, recordOnly: true, status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
       items.push({ col: 'tx', id: s.id, before: null });
       return done(`${m.name} 회비 ${P.alloc.length}개월 · 기록만 (통장 · 통계 그대로)`);
     }
     if (!C.txId && (C.src === 'cash' || C.src === 'inner')) {
-      const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: C.src === 'inner' ? '무입금(장부에만)' : '회비', accountId: feeAccount().id, payMethodId: C.src === 'cash' ? cashPayId() : null, bankId: null, internal: C.src === 'inner', status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
+      const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: cmemo || (C.src === 'inner' ? '장부에만' : '회비'), accountId: feeAccount().id, payMethodId: C.src === 'cash' ? cashPayId() : null, bankId: null, internal: C.src === 'inner', status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
       items.push({ col: 'tx', id: s.id, before: null });
       return done(`${m.name} 회비 ${P.alloc.length}개월을 채웠어요 · ${C.src === 'cash' ? '현금' : '장부에만'}`);
     }
     return baseCf();
   };
 })();
+
+// 회비 저장 뒤 메모 붙이기 (통장 · 연결): 기록만 · 현금 · 장부에만 · 대출 나눔은 위에서 직접 넣음
+async function cfSaveMemo(C, m, baseCf, memo, tid, n0) {
+  if (!C.txId && ['record', 'cash', 'inner'].includes(C.src)) return 'go';
+  if (C.left === 'loan') return 'go';
+  await baseCf();
+  const t = tid ? Store.get('tx', tid) : liveTx().filter((x) => x.club && x.club.type === 'fee' && x.club.memberId === m.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+  if (t && (tid || liveTx().length > n0)) await Store.put('tx', { ...t, memo });
+  return 'done';
+}

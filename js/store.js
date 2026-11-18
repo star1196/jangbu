@@ -20,7 +20,7 @@ const Store = (() => {
   let bundleKey = null;  // 함께 열기 묶음 열쇠 (메모리에만, 잠그면 지움)
   let chain = Promise.resolve();
   let ver = 0; // 자료가 바뀔 때마다 하나씩 (계산 결과를 잠깐 기억해 두는 데 씀: 10만 건에서도 빠르게)
-  const LOCAL_IDS = ['idmap']; // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
+  const LOCAL_IDS = ['idmap', 'undoLog']; // undoLog: 최근 한 일(되돌리기) · 이 기기 장부에만 (v35) // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
   // 여러 건을 한꺼번에 풀기·잠그기 (하나씩 기다리면 10만 건에서 너무 느림 → 500건씩 함께)
   async function inBatches(list, fn, n) {
     const out = new Array(list.length); n = n || 500;

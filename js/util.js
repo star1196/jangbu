@@ -259,7 +259,7 @@ const sortTx = (a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : (b.create
 // 계정 아이콘 동그라미: 색 테마가 있으면 그 색(동그라미 26% · 선 68%), 먹색이면 옅은 회색 + 수입 색/지출 색
 function catIcon(acc, size, circle, extra) {
   if (!acc) return `<span class="circ" style="width:${px(circle)};height:${px(circle)};background:var(--warn-soft)">${ic('circle-help', size, 'var(--warn)')}</span>`;
-  const P = DATA.PALETTES[view.pal];
+  const P = DATA.PALETTES[lv('pal')];
   let bg = 'var(--soft)', fg = acc.kind === 'in' ? 'var(--in)' : 'var(--out)';
   if (P && acc.color != null && acc.color >= 0) {
     const C = P[acc.color] || P[7];
@@ -271,7 +271,7 @@ function catIcon(acc, size, circle, extra) {
 // 작은 아이콘만 (달력 칸·표): 색 테마가 있으면 그 색 68%, 아니면 수입/지출 색
 function catGlyph(acc, size) {
   if (!acc) return ic('circle-help', size, 'var(--warn)');
-  const P = DATA.PALETTES[view.pal];
+  const P = DATA.PALETTES[lv('pal')];
   const fg = P && acc.color != null ? `color-mix(in oklab, ${P[acc.color] || P[7]} 68%, #1F1F1F)` : (acc.kind === 'in' ? 'var(--in)' : 'var(--out)');
   return ic(acc.icon, size, fg);
 }

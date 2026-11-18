@@ -20,12 +20,27 @@ function deviceName() { return view.device || (window.innerWidth < 600 ? '휴대
 const typeVisible = (t) => !view.types || view.types[t] !== false;
 const visibleLedgers = () => S.ledgers.filter((l) => typeVisible(l.type));
 
+// 색 설정은 장부마다 따로 (v35): view.colorsBy[장부 id] = { theme, pal, inC, outC } · 이 기기에만
+// 친구회는 처음에 디자인 규칙 v2(먹색 바탕 · 수입 빨강 · 지출 파랑 · 세이지), 가계부는 지금까지 쓰던 색 그대로
+const CLUB_V2 = { theme: '먹색', pal: '세이지 뮤트', inC: '#B5473F', outC: '#3B5F8F' };
+function lv(k) {
+  const c = typeof Store !== 'undefined' && Store.isOpen && Store.isOpen() && S && S.mode === 'app' ? Store.current() : null;
+  const own = c && view.colorsBy && view.colorsBy[c.id];
+  if (own && own[k] != null) return own[k];
+  return c && c.type === 'club' ? CLUB_V2[k] : view[k];
+}
+function lvSet(o) {
+  const c = typeof Store !== 'undefined' && Store.isOpen && Store.isOpen() && S.mode === 'app' ? Store.current() : null;
+  if (!c) { Object.assign(view, o); saveView(); return; }
+  view.colorsBy = { ...(view.colorsBy || {}), [c.id]: { ...((view.colorsBy || {})[c.id] || {}), ...o } }; saveView();
+}
 function applyView() {
-  const T = DATA.THEMES[view.theme] || DATA.THEMES['먹색'];
+  const T = DATA.THEMES[lv('theme')] || DATA.THEMES['먹색'];
   const r = document.documentElement.style;
   r.setProperty('--bg', T.bg); r.setProperty('--sf', T.sf); r.setProperty('--ink', T.ink);
   r.setProperty('--sub', T.sub); r.setProperty('--line', T.line); r.setProperty('--soft', T.soft);
-  r.setProperty('--in', view.inC); r.setProperty('--out', view.outC);
+  r.setProperty('--in', lv('inC')); r.setProperty('--out', lv('outC'));
+  document.documentElement.dataset.book = S && S.mode === 'app' && Store.current() ? Store.current().type : ''; // 친구회 색 v2 (css [data-book="club"])
   r.setProperty('--fs', DATA.FONT_SIZES[view.fs] || 1);
   const m = document.querySelector('meta[name="theme-color"]');
   if (m) m.setAttribute('content', T.bg);
@@ -66,6 +81,7 @@ function toast(msg, undo) {
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); }
   $app.appendChild(el);
   lastUndo = undo || null;
+  if (undo && typeof logUndo === 'function') logUndo(msg, undo); // 「최근 한 일」에 적기 (undo2.js · v35)
   el.innerHTML = ic('check', 18) + `<span>${esc(msg)}</span>` + (undo ? '<button class="undobtn" data-act="undo">되돌리기</button>' : '');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.remove(); lastUndo = null; }, undo ? 6000 : 2600);
@@ -73,6 +89,7 @@ function toast(msg, undo) {
 async function doUndo() {
   const u = lastUndo; if (!u) return;
   lastUndo = null;
+  if (u.logId && typeof undoRun === 'function') { const e = undoLog().list.find((v) => v.id === u.logId); if (e && !e.undone) { await undoRun([e]); render(); toast('되돌렸어요'); return; } }
   for (const it of u.items) {
     if (it.before) await Store.put(it.col, it.before, u.keepTime);
     else await Store.remove(it.col, it.id, u.keepTime);
@@ -134,6 +151,7 @@ async function copyText(t) {
 
 /* ───────── 그리기 ───────── */
 function render() {
+  try { if (applyView.lid !== ((S.mode === 'app' && Store.current() || {}).id || '') || applyView.mode !== S.mode) { applyView.lid = (S.mode === 'app' && Store.current() || {}).id || ''; applyView.mode = S.mode; applyView(); } } catch (e) { /* 그대로 */ }
   const L = layout();
   $app.className = (S.mode === 'app' ? '' : 'gatewrap ') + (L === 'phone' ? 'phone compact' : L);
   const prev = $app.querySelector('.content');
@@ -292,7 +310,7 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right">${isHome ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
+      <div class="top-right">${S.mode === 'app' ? undoTopBtn() : ''}${isHome ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
     ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
@@ -530,10 +548,10 @@ const ACT = {
   acctOpen: (el) => { S.listYM = el.dataset.ym; S.listF = { accId: el.dataset.id }; S.detail = null; go('목록'); },
   // 설정
   setFs: (el) => { view.fs = el.dataset.v; saveView(); applyView(); render(); },
-  setTheme: (el) => { view.theme = el.dataset.v; saveView(); applyView(); render(); },
-  setPal: (el) => { view.pal = el.dataset.v; saveView(); render(); },
-  setIn: (el) => { view.inC = el.dataset.v; saveView(); applyView(); render(); },
-  setOut: (el) => { view.outC = el.dataset.v; saveView(); applyView(); render(); },
+  setTheme: (el) => { lvSet({ theme: el.dataset.v }); applyView(); render(); },
+  setPal: (el) => { lvSet({ pal: el.dataset.v }); render(); },
+  setIn: (el) => { lvSet({ inC: el.dataset.v }); applyView(); render(); },
+  setOut: (el) => { lvSet({ outC: el.dataset.v }); applyView(); render(); },
   dlgRename: () => { S.dialog = { type: 'rename' }; render(); },
   dlgPw: () => { S.dialog = { type: 'pw' }; render(); },
   dlgAutoLock: () => SW_ACT.goSecurity(),
@@ -607,6 +625,7 @@ const ACT = {
   ...CLUB_ACT, // 친구회 (club.js)
   ...CLUB4_ACT,
   ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
+  ...UNDO_ACT, // 되돌리기 · 최근 한 일 (undo2.js · v35)
   ...SEC_ACT, // 화면 가림 · 보안 점검 (sec.js · v33)
   ...EDIT3_ACT,
   ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 할 일·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
@@ -614,6 +633,7 @@ const ACT = {
   ...CLUB7_ACT,
   ...B2_ACT,
   ...B3_ACT,
+  ...B4_ACT, // 생일 표 단순하게 (bday4.js · v35)
   ...E8_ACT, // 친구회 통장 여러 개 (club8.js · v34) // 생일 판정 · 연도 · 칸마다 정하기 (bday3.js · v34) // 생일 처리 다시 설계 (bday2.js · v33) // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
   ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
@@ -676,8 +696,8 @@ const ACT = {
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
-  swapColors: () => { [view.inC, view.outC] = [view.outC, view.inC]; saveView(); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
-  resetColors: () => { view.inC = DATA.DEFAULT_IN; view.outC = DATA.DEFAULT_OUT; saveView(); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
+  swapColors: () => { lvSet({ inC: lv('outC'), outC: lv('inC') }); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
+  resetColors: () => { lvSet({ inC: DATA.DEFAULT_IN, outC: DATA.DEFAULT_OUT }); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
 };
 
 $app.addEventListener('click', (e) => {
@@ -699,10 +719,12 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onPwInput(el)) return; // 메모 칸 (payway.js · v35)
   if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
   if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
   if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
   if (onE8Input(el)) return;
+  if (onB4Input(el)) return;
   if (onB3Input(el)) return;
   if (onB2Input(el)) return; // 생일 처리 칸 (bday2.js)
   if (onClub7Input(el)) return; // 나눠 잡기 · 맞바꿈 · 생일 처리 칸 (club7.js)
