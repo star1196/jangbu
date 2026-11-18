@@ -549,6 +549,10 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (D.type === 'e8Start') {
+    body = viewE8Dlg(D); // 다른 통장 시작 잔액 (club8.js)
+  } else if (/^b3/.test(D.type)) {
+    body = viewB3Dlg(D); // 다시 판정 · 연도 다시 맞추기 (bday3.js)
   } else if (/^b2/.test(D.type)) {
     body = /^(b2Do|b2Cell)$/.test(D.type) ? viewB2Dlg(D) : viewB2Global(D); // 생일 처리 (bday2.js)
   } else if (/^c7/.test(D.type)) {
@@ -560,7 +564,7 @@ function viewDialog() {
   } else if (/^ins/.test(D.type)) {
     body = viewInstDlg(D); // 카드 메모 · 계획 · 해지일 (inst.js)
   } else if (/^club/.test(D.type) && typeof viewClubDlg === 'function') {
-    body = viewClub4Dlg(D) || viewClubDlgX(D) || viewClubDlg(D); // 친구회 (club4 → club3 → club.js)
+    body = (D.type === 'clubRepay' ? viewRepayDlg(D) : '') || viewClub4Dlg(D) || viewClubDlgX(D) || viewClubDlg(D); // 대출 상환: 통장 기록에 연결 · 통장(새로) · 현금 · 장부에만 · 기록만 (payway.js) // 친구회 (club4 → club3 → club.js)
   } else if (/^(cl[A-Z]|dec[A-Z]|rl[A-Z])/.test(D.type) && typeof viewClub4Dlg === 'function') {
     body = viewClub4Dlg(D); // 회칙 조항 · 개정·결의 기록 (club4.js)
   } else if (/^bk/.test(D.type)) {

@@ -154,11 +154,11 @@ viewBdayScreen = function (L) {
 };
 
 /* ── 처리하기 대화 상자 ── */
-const B2_HOW = [['link', '통장 출금에 연결'], ['cash', '현금'], ['swap', '무출금 · 회비로 대신(맞바꿈)'], ['record', '기록만'], ['defer', '미룸'], ['na', '대상 아님'], ['exempt', '면제']];
+const B2_HOW = [['link', '통장 기록에 연결'], ['bank', '통장(새로)'], ['cash', '현금'], ['swap', '장부에만 · 회비로 대신(맞바꿈)'], ['record', '기록만'], ['defer', '미룸'], ['na', '대상 아님'], ['exempt', '면제']]; // 같은 순서 · 같은 이름 (v34)
 function viewB2Dlg(D) {
   const m = memberOf(D.memberId);
   if (D.type === 'b2Do') {
-    const s = bdayStatus(m, D.y), d = D.d, g = giftAmtAt(s.date || todayStr()), pay = ['link', 'cash', 'swap'].includes(d.how);
+    const s = bdayStatus(m, D.y), d = D.d, g = giftAmtAt(s.date || todayStr()), pay = ['link', 'bank', 'cash', 'swap'].includes(d.how);
     const cands = d.how === 'link' ? giftCands(m, D.y) : [], cx = cands.find((x) => x.id === d.txId) || null;
     const cap = cx ? cx.amount - giftYearsOf(cx).reduce((v, q) => v + q.amt, 0) : 0, ys = d.years || [], sum = ys.length * g;
     return `<div class="dlg" style="max-width:580px"><h2 class="dlg-title">${esc(m.name)} ${D.y} 생일 처리</h2>
@@ -171,7 +171,7 @@ function viewB2Dlg(D) {
         ${cx ? `<div class="field"><span class="label">이 출금이 몇 년 생일인가요? <span style="font-weight:400">(${won(g)}원씩 · 남은 ${won(cap)}원)</span></span>
           <div class="chips">${Array.from({ length: 8 }, (_, i) => D.y - 6 + i).filter((y) => y <= +todayStr().slice(0, 4) + 1).map((y) => `<button class="chip ${ys.includes(y) ? 'on' : ''}" data-act="b2Year" data-y="${y}">${y}</button>`).join('')}</div>
           <div class="${sum === cap ? 'okbox' : 'warnbox'}">${sum === cap ? `${ys.join(' · ')} 생일 · ${won(sum)}원 = 출금 ✓` : `${ys.length}해 × ${won(g)} = ${won(sum)}원 · 출금 남은 ${won(cap)}원${sum > cap ? ' · 너무 많아요' : ' · 나머지는 연결 안 된 채로 남아요'}`}</div></div>` : ''}` : ''}
-      ${d.how === 'cash' ? `<div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 140px"><span class="label">준 날</span><input class="input" type="date" data-b2="payDate" value="${esc(d.payDate)}"></label><label class="field" style="flex:1 1 140px"><span class="label">금액</span><input class="input r" data-b2="amount" inputmode="numeric" value="${esc(d.amount)}"></label></div>` : ''}
+      ${d.how === 'cash' || d.how === 'bank' ? `<div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 140px"><span class="label">준 날</span><input class="input" type="date" data-b2="payDate" value="${esc(d.payDate)}"></label><label class="field" style="flex:1 1 140px"><span class="label">금액</span><input class="input r" data-b2="amount" inputmode="numeric" value="${esc(d.amount)}"></label></div>` : ''}
       ${d.how === 'record' ? `<label class="field"><span class="label">처리한 날 (선택)</span><input class="input" type="date" data-b2="payDate" value="${esc(d.payDate)}"></label><span class="sub small">돈 없이 「처리함」 표시만 해요(시작 전 생일 등). 통장 · 통계는 그대로예요.</span>` : ''}
       ${pay && s.ok === false ? `<div class="warnbox">${ic('circle-alert', 20)}<div>자동 판정은 대상 아님이에요. 그래도 처리하려면 이유를 적어 주세요.<input class="input" style="margin-top:6px" data-b2="reason" value="${esc(d.reason || '')}" placeholder="예: 회장단 결의로 지급"></div></div>` : ''}
       <label class="field"><span class="label">메모${d.how === 'na' ? ' <span class="warnt" style="font-weight:400">(대상 아님 사유 · 꼭)</span>' : ' (선택)'}</span><input class="input" data-b2="memo" value="${esc(d.memo || '')}" placeholder="${d.how === 'defer' ? '예: 다음 모임 때 전달' : d.how === 'na' ? '예: 생일에 밀린 회비 있음' : ''}"></label>
@@ -250,7 +250,7 @@ const B2_ACT = {
   b2Year: (el) => { const d = S.dialog.d, y = +el.dataset.y; d.years = d.years.includes(y) ? d.years.filter((v) => v !== y) : [...d.years, y].sort(); render(); },
   b2Save: async () => {
     const D = S.dialog, d = D.d, m = memberOf(D.memberId), s = bdayStatus(m, D.y), items = [], err = (t) => { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = t; };
-    const pay = ['link', 'cash', 'swap'].includes(d.how);
+    const pay = ['link', 'bank', 'cash', 'swap'].includes(d.how);
     if (pay && s.ok === false && !String(d.reason || '').trim()) return err('대상 아님이에요. 처리하는 이유를 적어 주세요.');
     if (d.how === 'na' && !String(d.memo || '').trim()) return err('대상 아님 사유를 메모에 적어 주세요.');
     const override = pay && s.ok === false ? { ok: true, reason: d.reason.trim(), at: todayStr() } : null;
@@ -270,12 +270,12 @@ const B2_ACT = {
       S.dialog = null; render(); toast(`${m.name} ${d.years.join('·')} 생일 · 통장 출금에 연결 (새 줄 없음)`, { items }); return;
     }
     if (d.how === 'swap') { const ga = await giftAcc2(); S.dialog = { type: 'c7Swap', d: swapDraft({ date: d.payDate || todayStr(), amount: d.amount, outAcc: ga.id, inAcc: (feeAccount() || {}).id || '', memberId: m.id, year: D.y, memo: d.memo, override }) }; render(); return; }
-    if (d.how === 'cash') {
+    if (d.how === 'cash' || d.how === 'bank') {
       if (!toInt(d.amount)) return err('금액을 넣어 주세요.');
-      await bdayApply(m, D.y, 'cash', { amount: toInt(d.amount), payDate: d.payDate, memo: String(d.memo || '').trim(), override }, items);
-      const t = liveTx().find((x) => x.club && x.club.type === 'gift' && x.club.memberId === m.id && +x.club.year === D.y && !x.bankId && x.payMethodId === cashPayId());
+      await bdayApply(m, D.y, d.how, { amount: toInt(d.amount), payDate: d.payDate, memo: String(d.memo || '').trim(), override }, items);
+      const t = liveTx().find((x) => x.club && x.club.type === 'gift' && x.club.memberId === m.id && +x.club.year === D.y && !giftYearsOf(x).filter((q) => q.y !== D.y).length && (d.how === 'bank' ? !!x.bankId : x.payMethodId === cashPayId()));
       if (t) await Store.put('tx', { ...t, club: { ...t.club, years: [{ y: D.y, amt: t.amount }] } });
-      S.dialog = null; render(); toast(`${m.name} ${D.y} 생일 · 현금 ${won(toInt(d.amount))}원`, { items }); return;
+      S.dialog = null; render(); toast(`${m.name} ${D.y} 생일 · ${d.how === 'bank' ? '통장(새로)' : '현금'} ${won(toInt(d.amount))}원`, { items }); return;
     }
     items.push({ col: 'members', id: cur.id, before: { ...cur } });
     const nr = d.how === 'record' ? { ...rec, st: 'paid', how: 'record', payDate: d.payDate || '', memo: String(d.memo || '').trim() } : { ...rec, st: d.how, stAt: todayStr(), memo: String(d.memo || '').trim() };

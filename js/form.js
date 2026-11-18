@@ -136,7 +136,7 @@ function viewSheet() {
       ['날짜', dateLabel(`${f.y}-${f.mo}-${f.d}`, true)],
       ['가맹점', f.merchant || '—'],
       ['분류', acc ? acc.name : '미확인 (나중에 정리해요)'],
-      ['결제', f.payId === INNER_PAY ? `${innerLabel(f.kind)} · 통장·현금 잔액은 그대로, 통계에는 들어가요` : pay ? (pay.kind === 'card' ? `${cardLabel(pay)} · ${cardTypeTxt(pay)}` : pay.name) : '—'],
+      ['결제', f.payId === LINK_PAY ? (f.linkId ? `통장 기록에 연결 · ${(Store.get('tx', f.linkId) || {}).merchant || ''} ${won((Store.get('tx', f.linkId) || {}).amount || 0)}원 (새 줄 없음)` : '통장 기록에 연결 · 아직 안 고름') : f.payId === INNER_PAY ? `${innerLabel(f.kind)} · 통장·현금 잔액은 그대로, 통계에는 들어가요` : pay ? (pay.kind === 'card' ? `${cardLabel(pay)} · ${cardTypeTxt(pay)}` : pay.name) : '—'],
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),
       ...(f.perfEx ? [['실적', '카드 실적에서 빼요']] : []),
@@ -163,7 +163,7 @@ function viewSheet() {
   } else {
     const kinds = [['out', '지출'], ['in', '수입'], ...(feat('banks') || f.kind === 'tr' ? [['tr', '이체']] : [])].map(([k, l]) => `<button class="${k === f.kind ? 'on' : ''}" style="min-height:50px;font-size:${px(16)};${k === f.kind ? 'color:' + (k === 'out' ? 'var(--out)' : k === 'in' ? 'var(--in)' : 'var(--ink)') : ''}" data-act="fKind" data-k="${k}">${l}</button>`).join('');
     const quick = [['+1천', 1000], ['+5천', 5000], ['+1만', 10000], ['+5만', 50000], ['+10만', 100000]].map(([l, v]) => `<button class="qbtn" data-act="fQuick" data-v="${v}">${l}</button>`).join('');
-    const pays = payList(f.payId)
+    const pays = `<button class="chip linkchip ${f.payId === LINK_PAY ? 'on' : ''}" data-act="fPay" data-id="${LINK_PAY}">${ic('landmark', 16)}통장 기록에 연결</button>` + payList(f.payId)
       .map((p) => `<button class="chip ${p.id === f.payId ? 'on' : ''}" data-act="fPay" data-id="${p.id}">${p.kind === 'card' ? ic('credit-card', 16) : ''}${esc(p.name)}${p.kind === 'card' && p.cardType === 'check' ? ' <span class="small" style="opacity:.7">체크</span>' : ''}</button>`).join('') + (f.kind === 'tr' ? '' : `<button class="chip inner ${f.payId === INNER_PAY ? 'on' : ''}" data-act="fPay" data-id="${INNER_PAY}" title="통장·현금이 안 움직인 기록 (상품권 · 포인트 · 가족끼리 정산 등)">${innerLabel(f.kind)}</button>`);
     const fc = formCard(f);
     const cardPart = !fc || f.kind !== 'out' ? '' : `<div class="cardpart">
@@ -192,7 +192,7 @@ function viewSheet() {
           <label class="amtline"><span data-part="sign" class="amtsign"></span><input data-f="amount" class="amtin" value="${comma(f.amount)}" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off" aria-label="금액"><span style="font-size:${px(20)};font-weight:700">원</span></label>
           <div class="qrow">${quick}<button class="qbtn clear" data-act="fClear">지우기</button></div>
         </div>
-        ${f.kind === 'tr' ? viewTransferPart(f) : `<div class="field" style="position:relative">
+        ${f.kind === 'tr' ? viewTransferPart(f) + `<div class="field"><div class="chips"><button class="chip linkchip ${f.payId === LINK_PAY ? 'on' : ''}" data-act="fPay" data-id="${f.payId === LINK_PAY ? '' : LINK_PAY}">${ic('landmark', 16)}통장 기록에 연결 (이미 올라온 이체 줄)</button></div>${formLinkBox(f)}</div>` : `<div class="field" style="position:relative">
           <span class="label">가맹점</span>
           <input class="input" data-f="merchant" value="${esc(f.merchant)}" placeholder="어디서 썼나요" autocomplete="off">
           <div data-part="mer"></div>
@@ -205,7 +205,7 @@ function viewSheet() {
           <div class="chips" data-part="cats"></div>
           <div data-part="sav"></div>
         </div>
-        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${cardPart}${crBox(f)}</div>
+        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${formLinkBox(f)}${cardPart}${crBox(f)}</div>
         <div data-part="trip"></div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
         ${f.id && (Store.get('tx', f.id) || {}).bankMemo ? `<div class="field"><span class="label">통장 메모 <span style="font-weight:400">(파일 원본 · 고치지 않음)</span></span><span class="bmemo">${ic('landmark', 14)}${esc(Store.get('tx', f.id).bankMemo)}</span></div>` : ''}
@@ -485,7 +485,7 @@ async function formFinal() {
   if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
-  if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { if (f.payId !== INNER_PAY) S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
+  if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { if (f.payId !== INNER_PAY && f.payId !== LINK_PAY) S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
   const undo = { items: [{ col: 'tx', id: saved.id, before }, ...(th ? [{ col: 'photos', id: obj.photoId, before: null }] : [])] };
   if (f.again) {
     S.f = newForm({ kind: f.kind, y: f.y, mo: f.mo, d: f.d, payId: f.payId, bankId: f.bankId, fromId: f.fromId, toId: f.toId });

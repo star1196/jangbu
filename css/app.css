@@ -1068,3 +1068,15 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .okc { background: color-mix(in oklab, #3f8a55 18%, var(--sf)); color: #3f8a55; }
 .ngc { background: color-mix(in oklab, var(--warn) 22%, var(--sf)); color: var(--warn); }
 .dupside .tag { align-self: flex-start; }
+/* v34 생일 표 */
+.bdlegend.top { margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; background: var(--soft); }
+.bdc.todo b { color: var(--warn); }
+.bdc.picked { outline: 2px solid var(--ink); }
+.bdc .pickbox { position: absolute; top: 2px; left: 4px; font-style: normal; font-size: 11px; color: var(--ink); }
+.quickgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+.linkchip { border-style: dashed; } .linkbox { margin-top: 8px; } .pwseg button { min-width: 0; }
+/* v34 통장 여러 개 */
+.btag { display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--fs)); font-weight: 600; color: var(--ink); }
+.btag::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--bc, var(--sub)); }
+.bankline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; font-size: calc(14px * var(--fs)); }
+.linkamt2 { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font: inherit; color: var(--ink); cursor: pointer; }

@@ -608,11 +608,13 @@ const ACT = {
   ...CLUB4_ACT,
   ...CLUB5_ACT, // 친구회 입금 정리 (club5.js)
   ...SEC_ACT, // 화면 가림 · 보안 점검 (sec.js · v33)
-  ...EDIT3_ACT, // 고치기 · 지우기 · 중복 점검 (edit3.js · v33)
+  ...EDIT3_ACT,
   ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 할 일·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
   ...LEDGER2_ACT, // 통장 메모 · 내 메모 · 장부에만 · 짝 지우기 (ledger2.js)
   ...CLUB7_ACT,
-  ...B2_ACT, // 생일 처리 다시 설계 (bday2.js · v33) // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
+  ...B2_ACT,
+  ...B3_ACT,
+  ...E8_ACT, // 친구회 통장 여러 개 (club8.js · v34) // 생일 판정 · 연도 · 칸마다 정하기 (bday3.js · v34) // 생일 처리 다시 설계 (bday2.js · v33) // 대출 정리 · 넘친 돈 나누기 · 맞바꿈 · 생일 처리 (club7.js · v31)
   ...CLUB6_ACT, // 친구회 홈 숫자 → 통장 내역 · 수입 · 지출 · 미수금 (club6.js) // 친구회 회칙 책자 · 결의 기록 · 과거 입금 (club4.js)
   pickBook: (el) => { S.lockSel = el.dataset.id; view.lastLedger = S.lockSel; saveView(); render(); },
   toCreate: () => { S.mode = 'create'; S.createName = ''; render(); },
@@ -670,6 +672,7 @@ const ACT = {
   ...SAFE_ACT,
   ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
+  ...PW_ACT, // 돈 넣는 방식 · 카드값 결제 연결 (payway.js · v34 · 맨 뒤라야 카드값 결제를 덮음)
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
   accPerfEx: async () => { const a = accOf(S.editAccId), before = { ...a }; await Store.put('accounts', { ...a, perfEx: !a.perfEx }); render(); toast(a.perfEx ? '다시 카드 실적에 넣어요' : `'${a.name}'은(는) 카드 실적에서 빼요`, { items: [{ col: 'accounts', id: a.id, before }] }); },
@@ -699,6 +702,8 @@ $app.addEventListener('input', (e) => {
   if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
   if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
   if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
+  if (onE8Input(el)) return;
+  if (onB3Input(el)) return;
   if (onB2Input(el)) return; // 생일 처리 칸 (bday2.js)
   if (onClub7Input(el)) return; // 나눠 잡기 · 맞바꿈 · 생일 처리 칸 (club7.js)
   if (onClub5Input(el)) return; // 입금 정리 칸 (club5.js)

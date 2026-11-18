@@ -33,7 +33,7 @@ function replaceAmount(text, k, n) {
 /* ── 회칙 숫자 ↔ 앱 설정 ── [이름, 회칙 조항, 설정 열쇠들(금액 순서대로), 풀이] */
 const RULE_LINKS = [
   ['월 회비', '제 13 조 제 2 항', ['fee'], () => `${won(feeAt(curYM()))}원`],
-  ['생일 지급', '제 15 조 제 7 항', ['gift'], () => `${won(giftAt(curYM()))}원 (생일 당일까지 미수금 0일 때)`],
+  ['생일 지급', '제 15 조 제 7 항', ['gift'], () => `${won(giftAt(curYM()))}원 · 대상 판정: ${typeof giftModeTxt === 'function' ? giftModeTxt() : '제16조'} · 생일 달 회비는 그달 말일까지`],
   ['결혼 축의금', '제 15 조 제 5 항', ['wedBase', 'wedStep'], () => `${won(amt('wedBase'))} + ${won(amt('wedStep'))} × (몇 번째 결혼 − 1) · 만 45세 미혼 선지급(약관 1) = 8번째 ${won(wedFormula(8))}원`],
   ['조의금(직계 흉사)', '제 15 조 제 4 항', ['condolence'], () => `${won(amt('condolence'))}원 · 제16조 미납이어도 지급`],
   ['자녀 돌', '제 15 조 제 3 항', ['dol'], () => `${won(amt('dol'))}원 + 돌반지(시세, 금액 직접)`],
@@ -41,7 +41,7 @@ const RULE_LINKS = [
   ['정기모임 지원 한도', '제 15 조 제 8 항', ['meetCap'], () => `${won(amt('meetCap'))}원 (넘으면 모임 화면에 주황)`],
   ['회원 집 숙박 지원', '약관 3', ['stayPer', 'stayMax'], () => `1명당 ${won(amt('stayPer'))}원 · 최대 ${won(amt('stayMax'))}원`],
   ['동반자 참가비', '제 14 조 제 2 항', ['companion'], () => `성인 1인당 ${won(amt('companion'))}원 (수입 계정 「동반자 참가비」)`],
-  ['제16조 미납 기준', '제 16 조', ['penaltyDue'], () => `미수금 ${won(amt('penaltyDue'))}원 이상이면 제15조 지급 대상 아님 (조의금은 지급)`]
+  ['제16조 미납 기준', '제 16 조', ['penaltyDue'], () => `미수금 ${won(amt('penaltyDue'))}원 이상이면 제15조 지급 대상 아님 (조의금은 지급) · 생일 판정 기준: ${typeof giftModeTxt === 'function' ? giftModeTxt() : '제16조'}`]
 ];
 const wedFormula = (n) => amt('wedBase') + amt('wedStep') * Math.max(0, n - 1);
 // 다음 결혼 순번: 결혼축의금 받은 회원 수 + 1 (선지급은 순번에 안 셈)

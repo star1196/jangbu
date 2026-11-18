@@ -33,6 +33,7 @@ function clubQuickList() {
   return [['clubFeeNew', 'hand-coins', '#7FA38A', '회비 넣기', '회원 고르기 → 날짜·금액·통장 → 밀린 달부터 채우기'],
     ['clubInNew', 'coins', '#B5473F', '수입 넣기', '이자 · 찬조금 · 기타 수입'],
     ['clubOutNew', 'arrow-down', '#3B5F8F', '지출 넣기', '계정 · 모임 · 돈 나간 곳'],
+    ...(banksOpen().length > 1 ? [['clubTrNew', 'arrow-left-right', '#5E8C8C', '통장 간 이체', '국민 ↔ 대구 · 수입 · 지출로 안 셈']] : []),
     ['c7SwapNew', 'repeat', '#7A8B6F', '맞바꿈', '생일선물·축의금을 회비로 등 · 장부에만 두 줄 짝'],
     ...(feat('loans') ? [['clubRepayAny', 'rotate-ccw', '#8A7F6A', '대출 상환 넣기', '대출 고르기 → 날짜·금액·통장']] : []),
     ...(feat('files') ? [['clubFile', 'upload', '#5E8C8C', '통장 파일 올리기', '국민은행 거래내역 (엑셀 · CSV)']] : []),
@@ -59,9 +60,11 @@ function viewClubDlgX(D) {
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 150px"><span class="label">날짜</span><input class="input" type="date" data-co="date" value="${esc(d.date)}"></label><label class="field" style="flex:1 1 150px"><span class="label">금액</span><input class="input r" data-co="amount" inputmode="numeric" value="${esc(d.amount)}" placeholder="0" data-autofocus></label></div>
       <div class="field"><span class="label">무슨 수입?</span><div class="chips">${ins.map((a) => `<button type="button" class="chip accchip ${a.id === d.accountId ? 'on' : ''}" data-act="ciAcc" data-id="${a.id}">${catGlyph(a, 16)}${esc(a.name)}${a.pin ? ' <span class="star">☆</span>' : ''}</button>`).join('')}</div><span class="sub small">회비는 [회비 넣기], 대출 갚은 돈은 [대출 상환 넣기]로 넣어요.</span></div>
       <div class="field"><span class="label">누가? <span style="font-weight:400">(선택)</span></span><div class="chips"><button type="button" class="chip ${!d.memberId ? 'on' : ''}" data-act="ciMember" data-id="">회원 아님 · 은행</button>${memChips(d.memberId, 'ciMember', membersAll().filter((m) => m.status !== 'left'))}</div></div>
-      <div class="field"><span class="label">들어온 곳</span><div class="seg wrap"><button type="button" class="${!['cash', 'inner'].includes(d.src) ? 'on' : ''}" data-act="ciSrc" data-v="bank">${mainBankTxt()} 입금(기본)</button><button type="button" class="${d.src === 'cash' ? 'on' : ''}" data-act="ciSrc" data-v="cash">현금</button><button type="button" class="${d.src === 'inner' ? 'on' : ''}" data-act="ciSrc" data-v="inner">무입금(장부에만)</button></div>
+      <div class="field"><span class="label">들어온 곳</span>${pwSeg('dlg', 'clubIn', d.src || 'bank', ['link', 'bank', 'cash', 'inner'])}
+        ${d.src === 'link' ? pwList('dlg', pwCands({ kind: 'in', amount: d.amount, date: d.date, names: [d.memberId ? (memberOf(d.memberId) || {}).name : ''] }), d.linkId) : ''}
         ${d.src === 'inner' ? '<span class="sub small">통장·현금이 안 움직인 수입 (상품권 · 물품 찬조 등). 잔액은 그대로, 통계에는 들어가요.</span>' : ''}
-        ${!['cash', 'inner'].includes(d.src) && banksOpen().length > 1 ? `<select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>` : ''}</div>
+        ${d.src === 'link' ? pwList('dlg', pwCands({ kind: 'out', amount: d.amount, date: d.date, names: [d.memberId ? (memberOf(d.memberId) || {}).name : ''] })) : ''}
+        ${d.src === 'bank' && banksOpen().length > 1 ? `<select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}${b.id === (mainBank() || {}).id ? ' (주 통장)' : ''}</option>`).join('')}</select>` : ''}</div>
       <label class="field"><span class="label">메모 <span style="font-weight:400">(선택 · 찾기에 나와요)</span></span><input class="input" data-co="memo" value="${esc(d.memo)}" placeholder="예: 결산이자, ○○ 찬조"></label>
       <span class="sub small">나중에 통장 파일을 올려도 날짜(±1일)·금액·이름이 맞으면 같은 건으로 짝지어 두 번 들어가지 않아요.</span>
       <div class="err" data-err></div>${btns('저장')}</form>`;
@@ -98,12 +101,10 @@ function viewClubDlgX(D) {
     return `<form class="dlg" data-form="clubLoan" autocomplete="off" style="max-width:520px"><h2 class="dlg-title">${D.id ? '대출 고치기' : '대출 추가'}</h2><span class="sub small">이자 없음. 상환은 [상환 넣기]나 미확인 입금을 [대출 상환]으로 정하면 줄어요.</span>
       <div class="field"><span class="label">누구에게?</span><div class="chips">${memChips(d.memberId, 'clLoanWho', membersAll().filter((m) => m.status !== 'left' || m.id === d.memberId))}<button type="button" class="chip ${!d.memberId ? 'on' : ''}" data-act="clLoanWho" data-id="">회원 아님</button></div></div>
       ${!d.memberId ? `<label class="field"><span class="label">이름 (회원 아님)</span><input class="input" data-co="name" value="${esc(d.name)}" maxlength="20" placeholder="예: ○○ 동생"></label>` : ''}
-      ${D.id ? '' : `<div class="field"><span class="label">빌려준 돈은 언제 통장에서 나갔나요?</span><div class="seg wrap"><button type="button" class="${d.out !== 'now' ? 'on' : ''}" data-act="clLoanOut" data-v="before">시작 전에 이미 나감 — 통장 변화 없음</button><button type="button" class="${d.out === 'now' ? 'on' : ''}" data-act="clLoanOut" data-v="now">이번에 통장에서 나감 (대출 지급)</button></div>
-        <span class="sub small">${d.out === 'now' ? '통장 잔액에서 원금만큼 빠지고 「대출 지급」으로 적혀요(수입·지출 통계에는 안 들어감).' : '원금(또는 시작할 때 남은 원금)만 기록해요. 통장 잔액은 그대로예요.'} 갚는 돈(입금)은 통장 잔액에 더해지고 남은 원금이 줄어요.</span></div>`}
+      ${D.id ? '' : loanOutBlock(D)}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="field" style="flex:1 1 150px"><span class="label">대출일</span><input class="input" type="date" data-co="date" value="${esc(d.date)}"></label>
       <label class="field" style="flex:1 1 150px"><span class="label">원금</span><input class="input r" data-co="principal" inputmode="numeric" value="${esc(d.principal)}" placeholder="0"></label>
       ${d.out !== 'now' ? `<label class="field" style="flex:1 1 150px"><span class="label">시작할 때 남은 원금 <span style="font-weight:400">(선택)</span></span><input class="input r" data-co="startLeft" inputmode="numeric" value="${esc(d.startLeft || '')}" placeholder="원금과 같으면 비움"></label>` : ''}</div>
-      ${d.out === 'now' && !D.id ? `<label class="field"><span class="label">나간 통장</span><select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>` : ''}
       <label class="field"><span class="label">메모</span><input class="input" data-co="memo" value="${esc(d.memo)}"></label>
       <div class="err" data-err></div>
       ${D.id ? `<button class="btn ghost" type="button" style="color:var(--out);align-self:flex-start" data-act="clLoanDel">이 대출 지우기</button>` : ''}
@@ -145,7 +146,7 @@ function viewClubDlgX(D) {
         <div class="dlg-btns"><button class="btn" data-act="coBack">고치기</button><button class="btn ink" data-act="coSave">확인하고 저장</button></div></div>`;
     }
     // 돈 나간 곳 3가지 (모든 화면 크기 같음) · 통장 기록 없이 = 생일선물·결혼축의금을 회비로 대신할 때 등
-    const srcs = [['bank', '통장 출금(기본)'], ['cash', '현금'], ['inner', '무출금(장부에만)']];
+    const srcs = [['link', '통장 기록에 연결'], ['bank', '통장(새로)'], ['cash', '현금'], ['inner', '장부에만']]; // 같은 순서 · 같은 이름 (v34)
     const wedWarn = isWed && d.memberId && (memberOf(d.memberId) || {}).wed ? `<div class="warnbox">${ic('circle-alert', 20)}<div>${esc(memberOf(d.memberId).name)} 회원은 결혼축의금을 이미 받았어요 (${memberOf(d.memberId).wed.date.replace(/-/g, '.')} · ${won(memberOf(d.memberId).wed.amount)}원). <b>다시 주지 않아요.</b></div></div>` : '';
     const memos = [...new Set(clubTx().filter((x) => x.memo).sort(sortTx).map((x) => x.memo))].slice(0, 60);
     return `<form class="dlg" data-form="clubOut" autocomplete="off" style="max-width:560px"><h2 class="dlg-title">${D.txId ? '지출 고치기' : '지출 입력'}</h2>

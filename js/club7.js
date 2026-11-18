@@ -540,6 +540,11 @@ let C7_BASE_TX = null;
       const out = await splitTx(x, [{ amount: x.amount - lp, patch: { accountId: feeAccount().id, status: '확인', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: 0 } } }, { amount: lp, patch: loanPatch(L, acc) }], items);
       return done(`${m.name} 회비 ${P.alloc.length}개월 + 대출 상환 ${won(lp)}원${loanCalc(L).left === 0 ? ' (완납)' : ''} · ${out.length}줄로 나눔`);
     }
+    if (!C.txId && C.src === 'record') {
+      const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: '기록만 (다른 곳에서 받음)', accountId: feeAccount().id, payMethodId: null, bankId: null, internal: true, recordOnly: true, status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
+      items.push({ col: 'tx', id: s.id, before: null });
+      return done(`${m.name} 회비 ${P.alloc.length}개월 · 기록만 (통장 · 통계 그대로)`);
+    }
     if (!C.txId && (C.src === 'cash' || C.src === 'inner')) {
       const s = await Store.put('tx', { kind: 'in', date: C.date || todayStr(), amount: C.amount, merchant: m.name, memo: C.src === 'inner' ? '무입금(장부에만)' : '회비', accountId: feeAccount().id, payMethodId: C.src === 'cash' ? cashPayId() : null, bankId: null, internal: C.src === 'inner', status: '확인', source: '직접', club: { memberId: m.id, type: 'fee', alloc: allocClean(P.alloc), extra: P.extra }, deleted: false });
       items.push({ col: 'tx', id: s.id, before: null });

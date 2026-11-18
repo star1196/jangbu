@@ -39,7 +39,8 @@ const nonStat = (x) => { const a = accOf(x.accountId); return !!a && (a.nonStat 
 const clubTx = () => liveTx().filter((x) => isMoney(x) && !x.archived && counted(x));
 const bankPayId = () => (Store.all('payMethods').find((p) => p.kind === 'bank') || {}).id || null;
 const cashPayId = () => (Store.all('payMethods').find((p) => p.kind === 'cash') || {}).id || null;
-const mainBank = () => banksOpen()[0] || banksAll()[0] || null;
+// 주 통장: 고른 것(b.main) → 이름에 「국민」 → 첫 통장 (v34 · 입력 기본 통장)
+const mainBank = () => { const o = banksOpen(); return o.find((b) => b.main) || o.find((b) => /국민/.test(`${b.bank || ''}${b.name || ''}`)) || o[0] || banksAll()[0] || null; };
 const shortBank = (b) => (b ? (b.bank || b.name || '').replace(/은행$/, '') : '');
 const isHold = (x) => x.club && x.club.type === 'hold';
 const isUncClub = (x) => isUnc(x) && !isHold(x);
@@ -186,7 +187,8 @@ function viewClubFee() {
   const P = cfPlan();
   const head = x ? `<span class="sub small">${esc(m.name)} · ${x.date.replace(/-/g, '.')} 입금${x.internal ? ' · 장부에만' : ' · ' + esc(bankName(x.bankId))}${x.bankMemo ? ' · 통장 메모: ' + esc(x.bankMemo) : ''}</span><div class="bigamt pos">+${won(x.amount)}원</div>`
     : `<span class="sub small">${esc(m.name)} · 직접 넣기</span>
-      <div class="seg" style="margin:6px 0">${[['bank', '통장 입금'], ['cash', '현금'], ['inner', '무입금(장부에만)']].map(([k, l]) => `<button class="${(C.src || 'bank') === k ? 'on' : ''}" data-act="cfSrc" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="seg wrap" style="margin:6px 0">${[['link', '통장 기록에 연결'], ['bank', '통장(새로)'], ['cash', '현금'], ['inner', '장부에만'], ['record', '기록만']].map(([k, l]) => `<button class="${(C.src || 'bank') === k ? 'on' : ''}" data-act="cfSrc" data-v="${k}">${l}</button>`).join('')}</div>
+      ${C.src === 'link' ? pwList('cf', pwCands({ kind: 'in', amount: C.amount, date: C.date, names: [m.name, ...(m.aliases || [])] })) : ''}${C.src === 'record' ? '<span class="sub small">다른 곳에서 이미 받은 회비를 표시만 해요. 회비 달은 채워지고, 통장 · 통계는 그대로예요.</span>' : ''}
       <div class="cfin"><label class="field"><span class="label">날짜</span><input class="input" type="date" data-cf="date" value="${esc(C.date)}"></label>
       <label class="field"><span class="label">금액</span><input class="input r" data-cf="amount" inputmode="numeric" pattern="[0-9]*" value="${C.amount ? comma(C.amount) : ''}" placeholder="0" data-autofocus></label>
       ${C.src === 'cash' || C.src === 'inner' ? '' : `<label class="field"><span class="label">통장</span><select class="input" data-cf="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === C.bankId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>`}</div>`;

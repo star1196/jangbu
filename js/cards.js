@@ -334,6 +334,7 @@ function viewBillDlg(D) {
     <div class="drow"><span class="sub">나간 통장</span><b>${c.bankId ? esc(bankName(c.bankId)) : '정하지 않음'}</b></div>
     <span class="sub small">${b.items.length}건 사용분${b.items.some((i) => i.p.n > 1) ? ' (할부 포함)' : ''}. 확인하면 통장 잔액에서 빠지고, 지출 합계에는 다시 더하지 않아요.</span>
     ${feat('banks') && !c.bankId ? `<span class="small" style="color:var(--warn)">통장을 정하지 않으면 잔액에는 반영되지 않아요. [카드 고치기]에서 정할 수 있어요.</span>` : ''}
+    ${typeof billWayBlock === 'function' ? billWayBlock(D) : ''}
     <div class="dlg-btns"><button class="btn" data-act="closeDlg">아직 안 나갔어요</button><button class="btn ink" data-act="billPaidYes">네, 나갔어요</button></div></div>`;
 }
 

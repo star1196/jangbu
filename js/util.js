@@ -234,6 +234,7 @@ function leftBank(x) { return !isCredit(x) && !x.internal; } // 장부에만(무
 function sumTx(list) {
   let inc = 0, out = 0, bank = 0, saved = 0;
   for (const x of list) {
+    if (x.recordOnly) continue; // 기록만: 돈 없이 처리 표시 (v34)
     if (x.kind === 'in') inc += x.amount;
     else if (x.kind === 'out') { out += x.amount; if (leftBank(x)) bank += x.amount; saved += (x.discount || 0) + (x.pointUsed || 0) + (x.feeSaved || 0); } // 할부 수수료 면제도 아낀 돈
     else if (x.kind === 'bill' && !isSep(x.bankId)) bank += x.amount; // 카드 대금: 통장에서 나간 돈에만
