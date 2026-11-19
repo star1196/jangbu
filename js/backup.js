@@ -23,8 +23,24 @@ function backupFileName(ts) {
 }
 
 /* 묶음 이름을 사람 말로 (확인 화면 건수 풀이) */
-const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것', notes: '할 일·기념일', photos: '영수증 사진' };
+const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것', notes: '할 일·기념일', photos: '영수증 사진', members: '회원', loans: '대출', clauses: '회칙 조항', decisions: '결의·개정 기록' };
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
+
+// v36: 이 백업의 마지막 기록 (가장 나중에 넣거나 고친 것: 날짜·시각·내용) + 기록 수
+const LAST_SKIP = new Set(['meta', 'photos', 'gone', 'imports']);
+function lastRecInfo(cols) {
+  let best = null, col0 = '', n = 0;
+  for (const col of Object.keys(cols || {})) {
+    if (LAST_SKIP.has(col)) continue;
+    for (const r of cols[col] || []) { if (r.deleted) continue; n++; if (!best || (r.updatedAt || 0) > (best.updatedAt || 0)) { best = r; col0 = col; } }
+  }
+  if (!best) return { n, at: 0, txt: '' };
+  const d = (v) => String(v || '').replace(/-/g, '.');
+  const txt = col0 === 'tx' ? `${best.kind === 'in' ? '수입' : best.kind === 'out' ? '지출' : '이체'} ${d(best.date)} · ${won(best.amount || 0)}원 · ${best.merchant || ''}${best.pairId ? ' (맞바꿈)' : ''}`
+    : col0 === 'members' ? `회원 ${best.name || ''} (생일·회비 칸 등)` : `${COL_NAMES[col0] || col0} ${best.name || best.title || best.no || ''}`;
+  return { n, at: best.updatedAt || 0, txt: txt.trim() };
+}
+const lastRecRow = (L) => `<div class="drow bklast"><span class="sub">이 백업의 마지막 기록</span><b style="text-align:right">${L.at ? `${stamp(L.at)} · ${esc(L.txt)}` : '없음'}<br><span class="sub small" style="font-weight:400">기록 ${L.n}건</span></b></div>`;
 
 /* ───────── 백업 저장 ───────── */
 // opt.noPhotos: 사진 빼고 (파일이 훨씬 작음. 사진은 이 기기에 그대로) · opt.cols: 이 묶음만 (연도별 사진 내보내기)
@@ -37,14 +53,15 @@ async function makeBackupText(opt) {
   const head = { app: 'jangbu', kind: 'backup', v: 2, ledgerId: Store.current().id, type: Store.current().type, name: Store.current().name, createdAt: at, device: deviceName(), photos: !opt.noPhotos, part: opt.part || '' }; // v2 (v33): 이 머리는 암호에 묶여서 고치면 안 열림
   const sealed = await Store.sealBackup(payload, head);
   const file = { ...head, ...sealed };
-  return { at, text: JSON.stringify(file), n: payload.counts.tx };
+  return { at, text: JSON.stringify(file), n: payload.counts.tx, last: lastRecInfo(cols) };
 }
 async function prepareBackup() {
   const D = S.dialog;
   D.text = null; render();
+  const ver = Store.ver(); // 저장이 끝나기를 기다린 뒤 지금 장부 그대로 (sealBackup이 기다림)
   const b = await makeBackupText({ noPhotos: !!D.noPhotos });
   if (S.dialog !== D) return;
-  D.at = b.at; D.name = (D.noPhotos ? '사진빼고_' : '') + backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
+  D.ver = ver; D.last = b.last; D.at = b.at; D.name = (D.noPhotos ? '사진빼고_' : '') + backupFileName(b.at); D.text = b.text; D.n = b.n; D.size = b.text.length;
   render();
 }
 // 지우기·합치기 직전 자동 백업: 파일 이름 앞에 '지우기전_' · '합치기전_'
@@ -211,6 +228,26 @@ function remapObj(o, map) {
   return n;
 }
 
+// 칸마다 고친 시각: _ft가 있으면 그 칸의 시각(없으면 처음 만든 때 = 저절로 적힌 칸), 없으면 기록을 고친 시각
+function fieldTime(r, k) { return r._ft ? (r._ft[k] !== undefined ? r._ft[k] : r.createdAt || 0) : r.updatedAt || 0; }
+function mergeFields(l, o) {
+  const ks = new Set([...Store.ftKeys(l), ...Store.ftKeys(o)]);
+  const out = { ...l, ...(l.gifts ? { gifts: { ...l.gifts } } : {}) }, ft = { ...(l._ft || {}) };
+  let ch = false;
+  for (const k of ks) {
+    const a = Store.ftVal(l, k), b = Store.ftVal(o, k);
+    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    const tl = fieldTime(l, k), to = fieldTime(o, k);
+    if (to <= tl) continue; // 이 기기 칸이 같거나 더 최신
+    if (k.startsWith('gifts.')) { out.gifts = out.gifts || {}; if (b === undefined) delete out.gifts[k.slice(6)]; else out.gifts[k.slice(6)] = b; }
+    else if (b === undefined) delete out[k]; else out[k] = b;
+    ft[k] = to; ch = true;
+  }
+  if (!ch) return null;
+  if (l._ft || o._ft) { for (const k of ks) if (ft[k] === undefined) ft[k] = fieldTime(l, k); out._ft = ft; }
+  out.updatedAt = Math.max(l.updatedAt || 0, o.updatedAt || 0);
+  return out;
+}
 // 무엇이 바뀔지 미리 셈 (아직 저장하지 않음)
 function planMerge(p) {
   const cur = Store.current();
@@ -248,10 +285,10 @@ function planMerge(p) {
       if (goneHere.has(col + '|' + o.id)) continue; // 이 기기에서 완전히 지운 것은 되살리지 않음
       const local = Store.get(col, o.id);
       if (!local) { puts.push([col, o]); if (!o.deleted) bump(col, 'add'); continue; }
-      if ((o.updatedAt || 0) <= (local.updatedAt || 0)) continue; // 이 기기 것이 같거나 더 최신
-      if (JSON.stringify({ ...o, updatedAt: 0 }) === JSON.stringify({ ...local, updatedAt: 0 })) continue;
-      puts.push([col, o]);
-      bump(col, o.deleted && !local.deleted ? 'del' : 'chg');
+      // v36: 기록 통째가 아니라 칸마다 더 나중에 고친 쪽 (두 기기에서 같은 회원의 다른 칸을 고쳐도 둘 다 남음)
+      const mg = mergeFields(local, o); if (!mg) continue;
+      puts.push([col, mg]);
+      bump(col, mg.deleted && !local.deleted ? 'del' : 'chg');
     }
   }
   for (const g of same ? cols.gone || [] : []) { // 다른 장부의 '지움' 기록은 이 장부와 상관없음
@@ -317,7 +354,7 @@ async function createFromBackup(form) {
     setSync(id, { fromBackup: true });
     setSync(id, { lastMerge: { at: p.createdAt, device: p.device, mergedAt: Date.now() } });
     S.busy = false; S.dialog = null;
-    afterOpen(); render(); toast(`백업으로 '${p.ledger.name}'을(를) 만들었어요 · 내역 ${liveCount(p.cols || {})}건`);
+    afterOpen(); render(); { const L = lastRecInfo(p.cols || {}); toast(`백업으로 '${p.ledger.name}'을(를) 만들었어요 · 내역 ${liveCount(p.cols || {})}건${L.at ? ` · 마지막 기록 ${stamp(L.at)} ${L.txt}` : ''}`); }
   } catch (e) {
     S.busy = false; render();
     showErr($app.querySelector('[data-form="fromBackup"]'), '만들지 못했어요. (' + e.message + ')');
@@ -362,6 +399,7 @@ function viewBackupDlg(D) {
       <div class="drow"><span class="sub">영수증 사진</span><div class="seg" style="max-width:240px"><button class="${D.noPhotos ? '' : 'on'}" data-act="bkPhotos" data-v="1">사진 포함</button><button class="${D.noPhotos ? 'on' : ''}" data-act="bkPhotos" data-v="0">사진 빼고</button></div></div>
       ${D.noPhotos ? '<span class="sub small">사진은 이 기기에 그대로 있어요. 파일이 작아져 카카오톡으로 보내기 쉬워요.</span>' : ''}
       <div class="drow"><span class="sub">내역</span><b>${ready ? D.n + '건' : '…'}</b></div>
+      ${ready && D.last ? lastRecRow(D.last) : ''}
       <div class="drow"><span class="sub">파일 크기</span><b>${ready ? mb(D.size) : '…'}</b></div>
       <div class="drow"><span class="sub">마지막 백업</span><b>${info.lastSave ? `${stamp(info.lastSave)} (${agoTxt(info.lastSave)})` : '없음'}</b></div>
       ${pwNote}
@@ -391,6 +429,7 @@ function viewBackupDlg(D) {
     return `<div class="dlg">${nameWarn}${forcedWarn}<h2 class="dlg-title">불러오기 (합치기)</h2>${head}
       ${older ? `<div class="warnbox">${ic('circle-alert', 22)}<div><b>더 예전 파일이에요. 그래도 합칠까요?</b><br>이 기기에 이미 합친 백업(${stamp(last.at)})보다 먼저 만든 파일이에요. 합쳐도 이 기기에서 더 나중에 고친 내용은 그대로 남아요.</div></div>` : ''}
       ${P.same ? '' : `<div class="conf-note sub">다른 기기에서 따로 만든 장부의 백업이에요. 이름이 같은 계정과목·결제수단은 하나로 합쳐요.</div>`}
+      ${D.payload && D.payload.cols ? lastRecRow(lastRecInfo(D.payload.cols)) : ''}
       <div class="mcount">${[['새로 들어올 것', c.add], ['바뀔 것', c.chg], ['지워질 것', c.del]].map(([l, n]) => `<div><span class="l">${l}</span><span class="a">${n}건</span></div>`).join('')}</div>
       ${by ? `<div>${by}</div>` : ''}
       <span class="sub small">${nothing ? '이 기기에 이미 다 들어 있어요. 합쳐도 바뀌는 것이 없어요.' : '같은 내역은 더 나중에 고친 쪽으로 맞춰요. 지워질 것은 휴지통으로 가거나, 다른 기기에서 완전히 지운 것이에요.'} 합치기 전에 지금 장부를 「합치기전_…」 파일로 자동 백업하고, 합친 뒤 [되돌리기]도 할 수 있어요.</span>
@@ -410,13 +449,14 @@ function viewBackupDlg(D) {
 
 const BACKUP_ACT = {
   dlgBackup: () => { S.dialog = { type: 'backup', step: 'ready', noPhotos: !!view.bkNoPhotos }; render(); prepareBackup().catch((e) => { S.dialog = null; render(); toast('백업을 만들지 못했어요 (' + e.message + ')'); }); },
-  saveBackup: () => {
+  saveBackup: async () => {
     const D = S.dialog; if (!D || !D.text) return;
+    if (D.ver !== Store.ver()) { await prepareBackup(); if (S.dialog !== D || !D.text) return; } // 창을 연 뒤에 새로 저장된 것이 있으면 다시 만듦
     downloadText(D.name, D.text);
     setSync(Store.current().id, { lastSave: D.at });
     D.step = 'done'; render();
   },
-  shareBackup: () => { const D = S.dialog; if (D && D.text) shareFile(D); },
+  shareBackup: async () => { const D = S.dialog; if (!D || !D.text) return; if (D.ver !== undefined && D.ver !== Store.ver()) { await prepareBackup(); if (S.dialog !== D || !D.text) return; } shareFile(D); },
   bkPhotos: (el) => { const D = S.dialog; D.noPhotos = el.dataset.v === '0'; view.bkNoPhotos = D.noPhotos; saveView(); prepareBackup().catch((e) => toast('백업을 만들지 못했어요 (' + e.message + ')')); },
   pickBackup: (el) => { const inp = $app.querySelector(`input[data-backup="${el.dataset.mode || 'merge'}"]`); if (inp) inp.click(); },
   mergeYes: () => { if (!S.busy) applyMerge().catch((e) => { S.busy = false; render(); toast('합치지 못했어요 (' + e.message + ')'); }); },

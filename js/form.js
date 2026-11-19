@@ -205,7 +205,7 @@ function viewSheet() {
           <div class="chips" data-part="cats"></div>
           <div data-part="sav"></div>
         </div>
-        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${formLinkBox(f)}${cardPart}${crBox(f)}</div>
+        <div class="field" style="gap:10px"><span class="label">결제</span><div class="chips" data-part="pays">${pays}</div>${formLinkBox(f)}${v6FormSwapBox(f)}${cardPart}${crBox(f)}</div>
         <div data-part="trip"></div>
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
         ${f.id && (Store.get('tx', f.id) || {}).bankMemo ? `<div class="field"><span class="label">통장 메모 <span style="font-weight:400">(파일 원본 · 고치지 않음)</span></span><span class="bmemo">${ic('landmark', 14)}${esc(Store.get('tx', f.id).bankMemo)}</span></div>` : ''}

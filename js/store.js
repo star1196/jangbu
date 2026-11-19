@@ -31,6 +31,18 @@ const Store = (() => {
     return out;
   }
   // 새로 넣는 내역에 '넣은 기기' 적기 (합치기로 들어온 다른 기기 내역은 그 기기 이름 그대로)
+  // v36: 칸마다 고친 시각(_ft) → 두 기기에서 같은 기록의 다른 칸을 고쳐도 합칠 때 둘 다 남음 (gifts는 연도마다)
+  const FT_SKIP = new Set(['id', 'updatedAt', 'createdAt', '_ft', 'dev']);
+  function ftKeys(o) { const ks = []; for (const k of Object.keys(o || {})) { if (FT_SKIP.has(k)) continue; if (k === 'gifts' && o.gifts && typeof o.gifts === 'object') Object.keys(o.gifts).forEach((y) => ks.push('gifts.' + y)); else ks.push(k); } return ks; }
+  function ftVal(o, k) { if (!o) return undefined; if (k.startsWith('gifts.')) return o.gifts ? o.gifts[k.slice(6)] : undefined; return o[k]; }
+  function stampFt(prev, o, now) {
+    if (!prev) return;
+    const ft = { ...(prev._ft || {}) }, ks = new Set([...ftKeys(prev), ...ftKeys(o)]);
+    let ch = false;
+    const base = prev._ft ? (prev.createdAt || 0) : (prev.updatedAt || 0);
+    for (const k of ks) { if (JSON.stringify(ftVal(prev, k)) !== JSON.stringify(ftVal(o, k))) { ft[k] = now; ch = true; } else if (ft[k] === undefined) ft[k] = base; }
+    if (ch || prev._ft) o._ft = ft;
+  }
   function stampDev(col, obj, o) {
     if (col === 'tx' && !obj.createdAt && !o.dev && typeof deviceName === 'function') { try { o.dev = deviceName(); } catch (e) { /* 그대로 */ } }
   }
@@ -203,6 +215,8 @@ const Store = (() => {
     const now = Date.now();
     const o = { ...obj, id: obj.id || uid(), updatedAt: keepTime && obj.updatedAt ? obj.updatedAt : now, createdAt: obj.createdAt || now };
     stampDev(col, obj, o);
+    const prev = mem[col] && mem[col].get(o.id);
+    if (!keepTime) stampFt(prev, o, now); else if (prev && prev._ft && !o._ft) o._ft = prev._ft;
     (mem[col] = mem[col] || new Map()).set(o.id, o); ver++;
     const k = key, lid = ledger.id;
     chain = chain.then(async () => {
@@ -221,7 +235,7 @@ const Store = (() => {
     const now = Date.now(), out = [], k = key, lid = ledger.id;
     for (const [col, obj] of list) {
       const o = { ...obj, id: obj.id || uid(), updatedAt: now, createdAt: obj.createdAt || now };
-      stampDev(col, obj, o);
+      stampDev(col, obj, o); stampFt(mem[col] && mem[col].get(o.id), o, now);
       (mem[col] = mem[col] || new Map()).set(o.id, o); out.push([col, o]);
     }
     ver++;
@@ -655,5 +669,5 @@ const Store = (() => {
   return { switchTo, isOpened, openedIds, checkPassword, usage, ver: () => ver,
     bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
     hasBundleKey: () => !!bundleKey,
-    badRows: () => { const o = opened.get(ledger && ledger.id); return o ? o.bad || 0 : 0; }, selfTest, removeMany, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+    badRows: () => { const o = opened.get(ledger && ledger.id); return o ? o.bad || 0 : 0; }, selfTest, removeMany, ftKeys, ftVal, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

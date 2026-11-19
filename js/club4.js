@@ -142,7 +142,7 @@ function viewRuleBook() {
       <button class="rbchead" data-act="rbFold" data-k="${esc(g.name)}" aria-expanded="${!R.fold[g.name]}">${ic(R.fold[g.name] ? 'chevron-right' : 'chevron-down', 18)}<span>${esc(g.name)}</span><span class="sub small">${g.list.length}개</span></button>
       ${R.fold[g.name] ? '' : g.list.map((c) => `<div class="clause ${c.status === '삭제' ? 'old' : ''}">
         <button class="clbtn" data-act="clOpen" data-id="${c.id}"><span class="clhead"><b>${hl(c.no, q)}</b>${c.title ? ` <span>(${hl(c.title, q)})</span>` : ''}${clTag(c)}</span><span class="cltext">${clTextHtml(c.text, q)}</span></button>
-        ${R.edit ? `<div class="chips noprint" style="padding:0 0 10px 12px"><button class="btn" data-act="clEdit" data-id="${c.id}">고치기</button>${c.status !== '삭제' ? `<button class="btn" data-act="clDel" data-id="${c.id}">옛 조항으로 (삭제)</button>` : ''}</div>` : ''}
+        ${R.edit ? `<div class="chips noprint" style="padding:0 0 10px 12px"><button class="btn" data-act="clMove" data-id="${c.id}" data-d="-1" aria-label="위로">↑</button><button class="btn" data-act="clMove" data-id="${c.id}" data-d="1" aria-label="아래로">↓</button><button class="btn" data-act="clEdit" data-id="${c.id}">고치기</button>${c.status !== '삭제' ? `<button class="btn" data-act="clDel" data-id="${c.id}">옛 조항으로 (삭제)</button>` : ''}</div>` : ''}
       </div>`).join('')}
       ${R.edit && !R.fold[g.name] ? `<button class="btn ghost noprint" style="margin:6px 0 0 12px" data-act="clAdd" data-chap="${esc(g.name)}">${ic('plus', 16)}이 장에 조항 추가</button>` : ''}
     </section>`).join('');
@@ -152,7 +152,7 @@ function viewRuleBook() {
         <span class="chips noprint"><button class="btn ${R.search ? 'ink' : ''}" data-act="rbSearch">${ic('search', 18)}검색</button><button class="btn" data-act="rbPrint">${ic('file-spreadsheet', 18)}인쇄·PDF</button><button class="btn ${R.edit ? 'ink' : ''}" data-act="rbEdit">${R.edit ? '고치기 끝' : '고치기'}</button></span></div>
       <span class="sub">${D0.est ? `제정 ${dTxt(D0.est)}` : ''}${D0.last ? ` · 최종 개정 ${dTxt(D0.last)}` : ''}</span>
       ${R.search ? `<label class="qbox noprint" style="min-height:48px;border-width:1px;margin-top:10px">${ic('search', 18)}<input data-rbq value="${esc(R.q)}" placeholder="조항 · 제목 · 내용 찾기 (예: 회비, 축의금)" autocomplete="off" data-autofocus></label>` : ''}
-      <div class="chips noprint" style="margin-top:10px"><button class="chip ${R.old ? 'on' : ''}" data-act="rbOld" aria-pressed="${R.old}">${R.old ? ic('check', 14) : ''}옛 조항 보기 (${oldN})</button><button class="chip" data-act="go" data-to="개정·결의 기록">📜 개정·결의 기록</button><button class="chip" data-act="rbLinks">회칙 숫자 ↔ 설정</button>${R.edit ? `<button class="chip" data-act="decNew">${ic('plus', 14)}결의 기록</button>` : ''}</div>
+      <div class="chips noprint" style="margin-top:10px"><button class="chip ${R.old ? 'on' : ''}" data-act="rbOld" aria-pressed="${R.old}">${R.old ? ic('check', 14) : ''}옛 조항 보기 (${oldN})</button><button class="chip" data-act="go" data-to="개정·결의 기록">📜 개정·결의 기록</button><button class="chip" data-act="rbLinks">회칙 숫자 ↔ 설정</button>${R.edit ? `<button class="chip" data-act="clAdd">${ic('plus', 14)}조항 추가</button><button class="chip" data-act="clAddYak">${ic('plus', 14)}약관 추가</button><button class="chip" data-act="clAddBu">${ic('plus', 14)}부칙 추가</button><button class="chip" data-act="decNew">${ic('plus', 14)}결의 기록</button>` : ''}</div>
     </section>
     ${chaps.length > 1 ? `<nav class="rbtoc noprint" aria-label="목차"><span class="sub small">목차</span><div class="chips">${toc}</div></nav>` : ''}
     <section class="card rbbook">${body || `<div class="empty">「${esc(q)}」 찾은 조항이 없어요.</div>`}</section>
@@ -321,6 +321,23 @@ const CLUB4_ACT = {
   clOpen: (el) => { if (!el.dataset.id) return; S.dialog = { type: 'clView', id: el.dataset.id }; render(); },
   clEdit: (el) => { const c = Store.get('clauses', el.dataset.id); const t = todayStr(); S.dialog = { type: 'clEdit', id: c.id, d: { chap: c.chap, no: c.no, title: c.title, text: c.text, decided: t, from: t, mY: t.slice(0, 4), mQ: String(quarterOf(t)), mT: '정기모임', meeting: '', result: '', memo: '' } }; render(); },
   clAdd: (el) => { const t = todayStr(); S.dialog = { type: 'clEdit', id: null, d: { chap: el.dataset.chap || '', no: '', title: '', text: '', decided: t, from: t, mY: t.slice(0, 4), mQ: String(quarterOf(t)), mT: '정기모임' } }; render(); },
+  // v36: 약관 · 부칙 추가 (번호는 저절로 다음 번호) · 순서 바꾸기
+  clAddYak: () => {
+    const all = clausesAll(), yc = all.filter((c) => /약관/.test(c.chap)), n = Math.max(0, ...all.map((c) => (/^약관\s*(\d+)/.exec(c.no) || [])[1] || 0).map(Number));
+    CLUB4_ACT.clAdd({ dataset: { chap: yc.length ? yc[yc.length - 1].chap : '추가 약관' } }); S.dialog.d.no = `약관 ${n + 1}`; render();
+  },
+  clAddBu: () => {
+    const n = Math.max(0, ...clausesAll().map((c) => (/^제\s*(\d+)\s*조/.exec(c.no) || [])[1] || 0).map(Number));
+    CLUB4_ACT.clAdd({ dataset: { chap: '부칙' } }); S.dialog.d.no = `제 ${n + 1} 조`; render();
+  },
+  clMove: async (el) => {
+    const c = Store.get('clauses', el.dataset.id), same = clausesAll().filter((x) => x.chap === c.chap), i = same.findIndex((x) => x.id === c.id), o = same[i + +el.dataset.d];
+    if (!o) { toast(+el.dataset.d < 0 ? '이 장의 맨 위예요' : '이 장의 맨 아래예요'); return; }
+    const items = [{ col: 'clauses', id: c.id, before: { ...c } }, { col: 'clauses', id: o.id, before: { ...o } }];
+    const a = c.order || 0, b = o.order || 0;
+    await Store.put('clauses', { ...c, order: a === b ? b + (+el.dataset.d) * 0.01 : b }); await Store.put('clauses', { ...o, order: a });
+    render(); toast(`${c.no} 순서를 바꿨어요`, { items });
+  },
   clDel: (el) => { const t = todayStr(); S.dialog = { type: 'clDel', id: el.dataset.id, d: { decided: t, to: t, mY: t.slice(0, 4), mQ: String(quarterOf(t)), mT: '정기모임' } }; render(); },
   clSave: async () => {
     const D = S.dialog, d = D.d, err = (m) => { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = m; };
@@ -335,8 +352,9 @@ const CLUB4_ACT = {
       const h = { text: c.text, title: c.title, no: c.no, chap: c.chap, from: c.from, changedOn: d.decided, kind: '개정', meeting, result: d.result || '', memo: d.memo || '' };
       saved = await Store.put('clauses', { ...c, chap: d.chap.trim(), no: d.no.trim(), title: d.title.trim(), text: d.text, from: d.from || d.decided, hist: [...(c.hist || []), h] });
     } else {
-      const order = (clausesAll().filter((x) => x.chap === d.chap).pop() || clausesAll().slice(-1)[0] || { order: 0 }).order + 0.5;
-      saved = await Store.put('clauses', { chap: d.chap.trim(), no: d.no.trim(), title: d.title.trim(), text: d.text, from: d.from || d.decided, to: '', status: '현행', memo: '', order, hist: [] });
+      const last = clausesAll().slice(-1)[0] || { order: 0 }, inChap = clausesAll().filter((x) => x.chap === d.chap.trim()).pop(), nxt = inChap ? clausesAll().find((x) => (x.order || 0) > (inChap.order || 0)) : null;
+      const order = inChap ? (nxt ? ((inChap.order || 0) + (nxt.order || 0)) / 2 : (inChap.order || 0) + 1) : (last.order || 0) + 1; // 그 장의 맨 끝 (없는 장이면 맨 뒤)
+      saved = await Store.put('clauses', { chap: d.chap.trim(), no: d.no.trim(), title: d.title.trim(), text: d.text, from: d.from || d.decided, to: '', status: '현행', memo: String(d.memo || '').trim(), order, hist: [] });
       items.push({ col: 'clauses', id: saved.id, before: null });
     }
     const dec = await Store.put('decisions', { date: d.decided, kind: c ? '개정' : '신설', clauseId: saved.id, clauseNo: saved.no, summary: `${saved.title ? `(${saved.title}) ` : ''}${c ? '개정' : '신설'}${c ? (() => { const a0 = amountsIn(c.text).map((x) => x.n), a1 = amountsIn(saved.text).map((x) => x.n), k = a1.findIndex((v, i) => v !== a0[i]); return k >= 0 && a0[k] != null ? ` · ${won(a0[k])}원 → ${won(a1[k])}원` : ''; })() : ''}`, meeting, result: d.result || '', memo: d.memo || '', from: saved.from, before: c ? c.text : null, after: saved.text });

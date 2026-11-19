@@ -48,7 +48,7 @@ viewBdayScreen = function () {
       <div class="secrow"><h2 class="h2">🎂 생일</h2><span class="chips" style="gap:6px"><button class="btn" data-act="b3Rejudge">다시 판정${RJ.length ? ` (${RJ.length})` : ''}</button>${YF.length ? `<button class="btn" data-act="b3YearFix">생일 연도 다시 맞추기 (${YF.length})</button>` : ''}<button class="btn" data-act="b2Find">통장 기록으로 찾기</button></span></div>
       <button class="b4dueline ${S.b4Only ? 'on' : ''}" data-act="b4Only">${D.length ? `<b>미정산 ${D.length}건</b> <span class="sub small">${S.b4Only ? '모두 보기' : '누르면 미정산 칸만'}</span>` : '<b>미정산 0건</b> <span class="sub small">보낼 생일이 없어요</span>'}</button>
       ${B4_LEGEND}
-      <div class="chips" style="margin:6px 0"><button class="btn" data-act="b3SelToggle">${ic('list-checks', 16)}${sel ? '고르기 끝' : '여러 칸 고르기'}</button>${sel ? `<span class="sub small">${nPick}칸 →</span>${[['record', '보냄(날짜 없이)'], ['defer', '미정산'], ['exempt', '면제'], ['clear', '지우기']].map(([k, l]) => `<button class="btn" data-act="b3Bulk" data-v="${k}" ${nPick ? '' : 'disabled'}>${l}</button>`).join('')}` : ''}</div>
+      <div class="chips" style="margin:6px 0"><button class="btn" data-act="b3SelToggle">${ic('list-checks', 16)}${sel ? '고르기 끝' : '여러 칸 고르기'}</button>${sel ? `<span class="sub small">${nPick}칸 →</span>${[['sent', '보냄(날짜 넣기)', 'v6Bulk'], ['swap', '회비로 대신(맞바꿈)', 'v6Bulk'], ['record', '보냄(날짜 없이)'], ['defer', '미정산'], ['exempt', '면제'], ['clear', '지우기']].map(([k, l, a]) => `<button class="btn" data-act="${a || 'b3Bulk'}" data-v="${k}" ${nPick ? '' : 'disabled'}>${l}</button>`).join('')}` : ''}</div>
       ${ms.length ? bdMatrix(ms) : '<span class="sub">생일을 넣은 회원이 없어요.</span>'}
       <span class="sub small" style="display:block;margin-top:6px">규정적용 = 생일 날 기준 미납(${esc(giftModeTxt())}) · 그때 금액으로 고정돼요. 칸을 눌러 바꿀 수 있어요.</span></section></div>`;
 };
@@ -116,7 +116,7 @@ clubAutoRecord = async function () {
     const date = bdayOf(m, Y); if (!date || date >= t || date < sd || (m.joinDate && date.slice(0, 7) < m.joinDate.slice(0, 7))) continue;
     const cur = memberOf(m.id), rec = (cur.gifts || {})[Y]; if (rec) continue; // 이미 뭔가 적혀 있으면 손대지 않음
     if (giftTxFor(cur, Y)) continue;
-    const j = giftJudge(cur, Y); await Store.put('members', { ...cur, gifts: { ...(cur.gifts || {}), [Y]: { judge: { ...j, at: Date.now(), fixed: true } } } }); n++;
+    const j = giftJudge(cur, Y); await Store.put('members', { ...cur, gifts: { ...(cur.gifts || {}), [Y]: { judge: { ...j, at: Date.now(), fixed: true } } } }, true); n++; // 저절로 적는 것은 고친 시각을 안 바꿈(합칠 때 사람이 고친 쪽이 이김)
   }
   return n;
 };

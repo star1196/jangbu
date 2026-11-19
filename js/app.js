@@ -692,6 +692,7 @@ const ACT = {
   ...SAFE_ACT,
   ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
+  ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
   ...PW_ACT, // 돈 넣는 방식 · 카드값 결제 연결 (payway.js · v34 · 맨 뒤라야 카드값 결제를 덮음)
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
@@ -719,6 +720,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV36Input(el)) return; // v36 (v36.js)
   if (onPwInput(el)) return; // 메모 칸 (payway.js · v35)
   if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
   if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
