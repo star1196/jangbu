@@ -550,6 +550,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (D.type === 'v7Out') {
+    body = viewV7Dlg(D); // 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   } else if (/^v6/.test(D.type)) {
     body = viewV36Dlg(D); // 짝으로 묶기 · 생일 여러 칸 (v36.js)
   } else if (D.type === 'u2Ask') {

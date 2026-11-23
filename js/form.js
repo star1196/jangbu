@@ -461,7 +461,7 @@ async function formFinal() {
   const before = f.id ? { ...Store.get('tx', f.id) } : null;
   const date = `${f.y}-${pad2(+f.mo)}-${pad2(+f.d)}`;
   const common = { ...(before || {}), id: f.id || undefined, date, kind: f.kind, amount: f.amount, memo: f.memo.trim(), source: (before && before.source) || (f.rc ? '영수증' : '직접'), deleted: false,
-    ...(f.rc ? { approval: f.rc.approval || '', receiptHash: f.rc.hash, receiptTime: f.rc.time || '' } : {}) };
+    ...(f.rc ? { approval: f.rc.approval || (before && before.approval) || '', receiptHash: f.rc.hash || (before && before.receiptHash) || '', receiptTime: f.rc.time || '', ...(f.rc.raw ? { rcText: String(f.rc.raw).slice(0, 4000) } : {}) } : {}) }; // v37: 영수증 원문 글자도 붙임(찾기에 쓰임)
   const obj = f.kind === 'tr'
     ? { ...common, fromId: f.fromId, toId: f.toId, merchant: '', accountId: null, payMethodId: null, bankId: null, status: '확인', originalPrice: 0, discount: 0, pointUsed: 0 }
     : {
@@ -478,11 +478,12 @@ async function formFinal() {
       cashReceipt: crAble(f) && f.cr && f.cr.on ? { deduct: !!f.cr.deduct } : null
     };
   // 영수증 사진 붙이기: 작게 줄인 사진을 'photos' 묶음에 (장부 비밀번호로 암호화) · 내역엔 사진 번호만
-  const th = f.rc && f.rc.thumb && rcPhotoOn() && !(before && before.photoId) ? f.rc.thumb : null;
+  const th = f.rc && f.rc.thumb && rcPhotoOn() && f.rc.keepPhoto !== false && !(before && before.photoId) ? f.rc.thumb : null; // v37: 「사진도 저장」 체크칸
   if (th) obj.photoId = Store.uid();
   S.busy = true;
   const saved = await Store.put('tx', keepOrig(before, obj)); // 파일 줄: 금액 · 날짜 바꾸면 「원본과 다름」 (v33)
   if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
+  if (f.rc && f.kind === 'out' && typeof rcLearnShape === 'function') await rcLearnShape(f.rc, obj).catch(() => {}); // v37: 가게 단서 · 영수증 모양 기억
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
   if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { if (f.payId !== INNER_PAY && f.payId !== LINK_PAY) S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }

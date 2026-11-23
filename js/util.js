@@ -102,7 +102,7 @@ function txSearchText(x) {
   const C = txCache(); if (!C.idx) C.idx = new Map();
   let t = C.idx.get(x.id);
   if (t == null) {
-    const n = norm([x.merchant, x.memo, x.bankMemo, x.internal ? '장부에만' : '', (accOf(x.accountId) || {}).name, (payOf(x.payMethodId) || {}).name, x.bankId ? (bankOf(x.bankId) || {}).name : '', x.amount].filter(Boolean).join(' '));
+    const n = norm([x.merchant, x.memo, x.bankMemo, x.internal ? '장부에만' : '', (accOf(x.accountId) || {}).name, (payOf(x.payMethodId) || {}).name, x.bankId ? (bankOf(x.bankId) || {}).name : '', x.amount, x.rcText || ''].filter(Boolean).join(' '));
     t = n + '\u0001' + cho(n); C.idx.set(x.id, t);
   }
   return t;

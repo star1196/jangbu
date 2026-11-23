@@ -220,7 +220,7 @@ function viewCreate() {
   const T = DATA.LEDGER_TYPES.find((t) => t.type === S.createType);
   const name = S.createName || T.defaultName;
   const types = shown.map((t) => `<button type="button" class="chip ${t.type === S.createType ? 'on' : ''}" ${t.ready ? `data-act="createType" data-t="${t.type}"` : 'disabled'}>${esc(t.label)}${t.ready ? '' : ' · 나중에'}</button>`).join('');
-  const preset = S.createPreset || 'simple';
+  const preset = S.createPreset || 'all';
   if (!shown.some((t) => t.ready)) {
     return `<div class="gate"><div class="gate-box"><h1 class="gate-title">새 장부 만들기</h1><span class="sub">이 기기에서 보이게 한 장부 종류 중 지금 만들 수 있는 것이 없어요.</span>
       <button class="btn ink big" data-act="showAllTypes">모든 장부 종류 다시 보이기</button>${S.ledgers.length ? '<button class="btn ghost" data-act="toLock">취소</button>' : ''}</div></div>`;
@@ -402,6 +402,7 @@ function afterOpen() {
   setTimeout(() => cleanPhotos().catch(() => {}), 0); // 내역이 완전히 지워진 영수증 사진 정리
   setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
+  if (typeof v7FeatNotice === 'function') v7FeatNotice(); // v37: 꺼져 있던 기능을 켰으면 알림
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
   // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
   setTimeout(() => { if (typeof clubRulesAutoSeed === 'function' && isClubBook()) Promise.all([clubRulesAutoSeed(), clubAccountsAdd()]).then(([a, b]) => { if ((a || b) && S.mode === 'app') render(); }).catch(() => {}); }, 0);
@@ -668,14 +669,14 @@ const ACT = {
   toggleFeat: async (el) => {
     const k = el.dataset.k, st = Store.get('meta', 'settings') || { id: 'settings' };
     const features = { ...(st.features || {}) }; features[k] = !feat(k);
-    await Store.put('meta', { ...st, features });
+    await Store.put('meta', { ...st, features, featLog: [...(st.featLog || []), { at: Date.now(), how: `「사용할 기능」에서 ${features[k] ? '켬' : '끔'}`, keys: [k] }].slice(-30) }); // v37: 언제 · 어떻게 바뀌었는지
     const f = DATA.FEATURES.find((x) => x.key === k);
     render(); toast(features[k] ? `'${f.name}'을(를) 켰어요` : `'${f.name}'을(를) 껐어요. 자료는 그대로예요`);
   },
   featPreset: async (el) => {
     const st = Store.get('meta', 'settings') || { id: 'settings' }, before = { ...st };
     const features = {}; DATA.FEATURES.forEach((f) => { features[f.key] = el.dataset.p === 'simple' ? f.simple : true; });
-    await Store.put('meta', { ...st, features });
+    await Store.put('meta', { ...st, features, featLog: [...(st.featLog || []), { at: Date.now(), how: el.dataset.p === 'simple' ? '[간단하게] 단추' : '[모두 켜기] 단추', keys: DATA.FEATURES.filter((f) => !features[f.key]).map((f) => f.key) }].slice(-30) });
     render(); toast(el.dataset.p === 'simple' ? '간단하게로 맞췄어요. 자료는 그대로예요' : '모든 기능을 켰어요', { items: [{ col: 'meta', id: 'settings', before }] });
   },
   ...FORM_ACT,
@@ -692,6 +693,8 @@ const ACT = {
   ...SAFE_ACT,
   ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
+  ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
+  ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
   ...PW_ACT, // 돈 넣는 방식 · 카드값 결제 연결 (payway.js · v34 · 맨 뒤라야 카드값 결제를 덮음)
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
@@ -720,6 +723,8 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV7OutInput(el)) return; // v37 출력 창 (print7.js)
+  if (onV37Input(el)) return; // v37 (v37.js)
   if (onV36Input(el)) return; // v36 (v36.js)
   if (onPwInput(el)) return; // 메모 칸 (payway.js · v35)
   if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
@@ -821,7 +826,7 @@ const FORM = {
     S.busy = true; render();
     try {
       const type = S.createType || 'home';
-      const id = await Store.createLedger({ type, name, password: pw1, preset: S.createPreset || 'simple' });
+      const id = await Store.createLedger({ type, name, password: pw1, preset: S.createPreset || 'all' });
       await Store.unlock(id, pw1);
       await Store.migrate();
       let copied = 0;

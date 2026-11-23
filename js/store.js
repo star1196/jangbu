@@ -113,7 +113,7 @@ const Store = (() => {
     const now = Date.now();
     const recs = [];
     const features = {};
-    DATA.FEATURES.forEach((f) => { features[f.key] = type === 'club' ? DATA.CLUB_FEATURES_ON.includes(f.key) : preset === 'simple' ? f.simple : true; });
+    DATA.FEATURES.forEach((f) => { features[f.key] = type === 'club' ? DATA.CLUB_FEATURES_ON.includes(f.key) : preset === 'simple' ? f.simple : true; }); // v37: 고르지 않으면 모두 켬
     recs.push(['meta', { id: 'settings', schema: 0, autoLockMin: 5, startPoint: type === 'club' ? '2601' : '', alertDays: [30, 14, 7], features, createdAt: now, updatedAt: now }]);
     if (type === 'club') {
       // 친구회: 회비 30,000원(2026-01부터) · 생일선물 50,000원 · 배정은 밀린 달부터
@@ -343,6 +343,18 @@ const Store = (() => {
       }
       // 「통장 기록 없이 · 장부 안 처리」 → 「무출금 · 무입금 (장부에만)」 이름만 바꿈 (내용 · 금액 그대로)
       for (const x of all('tx')) if (x.memo && /장부 안 처리/.test(x.memo)) await put('tx', { ...x, memo: x.memo.replace(/장부 안 처리/g, '장부에만') }, true);
+    }],
+    [9, async () => { // v37: 꺼져 있던 기능을 한 번 모두 켬 (영수증 찍기 등 · 장부 종류에 맞는 기능만) · 기록을 남김
+      const st = get('meta', 'settings'); if (!st) return;
+      const type = (ledger && ledger.type) || 'home', f = { ...(st.features || {}) }, on = [];
+      for (const x of DATA.FEATURES) {
+        if (x.types && !x.types.includes(type)) continue;
+        if (type === 'club' && !DATA.CLUB_FEATURES_ON.includes(x.key)) continue; // 친구회는 원래 기본 목록 그대로
+        if (f[x.key] === false) { f[x.key] = true; on.push(x.key); }
+      }
+      if (!on.length) return;
+      const log = [...(st.featLog || []), { at: Date.now(), how: '새 버전에서 기본값으로 켬', keys: on, before: on.map((k) => k + ':꺼짐') }].slice(-30);
+      await put('meta', { ...st, features: f, featLog: log, featTurnedOn: on });
     }]
   ];
   const LATEST = MIGRATIONS[MIGRATIONS.length - 1][0];

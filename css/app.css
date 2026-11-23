@@ -1125,3 +1125,40 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .phone .b4grid th { font-size: calc(12px * var(--fs)); padding: 4px 2px; }
 .phone .b4grid td { padding: 2px; }
 .phone .b4c.sm, .b4c.sm { min-width: 18px; width: 18px; padding: 0; }
+
+/* v37 영수증 자르기 · 도구 */
+.v7crop { position: relative; max-height: 46vh; overflow: hidden; border-radius: 10px; background: #000; text-align: center; }
+.v7crop img { max-width: 100%; max-height: 46vh; display: inline-block; vertical-align: top; }
+.v7cropbox { position: absolute; border: 2px solid #C27A2C; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); pointer-events: none; }
+.v7rctools { margin-top: 6px; }
+
+/* v37 목록 출력 막대 · 칸 고르기 · 쪽 나눈 인쇄 */
+.v7bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.v7bar .seg { flex: 0 1 240px; }
+.v7cols { display: flex; flex-direction: column; gap: 2px; max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }
+.v7col { display: flex; align-items: center; gap: 4px; min-height: 40px; }
+.v7col .check { flex: 1; min-height: 40px; }
+.v7col:not(.on) { opacity: .7; }
+#v7print { display: none; }
+@media print {
+  body.v7printing #app, body.v7printing .toast { display: none !important; }
+  body.v7printing #v7print { display: block !important; }
+  #v7print .v7page { break-after: page; page-break-after: always; font-size: 9.5pt; color: #1F1F1F; display: flex; flex-direction: column; min-height: 266mm; }
+  #v7print .v7page.land { min-height: 180mm; }
+  #v7print .v7page:last-child { break-after: auto; page-break-after: auto; }
+}
+#v7print .v7ph { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1.5px solid #1F1F1F; padding-bottom: 4px; margin-bottom: 6px; font-size: 9pt; }
+#v7print .v7pf { margin-top: auto; display: flex; justify-content: space-between; border-top: 1px solid #D8D8D4; padding-top: 4px; font-size: 8.5pt; color: #77767A; }
+#v7print .v7t { width: 100%; border-collapse: collapse; table-layout: auto; }
+#v7print .v7t th { text-align: left; font-weight: 600; border-bottom: 1px solid #77767A; padding: 3px 4px; white-space: nowrap; }
+#v7print .v7t td { padding: 2px 4px; border-bottom: 1px solid #ECECE8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60mm; height: 6.2mm; }
+#v7print .v7t tr { break-inside: avoid; page-break-inside: avoid; }
+#v7print .v7t .r { text-align: right; }
+#v7print .v7t tr.carry td { font-style: italic; color: #77767A; background: #F7F7F5; }
+#v7print .v7t tr.msum td { font-weight: 700; background: #F2F2EE; }
+#v7print .v7t tr.tot td { font-weight: 800; border-top: 1.5px solid #1F1F1F; }
+#v7print .v7h3 { font-size: 11pt; margin: 10px 0 4px; }
+#v7print .v7photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#v7print .v7photos figure { margin: 0; break-inside: avoid; }
+#v7print .v7photos img { width: 100%; max-height: 110mm; object-fit: contain; }
+#v7print .v7photos figcaption { font-size: 8pt; color: #77767A; }
