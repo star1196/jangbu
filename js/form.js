@@ -63,7 +63,8 @@ const formCard = (f) => { const p = payOf(f.payId); return p && p.kind === 'card
 // 결제수단 목록: 현금 · 계좌이체 · 쓰는 카드들 (해지 카드는 숨김, 고칠 때 원래 카드는 보임)
 function payList(cur) {
   const ps = Store.all('payMethods');
-  return [...ps.filter((p) => p.kind !== 'card' && (!p.hidden || p.id === cur)).sort((a, b) => a.order - b.order), ...cardsAll().filter((c) => !c.closed || c.id === cur)];
+  const rank = { bank: 0, cash: 1 }; // v38 선택지 통일: 통장(계좌이체) → 현금 → 그 밖 → 카드
+  return [...ps.filter((p) => p.kind !== 'card' && (!p.hidden || p.id === cur)).sort((a, b) => ((rank[a.kind] ?? 2) - (rank[b.kind] ?? 2)) || a.order - b.order), ...cardsAll().filter((c) => !c.closed || c.id === cur)];
 }
 
 function openForm(f) { S.f = f; render(); focusField('amount'); }
@@ -156,7 +157,7 @@ function viewSheet() {
           <span style="font-size:${px(16)};font-weight:600">${esc(f.merchant || (acc ? acc.name : '가맹점 없음'))}</span>
           <span class="amt ${clsOf(n)}" style="font-size:${px(38)};letter-spacing:-0.03em">${moneyTxt(n)}</span>
         </div>
-        ${crBox(f, true)}
+        ${crBox(f, true)}${typeof v8ConfirmRows === 'function' ? v8ConfirmRows(f) : ''}
         <div>${rows.map(([k, v]) => `<div class="conf-row"><span class="k">${k}</span><span class="v">${esc(v)}</span><button class="linkbtn" data-act="fBack">고치기</button></div>`).join('')}</div>
       </div>
       <div class="sheet-foot"><button class="btn big" style="flex:1" data-act="fBack">고치기</button><button class="btn ink big" style="flex:1.3" data-act="fFinal" ${S.busy ? 'disabled' : ''}>${f.again ? '확인하고 저장, 하나 더' : '확인하고 저장'}</button></div>`;
@@ -210,6 +211,7 @@ function viewSheet() {
         ${needsBank(f) ? `<div class="field" style="gap:10px"><span class="label">어느 통장 <span style="font-weight:400">(${f.kind === 'in' ? '들어온' : '나간'} 통장)</span></span>${bankChips(f.bankId, 'fBank')}</div>` : ''}`}
         ${f.id && (Store.get('tx', f.id) || {}).bankMemo ? `<div class="field"><span class="label">통장 메모 <span style="font-weight:400">(파일 원본 · 고치지 않음)</span></span><span class="bmemo">${ic('landmark', 14)}${esc(Store.get('tx', f.id).bankMemo)}</span></div>` : ''}
         <label class="field"><span class="label">내 메모</span><input class="input" data-f="memo" value="${esc(f.memo)}" placeholder="필요할 때만 적어요" autocomplete="off"></label>
+        ${typeof v8Pills === 'function' ? v8Pills(f) : ''}
         ${f.kind === 'tr' || !showMore ? '' : `<button class="morebtn" data-act="fMore">${ic(f.more ? 'chevron-down' : 'chevron-right', 18)}더보기 <span class="sub" style="font-weight:400">(원래 가격 · 할인 · 포인트)</span></button>`}
         ${f.more && f.kind !== 'tr' && showMore ? `<div class="morebox">
           <div class="moregrid">
@@ -480,6 +482,7 @@ async function formFinal() {
   // 영수증 사진 붙이기: 작게 줄인 사진을 'photos' 묶음에 (장부 비밀번호로 암호화) · 내역엔 사진 번호만
   const th = f.rc && f.rc.thumb && rcPhotoOn() && f.rc.keepPhoto !== false && !(before && before.photoId) ? f.rc.thumb : null; // v37: 「사진도 저장」 체크칸
   if (th) obj.photoId = Store.uid();
+  const v8items = typeof v8BeforeSave === 'function' ? await v8BeforeSave(f, obj, before) : []; // v38: 알약 값 · 받을 돈
   S.busy = true;
   const saved = await Store.put('tx', keepOrig(before, obj)); // 파일 줄: 금액 · 날짜 바꾸면 「원본과 다름」 (v33)
   if (f.rc && f.rc.shop && f.kind === 'out') await rcLearn(f.rc.shop, obj.merchant, obj.accountId).catch(() => {}); // 영수증으로 배운 가게
@@ -487,7 +490,7 @@ async function formFinal() {
   if (th) await Store.put('photos', { id: obj.photoId, txId: saved.id, data: th.data, w: th.w, h: th.h, bytes: th.bytes });
   S.busy = false;
   if (f.kind === 'tr') { S.lastBank = f.fromId; S.lastTo = f.toId; } else { if (f.payId !== INNER_PAY && f.payId !== LINK_PAY) S.lastPay = f.payId; if (needsBank(f) && f.bankId) S.lastBank = f.bankId; }
-  const undo = { items: [{ col: 'tx', id: saved.id, before }, ...(th ? [{ col: 'photos', id: obj.photoId, before: null }] : [])] };
+  const undo = { items: [...v8items, { col: 'tx', id: saved.id, before }, ...(th ? [{ col: 'photos', id: obj.photoId, before: null }] : [])] };
   if (f.again) {
     S.f = newForm({ kind: f.kind, y: f.y, mo: f.mo, d: f.d, payId: f.payId, bankId: f.bankId, fromId: f.fromId, toId: f.toId });
     if (f.tripTouched) { S.f.tripId = f.tripId; S.f.tripTouched = true; }

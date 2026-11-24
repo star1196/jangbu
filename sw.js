@@ -1,5 +1,5 @@
 // 앱을 고칠 때마다 아래 버전 번호를 하나씩 올려요 (jangbu-v5 → jangbu-v6 …)
-const VERSION = 'jangbu-v37';
+const VERSION = 'jangbu-v38';
 // 영수증 글자 읽기 자료는 앱 버전과 따로 보관 (새 버전이 와도 다시 받지 않음)
 const OCR_CACHE = 'jangbu-ocr-5.1.1';
 
@@ -48,6 +48,8 @@ const FILES = [
   './js/v36.js',
   './js/v37.js',
   './js/print7.js',
+  './js/v38.js',
+  './js/home3.js',
   './js/screens.js',
   './vendor/xlsx.full.min.js',
   './vendor/pdf.min.js',

@@ -260,8 +260,8 @@ function viewSavings() {
 // 재산 현황표: 통장 잔액 + 적금·예금을 명의별·종류별로 (별도 통장은 합계에서 뺌)
 function viewAssets() {
   const items = [];
-  if (feat('banks')) banksOpen('home').forEach((b) => items.push({ owner: b.owner || '나', type: '통장', name: b.name, amt: bankBalance(b.id) }));
-  savingsActive().forEach((s) => items.push({ owner: s.owner || '나', type: s.stype || '적금', name: `${s.bank ? s.bank + ' ' : ''}${s.name}`, amt: savPaid(s) }));
+  if (feat('banks')) banksOpen('home').forEach((b) => items.push({ owner: ownerShow(b.owner), type: '통장', name: b.name, amt: bankBalance(b.id) }));
+  savingsActive().forEach((s) => items.push({ owner: ownerShow(s.owner), type: s.stype || '적금', name: `${s.bank ? s.bank + ' ' : ''}${s.name}`, amt: savPaid(s) }));
   const seps = feat('banks') && feat('sepBanks') ? banksOpen('sep') : [];
   if (!items.length && !seps.length) return '';
   const total = items.reduce((t, i) => t + i.amt, 0);
@@ -271,14 +271,14 @@ function viewAssets() {
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px"><h2 class="h2" style="font-size:${px(17)}">재산 현황</h2><span class="sub small">${fullDate(todayStr())} 기준</span></div>
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 0"><span class="sub">합계</span><span style="font-size:${px(22)};font-weight:700">${balance(total)}</span></div>
     <div class="chips" style="gap:6px;padding-bottom:8px">${Object.entries(byType).map(([k, v]) => `<span class="tag" style="padding:4px 10px;font-size:${px(13)}">${esc(k)} ${won(v)}원</span>`).join('')}</div>
-    ${owners.map((o) => { const its = items.filter((i) => i.owner === o); return `<div class="asgroup"><div class="ashead"><b>${esc(o)}</b><span>${balance(its.reduce((t, i) => t + i.amt, 0))}</span></div>
+    ${owners.map((o) => { const its = items.filter((i) => i.owner === o); return `<div class="asgroup"><div class="ashead"><b>${esc(ownerShow(o))}</b><span>${balance(its.reduce((t, i) => t + i.amt, 0))}</span></div>
       ${its.map((i) => `<div class="asrow"><span class="sub small" style="flex:none;width:${px(52)}">${esc(i.type)}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</span><span style="white-space:nowrap">${balance(i.amt)}</span></div>`).join('')}</div>`; }).join('')}
     ${seps.length ? `<div class="asgroup"><div class="ashead"><b>별도 통장</b><span class="sub small">합계에서 빠져요</span></div>${seps.map((b) => `<div class="asrow"><span class="sub small" style="flex:none;width:${px(52)}">별도</span><span style="flex:1;min-width:0">${esc(b.name)}</span><span style="white-space:nowrap">${balance(bankBalance(b.id))}</span></div>`).join('')}</div>` : ''}
   </section>`;
 }
 function savDraft(s) {
   s = s || {};
-  return { name: s.name || '', bank: s.bank || '', stype: s.stype || '적금', owner: s.owner || '나', purpose: s.purpose || '', start: s.start || todayStr(), monthly: s.monthly ? comma(s.monthly) : '', deposit: s.deposit ? comma(s.deposit) : '',
+  return { name: s.name || '', bank: s.bank || '', stype: s.stype || '적금', owner: ownerShow(s.owner), purpose: s.purpose || '', start: s.start || todayStr(), monthly: s.monthly ? comma(s.monthly) : '', deposit: s.deposit ? comma(s.deposit) : '',
     paidBefore: s.paidBefore ? comma(s.paidBefore) : '', rate: s.rate || '', end: s.end || '', endText: s.endText || '', onMature: s.onMature || '', bankId: s.bankId || '' };
 }
 function viewSavDlg(D) {
@@ -300,7 +300,7 @@ function viewSavDlg(D) {
     <div class="cols" style="gap:10px">
       <label class="field" style="flex:1 1 140px"><span class="label">명의 (누구 것)</span><input class="input" data-d="owner" value="${esc(d.owner)}" list="ownerNames" autocomplete="off"></label>
       <label class="field" style="flex:2 1 200px"><span class="label">용도 <span style="font-weight:400">(선택)</span></span><input class="input" data-d="purpose" value="${esc(d.purpose)}" placeholder="예: 자녀 양육, 부모님 돈" autocomplete="off"></label></div>
-    <datalist id="ownerNames">${DATA.OWNERS.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+    <datalist id="ownerNames">${[...new Set([...familyAll().map((p) => p.name), ...DATA.OWNERS.map(ownerShow)])].map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
     <div class="cols" style="gap:10px">
       <label class="field" style="flex:1 1 150px"><span class="label">시작일</span><input class="input" type="date" data-d="start" value="${esc(d.start)}"></label>
       ${d.stype === '예금' ? `<label class="field" style="flex:1 1 150px"><span class="label">맡긴 돈</span><input class="input r" data-d="deposit" value="${esc(d.deposit)}" inputmode="numeric" autocomplete="off"></label>`

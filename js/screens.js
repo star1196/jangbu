@@ -1,7 +1,7 @@
 // 화면 그리기: 홈 · 달력 · 목록 · 계정별 · 설정 · 계정과목 편집 · 휴지통 · 대화 상자
 'use strict';
 
-const PARENT = { '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
+const PARENT = { '받을 돈': '홈', '가족별': '홈', '전체 메뉴': '홈', '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
   '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정', '최근 한 일': '홈' };
@@ -45,7 +45,10 @@ function screenBody(L) {
     case '현금영수증': return viewCashRc(L);
     case '내역 보기': return viewDrill(L); // 홈 숫자 → 조건 걸린 내역 (home2.js)
     case '할 일·기념일': return viewNotes();
-    case '홈 꾸미기': return viewHomeCfg();
+    case '홈 꾸미기': return viewHome3Cfg(); // v38 새 홈 편집 (home3.js)
+    case '전체 메뉴': return viewAllMenu(L); // v38 (home3.js)
+    case '받을 돈': return viewRecv(L); // v38 (v38.js)
+    case '가족별': return viewFamily(L); // v38 (v38.js)
     case '중복 점검': return viewDup(); // (edit3.js)
     case '보안 점검': return viewSecChk(); // (sec.js)
     case '최근 한 일': return viewUndoList(); // (undo2.js)
@@ -89,7 +92,7 @@ function viewHome(L) {
     ? `<div class="todo"><span class="circ" style="width:40px;height:40px;background:var(--warn-soft)">${ic('circle-help', 20, 'var(--warn)')}</span>
         <div class="tm"><span class="tt">미확인 <span style="color:var(--warn)">${unc}건</span></span><span class="sub small">분류를 기다리는 내역</span></div>
         <button class="btn ink" data-act="goUncFix">정리하기</button></div>` : '') + dupTodoRow(false) + startTodo() + mergeTodo() + storageTodo() + pendingTodos() + cardTodos() + cardPlanTodos() + savingTodos() + remTodos() + recurTodo() + backupTodo();
-  return viewHome2(L, todos); // 홈 칸 · 순서 · 켜고 끄기 (home2.js · v32)
+  return viewHome3(L, todos); // v38 새 홈 (home3.js) · 예전 홈 칸은 viewHome2
 }
 
 // 홈의 통장 목록: 가계부 통장만(접었다 펴기) + 합계, 별도 통장은 "N개 ›" 한 줄(금액 숨김)
@@ -346,8 +349,8 @@ function acctAgg(ym, kind) {
   const agg = {}, bankBasis = S.acctBasis === 'bank' && feat('cardBill') && kind === 'out';
   liveTx().filter((x) => counted(x) && x.kind === kind && !isUnc(x) && moveOk(x, mvOf('acct'))).forEach((x) => { // 모두 / 통장·현금만 / 장부에만 (v31)
     if (bankBasis && isCredit(x) && (payOf(x.payMethodId) || {}).billingDay) {
-      billParts(x).forEach((p) => { if (p.ym === ym) agg[x.accountId] = (agg[x.accountId] || 0) + p.amount; });
-    } else if (ymOf(x.date) === ym) agg[x.accountId] = (agg[x.accountId] || 0) + x.amount;
+      { const k = x.amount ? myAmt(x) / x.amount : 1; billParts(x).forEach((p) => { if (p.ym === ym) accParts(x).forEach((q) => { agg[q.acc] = (agg[q.acc] || 0) + Math.round(p.amount * k * (q.amt / (myAmt(x) || 1))); }); }); }
+    } else if (ymOf(x.date) === ym) accParts(x).forEach((p) => { agg[p.acc] = (agg[p.acc] || 0) + p.amt; }); // v38: 나눈 계정 · 받을 돈 뺀 내 몫
   });
   return agg;
 }
@@ -441,6 +444,7 @@ function viewSettings() {
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
       ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('할 일 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
+      ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -550,6 +554,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^v8/.test(D.type)) {
+    body = viewV8Dlg(D); // 주인 이름 · 가족 · 받을 돈 (v38.js)
   } else if (D.type === 'v7Out') {
     body = viewV7Dlg(D); // 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   } else if (/^v6/.test(D.type)) {

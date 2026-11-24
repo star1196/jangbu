@@ -231,12 +231,20 @@ function txAmt(x, size) {
 const isCredit = (x) => { const p = payOf(x.payMethodId); return !!p && p.kind === 'card' && p.cardType !== 'check'; };
 // 통장에서 바로 나간 돈인지: 현금·계좌이체·체크카드는 쓴 날 = 나간 날, 신용카드는 결제일에 대금으로
 function leftBank(x) { return !isCredit(x) && !x.internal; } // 장부에만(무출금)은 통장에서 안 나감 (v31)
+// v38: 내 몫 — 받을 돈(대신 냄 · 빌려줌 · 보험 청구)은 내 지출이 아님, 받을 돈으로 받은 입금은 수입이 아님
+const myAmt = (x) => (x.kind === 'in' && x.recvPay ? 0 : x.kind === 'out' ? Math.max(0, x.amount - (x.recvAmt || 0)) : x.amount);
+// 계정 나누기(parts): 한 줄 안에 계정 · 사람 · 금액 → 계정별로 [{acc, amt}]
+function accParts(x) {
+  const m = myAmt(x); if (!m) return [];
+  if (x.parts && x.parts.length) { const a = {}; x.parts.forEach((p) => { const k = p.accId || x.accountId; a[k] = (a[k] || 0) + (p.amt || 0); }); return Object.entries(a).map(([acc, amt]) => ({ acc, amt })); }
+  return [{ acc: x.accountId, amt: m }];
+}
 function sumTx(list) {
   let inc = 0, out = 0, bank = 0, saved = 0;
   for (const x of list) {
     if (x.recordOnly) continue; // 기록만: 돈 없이 처리 표시 (v34)
-    if (x.kind === 'in') inc += x.amount;
-    else if (x.kind === 'out') { out += x.amount; if (leftBank(x)) bank += x.amount; saved += (x.discount || 0) + (x.pointUsed || 0) + (x.feeSaved || 0); } // 할부 수수료 면제도 아낀 돈
+    if (x.kind === 'in') inc += myAmt(x);
+    else if (x.kind === 'out') { out += myAmt(x); if (leftBank(x)) bank += x.amount; saved += (x.discount || 0) + (x.pointUsed || 0) + (x.feeSaved || 0); } // 할부 수수료 면제도 아낀 돈
     else if (x.kind === 'bill' && !isSep(x.bankId)) bank += x.amount; // 카드 대금: 통장에서 나간 돈에만
   }
   return { inc, out, bank, saved };

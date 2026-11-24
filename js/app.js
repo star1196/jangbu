@@ -231,6 +231,7 @@ function viewCreate() {
     <span class="sub" style="text-align:center;font-size:${px(15)}">모든 내용은 이 기기 안에만, 암호화해서 저장해요.</span>
     <div class="field" style="margin-top:8px"><span class="label">장부 종류</span><div class="chips">${types}</div></div>
     <label class="field"><span class="label">장부 이름</span><input class="input" name="name" maxlength="20" value="${esc(name)}"></label>
+    ${S.createType === 'club' ? '' : `<label class="field"><span class="label">이 장부의 주인 이름 <span style="font-weight:400">(꼭 · 「○○○의 ${S.createType === 'hospital' ? '회계장부' : '가계부'}」로 보여요)</span></span><input class="input" name="owner" maxlength="30" value="${esc(S.createOwner || '')}" placeholder="예: 홍길동"></label>`}
     ${S.createType === 'club' ? `<span class="sub small">회원 × 월 회비 · 생일선물 · 모임 지출 · 대출 · 결산표. 시작점 2026년 1월, 월 회비 30,000원으로 시작해요 (설정에서 바꾸기).</span>` : `<div class="field"><span class="label">어떻게 쓸까요?</span>
       <div class="seg"><button type="button" class="${preset === 'simple' ? 'on' : ''}" data-act="createPreset" data-p="simple">간단하게</button><button type="button" class="${preset === 'all' ? 'on' : ''}" data-act="createPreset" data-p="all">전부 쓰기</button></div>
       <span class="sub small">${preset === 'simple' ? '입력·목록·달력·계정별·통장·카드·파일 올리기만 보여요.' : '별도 통장·여행·적금·고정 계획표·금고 등 모든 기능이 보여요.'} 나중에 설정 → 사용할 기능에서 언제든 바꿀 수 있어요.</span></div>
@@ -291,6 +292,10 @@ function viewApp(L) {
   const showSel = S.selMode && pickedN > 0;
   const showFab = isClub ? (phone && isHome && !S.selMode) : (!phoneHome && !S.selMode && !NO_FAB.includes(S.screen));
   const swOpen = S.dialog && S.dialog.type === 'switch';
+  // v38 새 홈 · 전체 메뉴 · 홈 꾸미기 (친구회 빼고 모든 장부): 디자인대로 머리 · 아래 메뉴 줄 · 옆 메뉴 없이, 휴대폰 홈은 아래 [＋지출][＋수입][영수증] 고정
+  if (!isClub && typeof viewHome3 === 'function' && (isHome || S.screen === '전체 메뉴' || S.screen === '홈 꾸미기')) {
+    return `<main class="h3main ${phone ? 'ph' : ''} ${isHome ? 'home' : ''}"><div class="content h3content" data-screen="${esc(S.screen)}">${screenBody(L)}</div>${phone && isHome ? h3Bar() : ''}</main>`;
+  }
   // 왼쪽 위: 앱 이름 없이 장부 이름 + ˅ (가로·노트북은 왼쪽 메뉴 맨 위)
   const bookBtn = compact
     ? `<button class="top-book" data-act="switchBook" data-swanchor aria-haspopup="dialog" aria-expanded="${!!swOpen}">${esc(book)}${ic(swOpen ? 'chevron-up' : 'chevron-down', 18)}</button>`
@@ -310,7 +315,7 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right">${S.mode === 'app' ? undoTopBtn() : ''}${isHome ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
+      <div class="top-right">${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
     ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
@@ -402,7 +407,8 @@ function afterOpen() {
   setTimeout(() => cleanPhotos().catch(() => {}), 0); // 내역이 완전히 지워진 영수증 사진 정리
   setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
-  if (typeof v7FeatNotice === 'function') v7FeatNotice(); // v37: 꺼져 있던 기능을 켰으면 알림
+  if (typeof v7FeatNotice === 'function') v7FeatNotice();
+  if (typeof v8OwnerAsk === 'function') v8OwnerAsk(); // v38: 주인 이름 한 번 묻기 // v37: 꺼져 있던 기능을 켰으면 알림
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
   // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
   setTimeout(() => { if (typeof clubRulesAutoSeed === 'function' && isClubBook()) Promise.all([clubRulesAutoSeed(), clubAccountsAdd()]).then(([a, b]) => { if ((a || b) && S.mode === 'app') render(); }).catch(() => {}); }, 0);
@@ -693,6 +699,8 @@ const ACT = {
   ...SAFE_ACT,
   ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
+  ...V8_ACT, // v38 (v38.js)
+  ...H3_ACT, // v38 새 홈 (home3.js)
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
@@ -723,6 +731,8 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV8Input(el)) return; // v38
+  if (onH3Input(el)) return; // v38 홈 기간
   if (onV7OutInput(el)) return; // v37 출력 창 (print7.js)
   if (onV37Input(el)) return; // v37 (v37.js)
   if (onV36Input(el)) return; // v36 (v36.js)
@@ -817,8 +827,10 @@ const FORM = {
   async create(f) {
     const name = f.elements.name.value.trim();
     const pw1 = f.elements.pw1.value, pw2 = f.elements.pw2.value;
-    S.createName = name;
+    const owner = f.elements.owner ? f.elements.owner.value.trim().slice(0, 30) : '';
+    S.createName = name; S.createOwner = owner;
     if (!name) return showErr(f, '장부 이름을 적어 주세요.', 'name');
+    if (f.elements.owner && !owner) return showErr(f, '이 장부의 주인 이름을 적어 주세요.', 'owner');
     if (nameTaken(name)) return showErr(f, '이미 같은 이름의 장부가 있어요. 다른 이름으로 해 주세요.', 'name');
     if (pw1.length < 4) return showErr(f, '비밀번호는 4자 이상으로 해 주세요.', 'pw1');
     if (pw1 !== pw2) return showErr(f, '두 비밀번호가 서로 달라요.', 'pw2');
@@ -829,6 +841,7 @@ const FORM = {
       const id = await Store.createLedger({ type, name, password: pw1, preset: S.createPreset || 'all' });
       await Store.unlock(id, pw1);
       await Store.migrate();
+      if (owner && typeof ownerSet === 'function') { await ownerSet(owner, true); S.createOwner = ''; } // v38 주인 이름
       let copied = 0;
       if (S.createImport && type !== 'club') { copied =await applyCopy(S.createImport); S.createImport = null; } // 다른 장부의 카드·통장·사전·서식
       S.ledgers = await Store.listLedgers();

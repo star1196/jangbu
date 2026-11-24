@@ -146,7 +146,7 @@ function v7PerTxt(D, src) { const [a, b] = v7Range(D, src); return D.per === 'sc
 function outBuild(D) {
   const src = v7Src(); if (!src) return null;
   const rows = src.rows(v7Range(D, src)), cols = outColsGet(v7SKey(src));
-  return { src, rows, cols, book: Store.current().name, per: v7PerTxt(D, src), cond: src.cond(), at: new Date().toLocaleString('ko-KR') };
+  return { src, rows, cols, book: typeof bookTitle === 'function' ? bookTitle() : Store.current().name, per: v7PerTxt(D, src), cond: src.cond(), at: new Date().toLocaleString('ko-KR') };
 }
 function outSums(rows) {
   const byAcc = {}, byMonth = {};

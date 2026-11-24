@@ -367,7 +367,7 @@ function viewXl(L) {
     opts = `<span class="label">어느 통장으로?</span><div class="chips"><button class="chip ${s.opt.target === 'new' ? 'on' : ''}" data-act="xlOpt" data-k="target" data-v="new">새 통장 만들기</button>${banksAll().map((b) => `<button class="chip ${s.opt.target === b.id ? 'on' : ''}" data-act="xlOpt" data-k="target" data-v="${b.id}">${esc(b.name)}</button>`).join('')}</div>
       ${s.opt.target === 'new' ? `<label class="field"><span class="label">새 통장 이름</span><input class="input" data-xlopt="name" value="${esc(s.opt.name)}" maxlength="20" autocomplete="off"></label>
       <span class="label">어떤 통장인가요?</span><div class="chips">${[['home', '가계부 통장'], ['sep', '별도 통장']].map(([k, l]) => `<button class="chip ${s.opt.type === k ? 'on' : ''}" data-act="xlOpt" data-k="type" data-v="${k}">${l}</button>`).join('')}</div>
-      <span class="label">명의</span><div class="chips">${DATA.OWNERS.map((n) => `<button class="chip ${s.opt.owner === n ? 'on' : ''}" data-act="xlOpt" data-k="owner" data-v="${n}">${n}</button>`).join('')}</div>` : ''}`;
+      <span class="label">명의</span><div class="chips">${DATA.OWNERS.map((n) => `<button class="chip ${s.opt.owner === n ? 'on' : ''}" data-act="xlOpt" data-k="owner" data-v="${n}">${esc(ownerShow(n))}</button>`).join('')}</div>` : ''}`;
   } else if (s.kind === 'card' && P && P.blocks) {
     opts = `<span class="label">카드 ${P.blocks.length}장이 옆으로 있어요. 카드마다 새 카드로 만들어요 (결제일·결제 통장은 제목에서 읽음)</span>
       <div class="stack" style="gap:6px">${P.blocks.map((b, bi) => `<button class="xsheet" style="border:1px solid var(--line);border-radius:10px;min-height:52px" data-act="xlBlock" data-b="${bi}">${b.use ? ic('check', 18) : '<span style="width:18px"></span>'}<span style="flex:1;min-width:0;text-align:left;display:flex;flex-direction:column;gap:1px"><b>${esc(b.name)}</b><span class="sub small">${b.items.length}건${b.billingDay ? ` · 결제일 ${b.billingDay}일` : ''}${b.hint ? ` · ${esc(b.hint)}` : ''}</span></span><span class="xbadge ${b.use ? '' : 'skip'}">${b.use ? '옮김' : '건너뜀'}</span></button>`).join('')}</div>`;
@@ -579,8 +579,8 @@ async function exportXl() {
   }
   if (feat('savings') || banksAll().length) {
     const rows = [['기준일', todayStr(), '', '', ''], ['명의', '종류', '이름', '금액', '만기일']];
-    banksOpen('home').forEach((b) => rows.push([b.owner || '나', '통장', b.name, bankBalance(b.id), '']));
-    savingsAll().forEach((s) => rows.push([s.owner || '나', s.stype + (s.matured ? ' (만기됨)' : ''), `${s.bank ? s.bank + ' ' : ''}${s.name}`, s.matured ? s.maturedAmount || 0 : savPaid(s), s.end || s.endText || '']));
+    banksOpen('home').forEach((b) => rows.push([ownerShow(b.owner), '통장', b.name, bankBalance(b.id), '']));
+    savingsAll().forEach((s) => rows.push([ownerShow(s.owner), s.stype + (s.matured ? ' (만기됨)' : ''), `${s.bank ? s.bank + ' ' : ''}${s.name}`, s.matured ? s.maturedAmount || 0 : savPaid(s), s.end || s.endText || '']));
     add('재산 현황', rows, [10, 12, 26, 14, 14]);
   }
   if (remindersAll().length) add('기억할 것', [['제목', '시작', '끝나는 날', '내용'], ...remindersAll().map((r) => [r.title, r.start || '', r.end || '', r.body || ''])], [24, 12, 12, 40]);
