@@ -278,7 +278,7 @@ function viewLock() {
 }
 
 /* 앱 뼈대: 왼쪽 메뉴(가로) 또는 아래 메뉴(세로·휴대폰) + 위 이동 버튼 */
-const NO_FAB = ['처음 시작하기', '계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '미확인 정리', '사용할 기능', '금고', '엑셀 옮기기'];
+const NO_FAB = ['처음 시작하기', '계정과목 편집', '휴지통', '카드 추가', '파일 올리기', '분류 대기', '사용할 기능', '금고', '엑셀 옮기기'];
 function viewApp(L) {
   const phone = L === 'phone', compact = L !== 'wide';
   const navOn = PARENT[S.screen] || S.screen;
@@ -294,7 +294,9 @@ function viewApp(L) {
   const swOpen = S.dialog && S.dialog.type === 'switch';
   // v38 새 홈 · 전체 메뉴 · 홈 꾸미기 (친구회 빼고 모든 장부): 디자인대로 머리 · 아래 메뉴 줄 · 옆 메뉴 없이, 휴대폰 홈은 아래 [＋지출][＋수입][영수증] 고정
   if (!isClub && typeof viewHome3 === 'function' && (isHome || S.screen === '전체 메뉴' || S.screen === '홈 꾸미기')) {
-    return `<main class="h3main ${phone ? 'ph' : ''} ${isHome ? 'home' : ''}"><div class="content h3content" data-screen="${esc(S.screen)}">${screenBody(L)}</div>${phone && isHome ? h3Bar() : ''}</main>`;
+    // v39: 이동 단추 [← 뒤로] [홈] [→ 앞으로]는 새 홈 · 전체 메뉴 · 홈 꾸미기에도 늘 (4-20 규칙)
+    const navRow = `<div class="top-nav h3nav"><button class="iconbtn" data-act="back" aria-label="뒤로" ${canBack ? '' : 'disabled'}>${ic('arrow-left', 22)}</button><button class="iconbtn" data-act="home" aria-label="홈">${ic('house', 22)}</button><button class="iconbtn" data-act="fwd" aria-label="앞으로" ${S.fwd.length ? '' : 'disabled'}>${ic('arrow-right', 22)}</button></div>`;
+    return `<main class="h3main ${phone ? 'ph' : ''} ${isHome ? 'home' : ''}">${navRow}<div class="content h3content" data-screen="${esc(S.screen)}">${screenBody(L)}</div>${phone && isHome ? h3Bar() : ''}</main>`;
   }
   // 왼쪽 위: 앱 이름 없이 장부 이름 + ˅ (가로·노트북은 왼쪽 메뉴 맨 위)
   const bookBtn = compact
@@ -408,7 +410,8 @@ function afterOpen() {
   setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
   if (typeof v7FeatNotice === 'function') v7FeatNotice();
-  if (typeof v8OwnerAsk === 'function') v8OwnerAsk(); // v38: 주인 이름 한 번 묻기 // v37: 꺼져 있던 기능을 켰으면 알림
+  if (typeof v8OwnerAsk === 'function') v8OwnerAsk(); // v38: 주인 이름 한 번 묻기
+  S.h3hide = Store.current().type !== 'club' && (Store.get('meta', 'settings') || {}).home3HideStart !== false; // v39: 잠금 풀고 처음 홈 금액은 •••••• (누르면 보임) // v37: 꺼져 있던 기능을 켰으면 알림
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
   // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
   setTimeout(() => { if (typeof clubRulesAutoSeed === 'function' && isClubBook()) Promise.all([clubRulesAutoSeed(), clubAccountsAdd()]).then(([a, b]) => { if ((a || b) && S.mode === 'app') render(); }).catch(() => {}); }, 0);
@@ -699,6 +702,7 @@ const ACT = {
   ...SAFE_ACT,
   ...BOOK_ACT, // 장부 관리: 이름 바꾸기 · 하나로 합치기 · 완전 삭제 (books.js)
   ...INST_ACT,
+  ...V9_ACT, // v39 카드 화면 (cards9.js)
   ...V8_ACT, // v38 (v38.js)
   ...H3_ACT, // v38 새 홈 (home3.js)
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
@@ -731,6 +735,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV9Input(el)) return; // v39 결제일 정하기
   if (onV8Input(el)) return; // v38
   if (onH3Input(el)) return; // v38 홈 기간
   if (onV7OutInput(el)) return; // v37 출력 창 (print7.js)

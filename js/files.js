@@ -1036,7 +1036,7 @@ const FILE_ACT = {
     S.impBulk = ''; render(); toast(n ? `체크한 ${n}건을 '${a.name}'(으)로 바꿨어요 · 줄마다 다시 고칠 수 있어요` : `'${a.name}'은(는) ${a.kind === 'in' ? '수입' : '지출'} 분류라 맞는 줄이 없어요`);
   },
   impAsk: (el) => { const it = S.imp.items[+el.dataset.i]; it.asks[+el.dataset.q].choice = el.dataset.v; cardSplit(it); render(); },
-  goUncFix: () => { S.uncTotal = null; S.uncSkip = []; S.uncLast = null; go('미확인 정리'); },
+  goUncFix: () => { S.uncTotal = null; S.uncSkip = []; S.uncLast = null; go('분류 대기'); },
   uncAll: () => { S.uncAll = !S.uncAll; render(); },
   uncAuto: () => { S.uncAuto = S.uncAuto === false; render(); },
   // 묶음(같은 가맹점) 전체를 한 분류로 · 규칙 저장(온라인몰 빼고) → 다음부터 자동

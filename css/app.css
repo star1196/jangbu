@@ -1293,3 +1293,51 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .v8famrow { display: flex; align-items: center; gap: 4px; } .v8famrow .input { flex: 1; } .v8famrow.off .input { opacity: .5; }
 @media (max-width: 599px) { .v8rfoot .btn.big { width: 100%; } .v8part { grid-template-columns: 1fr 1fr; } }
 .v8ownerask { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px; border-color: #C27A2C; background: #FBF2E7; }
+
+/* v39 새 홈 · 전체 메뉴 · 홈 꾸미기에도 이동 단추 */
+.h3main .h3nav { flex: none; display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); }
+.h3main .h3nav .iconbtn { width: 44px; height: 44px; }
+.h3main .h3nav .iconbtn[disabled] { opacity: .35; }
+.h3 { padding-top: 8px; }
+.h3sum b { white-space: nowrap; }
+.h3sum b.long { font-size: calc(17px * var(--fs)); }
+.h3sum b.xlong { font-size: calc(15px * var(--fs)); }
+.h3.wide .h3sum b.long { font-size: calc(18px * var(--fs)); }
+
+/* v39 (선택) 알약에 색: 빈 = 옅은 색 바탕 + 테두리 + (선택) · 값 있음 = 색 채움 + 요약 + ● · 새 기능 점 */
+.v8pill { background: #EEF3EF; border: 1px solid #A9C3B1; color: #3F6A4D; }
+.v8pill .v8opt { color: #5F7F69; }
+.v8pill.fill { background: #3F6A4D; border-color: #3F6A4D; color: #fff; }
+.v8pill.fill .v8dotk { color: #fff; }
+.v8pill.open:not(.fill) { border-color: #1F1F1F; background: #fff; color: var(--ink); }
+.v8pill.open.fill { box-shadow: 0 0 0 2px #fff, 0 0 0 3px #1F1F1F; }
+.v8new { top: -3px; right: -1px; width: 8px; height: 8px; border: 1.5px solid var(--sf, #fff); }
+
+/* v39 전체 메뉴: 아이콘 + 진한 이름 + 회색 설명 한 줄 · 일정 꼬리표 */
+.h3mi.v9mi { min-height: 64px; padding: 10px 12px; align-items: center; gap: 10px; }
+.v9mic { flex: none; width: 36px; height: 36px; border-radius: 10px; background: #F2F2EF; display: flex; align-items: center; justify-content: center; }
+.v9mt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.v9mt b { font-size: calc(16px * var(--fs)); font-weight: 700; color: var(--ink); }
+.v9mt .sub { font-size: calc(12px * var(--fs)); line-height: 1.35; }
+.v9grp { font-size: calc(14px * var(--fs)); font-weight: 700; color: var(--ink); margin-top: 4px; }
+.h3all .h3grid { grid-template-columns: 1fr; }
+.h3all:not(.phone) .h3grid { grid-template-columns: repeat(2, 1fr); }
+.h3main:not(.ph) .h3all:not(.phone):not(.compact) .h3grid { grid-template-columns: repeat(3, 1fr); }
+.v9tag { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 6px; background: #F2F2EF; color: var(--sub); font-size: calc(11px * var(--fs)); font-weight: 600; vertical-align: 1px; }
+
+/* v39 카드 목록 · 카드 명세서 */
+.v9mon { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.v9mon b { font-size: calc(18px * var(--fs)); min-width: 130px; text-align: center; }
+.v9csum { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.v9csum > div, .v9sgrid > div { display: flex; flex-direction: column; gap: 4px; }
+.v9csum b { font-size: calc(20px * var(--fs)); font-variant-numeric: tabular-nums; }
+.v9card { background: var(--sf); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.v9cbtn { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 14px 16px; border: 0; background: none; text-align: left; }
+.v9cn { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: calc(16px * var(--fs)); }
+.v9cn > svg:last-child { margin-left: auto; }
+.v9cl { display: flex; flex-direction: column; gap: 2px; } .v9cl b { font-size: calc(16px * var(--fs)); font-variant-numeric: tabular-nums; }
+.v9need { margin: 0 16px 14px; border-color: #C27A2C; color: #8F5414; background: #FBF2E7; }
+.v9sgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 10px 0; }
+.v9sgrid b { font-size: calc(17px * var(--fs)); }
+.v9srow { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 18px; border-top: 1px solid var(--line); }
+.v9sm { flex: 1; min-width: 0; }

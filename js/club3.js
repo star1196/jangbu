@@ -63,7 +63,6 @@ function viewClubDlgX(D) {
       <div class="field"><span class="label">들어온 곳</span>${pwSeg('dlg', 'clubIn', d.src || 'bank', ['link', 'bank', 'cash', 'inner'])}
         ${d.src === 'link' ? pwList('dlg', pwCands({ kind: 'in', amount: d.amount, date: d.date, names: [d.memberId ? (memberOf(d.memberId) || {}).name : ''] }), d.linkId) : ''}
         ${d.src === 'inner' ? '<span class="sub small">통장·현금이 안 움직인 수입 (상품권 · 물품 찬조 등). 잔액은 그대로, 통계에는 들어가요.</span>' : ''}
-        ${d.src === 'link' ? pwList('dlg', pwCands({ kind: 'out', amount: d.amount, date: d.date, names: [d.memberId ? (memberOf(d.memberId) || {}).name : ''] })) : ''}
         ${d.src === 'bank' && banksOpen().length > 1 ? `<select class="input" data-co="bankId">${banksOpen().map((b) => `<option value="${b.id}" ${b.id === d.bankId ? 'selected' : ''}>${esc(b.name)}${b.id === (mainBank() || {}).id ? ' (주 통장)' : ''}</option>`).join('')}</select>` : ''}</div>
       <label class="field"><span class="label">메모 <span style="font-weight:400">(선택 · 찾기에 나와요)</span></span><input class="input" data-co="memo" value="${esc(d.memo)}" placeholder="예: 결산이자, ○○ 찬조"></label>
       <span class="sub small">나중에 통장 파일을 올려도 날짜(±1일)·금액·이름이 맞으면 같은 건으로 짝지어 두 번 들어가지 않아요.</span>

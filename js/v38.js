@@ -13,7 +13,7 @@ const FAM_DEF = [['me', '주인'], ['sp', '배우자'], ['c1', '첫째'], ['c2',
 function familyAll(withHidden) {
   const L = (Store.get('meta', 'family') || {}).list;
   const base = L && L.length ? L : FAM_DEF.map(([id, n], i) => ({ id, name: id === 'me' ? meLabel() : n, order: i }));
-  return base.map((p) => (p.id === 'me' ? { ...p, name: meLabel() } : p)).filter((p) => withHidden || !p.hidden).sort((a, b) => (a.order || 0) - (b.order || 0));
+  return base.map((p) => (p.id === 'me' ? { ...p, name: meLabel() } : p)).filter((p) => withHidden || !p.hidden).sort((a, b) => (b.id === 'me') - (a.id === 'me') || (a.order || 0) - (b.order || 0)); // 주인은 늘 맨 위
 }
 const famOf = (id) => familyAll(true).find((p) => p.id === id);
 const famName = (id) => (famOf(id) || {}).name || '';
@@ -33,8 +33,9 @@ function v8Similar(nm, names) {
 // 처음 열 때 한 번 주인 이름 묻기 (친구회 빼고)
 function v8OwnerAsk() { /* v38: 창으로 막지 않고 홈 맨 위 한 줄로 물어봐요 (v8OwnerBanner) */ }
 function v8OwnerBanner() {
-  if (!v8On()) return ''; const st = Store.get('meta', 'settings') || {}; if (st.owner || st.ownerAsked) return '';
-  return `<section class="h3card v8ownerask"><span><b>이 장부의 주인 이름을 알려 주세요</b><br><span class="sub small">「나」 대신 이름으로 보여요 · 출력 머리에도 「○○○의 ${bookWord()}」</span></span><span class="chips" style="gap:6px"><button class="btn" data-act="v8OwnerLater">나중에</button><button class="btn ink" data-act="v8OwnerOpen">적기</button></span></section>`;
+  if (!v8On()) return ''; const st = Store.get('meta', 'settings') || {}; if (st.owner || st.ownerNoAsk) return '';
+  if (st.ownerAsked && Date.now() - st.ownerAsked < 7 * 86400000) return ''; // v39: [나중에] → 7일 뒤 다시
+  return `<section class="h3card v8ownerask"><span><b>이 장부의 주인 이름을 알려 주세요</b><br><span class="sub small">「나」 대신 이름으로 보여요 · 출력 머리에도 「○○○의 ${bookWord()}」</span></span><span class="chips" style="gap:6px"><button class="btn" data-act="v8OwnerNever">다시 묻지 않기</button><button class="btn" data-act="v8OwnerLater">나중에</button><button class="btn ink" data-act="v8OwnerOpen">적기</button></span><span class="sub small" style="width:100%">설정 → 장부 주인 · 가족에서 언제든 적고 바꿀 수 있어요</span></section>`;
 }
 async function ownerSet(nm, asked) { const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, ...(nm != null ? { owner: String(nm).trim().slice(0, V8_MAX) } : {}), ownerAsked: asked ? Date.now() : st.ownerAsked || Date.now() }); }
 // 새 기능 점: 한 번 누르면 사라짐 (장부마다)
@@ -99,7 +100,7 @@ const PILLS = [['recv', '대신 냄'], ['for', '누구를 위해'], ['split', '�
 function v8Pills(f) {
   if (!pillOk(f)) return '';
   const ks = PILLS.filter(([k]) => f.kind === 'out' || k !== 'recv'), open = f.pill || '';
-  const btn = ([k, l]) => { const v = pillVal(f, k), o = open === k, dot = !v && !v8Seen('pill_' + k) && k !== 'for';
+  const btn = ([k, l0]) => { const l = f.kind === 'in' && k === 'for' ? '누구 수입' : l0; const v = pillVal(f, k), o = open === k, dot = !v && !v8Seen('pill_' + k) && k !== 'for';
     return `<button class="v8pill ${v ? 'fill' : ''} ${o ? 'open' : ''}" data-act="v8Pill" data-k="${k}" aria-expanded="${o}">${v ? `${l}: ${esc(v)} <i class="v8dotk">●</i>` : `${l} <span class="v8opt">(선택)</span>`}${dot ? '<i class="v8new"></i>' : ''}</button>`; };
   const errs = v8Errs(f);
   return `<div class="v8pillrow">${ks.map(btn).join('')}</div>${open ? `<div class="v8panel">${v8Panel(f, open)}</div>` : ''}${errs.length && (f.pill || f.v8tried) ? `<div class="v8warn">${errs.map(esc).join('<br>')}</div>` : ''}`;
@@ -120,17 +121,17 @@ function v8Panel(f, k) {
   }
   if (k === 'for') {
     const W = f.forWhom || { pids: [], mode: 'half', amts: {} }, A = forAmts(f), base = v8Base(f);
-    return `<b class="v8q">누구를 위해 썼나요? <span class="sub small" style="font-weight:400">(여러 명 가능)</span></b>
+    return `<b class="v8q">${f.kind === 'in' ? '누구 수입인가요? <span class="sub small" style="font-weight:400">(예: 배우자 월급 · 여러 명 가능)</span>' : '누구를 위해 썼나요? <span class="sub small" style="font-weight:400">(여러 명 가능)</span>'}</b>
       <div class="chips" style="gap:6px">${familyAll().map((p) => `<button class="chip ${W.pids.includes(p.id) ? 'on' : ''}" data-act="v8For" data-id="${p.id}">${esc(p.name)}</button>`).join('')}<button class="chip" data-act="v8FamAddOpen">+ 가족 추가</button></div>
       ${f.famAdd ? `<div style="display:flex;gap:6px"><input class="input" data-v8="famNew" maxlength="${V8_MAX}" placeholder="이름 (예: 어머니)" value="${esc(f.famNew || '')}"><button class="btn" data-act="v8FamAdd">추가</button></div>` : ''}
       ${W.pids.length > 1 ? `<div class="seg"><button class="${W.mode !== 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="half">반반</button><button class="${W.mode === 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="custom">직접 나누기</button></div>
         ${W.mode === 'custom' ? `${W.pids.map((p) => `<label class="v8row"><span>${esc(famName(p))}</span><input class="input r" data-v8="forAmt" data-id="${p}" inputmode="numeric" value="${esc(W.amts[p] == null ? '' : W.amts[p])}" placeholder="${comma(A[p] || 0)}"></label>`).join('')}<span class="sub small">한 명을 비워 두면 나머지가 저절로 들어가요 · 합계 ${won(base)}원</span>` : `<span class="sub small">${W.pids.map((p) => `${esc(famName(p))} ${won(A[p])}원`).join(' · ')}</span>`}` : ''}
-      ${V8_NOTE}${tools}`;
+      ${f.kind === 'in' ? '' : V8_NOTE}${tools}`;
   }
   const base = v8Base(f), P = f.parts && f.parts.length ? f.parts : [{ accId: f.accId || '', pid: '', amt: '' }, { accId: f.accId || '', pid: '', amt: '' }];
   const accs = (typeof visibleAccs === 'function' ? visibleAccs(f.kind) : Store.all('accounts').filter((a) => a.kind === f.kind && !a.hidden));
   const sum = P.reduce((a, p) => a + toInt(p.amt), 0);
-  return `<b class="v8q">나누기 <span class="sub small" style="font-weight:400">(한 줄 안에서 계정 · 사람 · 금액 · 카드 줄은 그대로 한 줄)</span></b>
+  return `<b class="v8q">나누기 <span class="sub small" style="font-weight:400">${f.kind === 'in' ? '(예: 본급 + 수당 · 한 줄 안에서 종류 · 사람 · 금액)' : '(한 줄 안에서 계정 · 사람 · 금액 · 카드 줄은 그대로 한 줄)'}</span></b>
     ${P.map((p, i) => `<div class="v8part"><select class="input" data-v8="partAcc" data-i="${i}"><option value="">계정</option>${accs.map((a) => `<option value="${a.id}" ${a.id === p.accId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
       <select class="input" data-v8="partPid" data-i="${i}"><option value="">사람 (선택)</option>${familyAll().map((m) => `<option value="${m.id}" ${m.id === p.pid ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
       <input class="input r" data-v8="partAmt" data-i="${i}" inputmode="numeric" value="${esc(p.amt)}" placeholder="금액">${P.length > 1 ? `<button class="iconbtn" data-act="v8PartDel" data-i="${i}" aria-label="이 줄 빼기">${ic('x', 18)}</button>` : ''}</div>`).join('')}
@@ -141,7 +142,7 @@ function v8ConfirmRows(f) {
   if (!pillOk(f)) return '';
   const rows = [];
   if (f.recv && f.recv.who) rows.push(['받을 돈', `${f.recv.kind} · ${f.recv.who} ${won(toInt(f.recv.amt))}원 (내 지출에서 빠짐)`]);
-  if (f.forWhom && f.forWhom.pids.length) { const A = forAmts(f); rows.push(['누구를 위해', f.forWhom.pids.map((p) => `${famName(p)} ${won(A[p])}`).join(' · ')]); }
+  if (f.forWhom && f.forWhom.pids.length) { const A = forAmts(f); rows.push([f.kind === 'in' ? '누구 수입' : '누구를 위해', f.forWhom.pids.map((p) => `${famName(p)} ${won(A[p])}`).join(' · ')]); }
   if (f.parts && f.parts.length) rows.push(['나누기', f.parts.map((p) => `${(accOf(p.accId) || {}).name || ''}${p.pid ? '·' + famName(p.pid) : ''} ${won(toInt(p.amt))}`).join(' + ')]);
   return rows.map(([k, v]) => `<div class="conf-row"><span class="k">${k}</span><span class="v">${esc(v)}</span><button class="linkbtn" data-act="fBack">고치기</button></div>`).join('');
 }
@@ -229,6 +230,8 @@ function viewV8Dlg(D) {
     return `<div class="dlg" style="max-width:520px"><h2 class="dlg-title">가족 목록 <span class="sub small" style="font-weight:400">이 장부만 · 누구를 위해 · 받을 돈에 같이 써요</span></h2>
       ${L.map((p, i) => `<div class="v8famrow ${p.hidden ? 'off' : ''}"><input class="input" data-v8="famName" data-i="${i}" maxlength="${V8_MAX}" value="${esc(p.name)}" ${p.id === 'me' ? 'aria-label="주인 이름"' : ''}>${p.id === 'me' ? '<span class="tag">주인</span>' : `<button class="iconbtn" data-act="v8FamHide" data-i="${i}" aria-label="${p.hidden ? '보이기' : '숨기기'}">${ic(p.hidden ? 'eye-off' : 'eye', 18)}</button>`}<button class="iconbtn" data-act="v8FamMv" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} aria-label="위로">↑</button><button class="iconbtn" data-act="v8FamMv" data-i="${i}" data-d="1" ${i < L.length - 1 ? '' : 'disabled'} aria-label="아래로">↓</button></div>`).join('')}
       <button class="btn" data-act="v8FamRow">${ic('plus', 16)}추가</button>
+      <span class="sub small">맨 위 칸이 장부 주인 이름이에요. 비워 두면 「나」로 보여요.</span>
+      <label class="check" style="min-height:40px"><input type="checkbox" data-act="v8OwnerAskToggle" ${(Store.get('meta', 'settings') || {}).ownerNoAsk ? '' : 'checked'}>주인 이름이 비어 있으면 홈에서 7일에 한 번 묻기</label>
       <div class="err" data-err></div><div class="dlg-btns"><button class="btn" data-act="closeDlg">취소</button><button class="btn ink" data-act="v8FamSave">저장</button></div></div>`;
   }
   if (D.type === 'v8RvNew') {
@@ -340,6 +343,8 @@ const V8_ACT = {
   v8PartRest: () => { const f = S.f, base = v8Base(f), P = f.parts, s = P.slice(0, -1).reduce((a, p) => a + toInt(p.amt), 0); P[P.length - 1].amt = comma(Math.max(0, base - s)); render(); },
   // 주인 · 가족
   v8OwnerSave: async () => { const nm = String(v8Dlg().name || '').trim(); if (!nm) { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = '이름을 적어 주세요.'; return; } await ownerSet(nm, true); S.dialog = null; render(); toast(`「${bookTitle()}」(으)로 보여요`); },
+  v8OwnerNever: async () => { const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, ownerNoAsk: true, ownerAsked: Date.now() }); render(); toast('다시 묻지 않아요 · 설정 → 장부 주인 · 가족에서 적을 수 있어요'); },
+  v8OwnerAskToggle: async () => { const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, ownerNoAsk: !st.ownerNoAsk }); render(); },
   v8OwnerOpen: () => { S.dialog = { type: 'v8Owner', name: '' }; render(); },
   v8OwnerLater: async () => { await ownerSet(null, true); S.dialog = null; render(); },
   v8FamEdit: () => { S.dialog = { type: 'v8Fam', list: familyAll(true).map((p) => ({ ...p })) }; render(); },
@@ -347,9 +352,10 @@ const V8_ACT = {
   v8FamHide: (el) => { const p = S.dialog.list[+el.dataset.i]; p.hidden = !p.hidden; render(); },
   v8FamMv: (el) => { const L = S.dialog.list, i = +el.dataset.i, j = i + +el.dataset.d; if (j < 0 || j >= L.length) return; [L[i], L[j]] = [L[j], L[i]]; render(); },
   v8FamSave: async () => {
-    const L = S.dialog.list.filter((p) => String(p.name || '').trim()), me = L.find((p) => p.id === 'me');
+    const L = S.dialog.list.filter((p) => p.id === 'me' || String(p.name || '').trim());
     const before = Store.get('meta', 'family') ? { ...Store.get('meta', 'family') } : null, stB = { ...(Store.get('meta', 'settings') || { id: 'settings' }) };
-    if (me && me.name.trim() !== ownerName()) await ownerSet(me.name, true);
+    const meRow = S.dialog.list.find((p) => p.id === 'me');
+    if (meRow && String(meRow.name || '').trim() !== ownerName() && String(meRow.name || '').trim() !== '나') await ownerSet(String(meRow.name || '').trim(), true);
     await familySave(L); S.dialog = null; render(); toast('가족 목록을 저장했어요', { items: [{ col: 'meta', id: 'family', before }, { col: 'meta', id: 'settings', before: stB }] });
   },
   v8FamPick: (el) => { S.fam.pid = el.dataset.id; render(); },
@@ -441,3 +447,12 @@ v7Src = (function (orig) {
     return null;
   };
 })(v7Src);
+
+/* ───────── v39 수입 입력: 「어디서 받았나요」 고르기 (최근 받은 곳 · 가족) ───────── */
+function v9InSources(f) {
+  const seen = []; liveTx().filter((x) => x.kind === 'in' && x.merchant && !x.recvPay).sort((a, b) => (b.date < a.date ? -1 : 1)).forEach((x) => { const n = String(x.merchant).trim(); if (n && !seen.includes(n) && seen.length < 8) seen.push(n); });
+  const fam = familyAll().filter((p) => p.id !== 'me').map((p) => p.name).filter((n) => !seen.includes(n)).slice(0, 4);
+  const L = [...seen, ...fam]; if (!L.length) return '';
+  return `<div class="chips v9src" style="gap:6px">${L.map((n) => `<button class="chip ${f.merchant === n ? 'on' : ''}" data-act="v9Src" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>`;
+}
+V8_ACT.v9Src = (el) => { const f = S.f; if (!f) return; f.merchant = el.dataset.v; if (!f.accTouched) f.accId = recAccounts(f)[0] || f.accId; render(); };

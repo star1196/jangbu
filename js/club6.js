@@ -21,7 +21,7 @@ function viewClubBankLog(L) {
   const P = pfOf('cbank', '1년'), [from, to] = pfRange('cbank', '1년');
   const rows = bankLedger(id);
   const sk = 'cbank:' + id; // 표 제목 ▲▼ (v32 · 통장마다 기억)
-  const list = colSorted(rows.filter((r) => !r.open && r.x.date >= from && r.x.date <= to && (!P.q || txHit(r.x, P.q))), sk, { date: (r) => r.x.date + String(r.x.createdAt || 0).padStart(15, '0'), in: (r) => (r.d > 0 ? r.d : 0), out: (r) => (r.d < 0 ? -r.d : 0), bal: (r) => r.bal }, 'date');
+  const list = colSorted(rows.filter((r) => !r.open && r.x.date >= from && r.x.date <= to && (!P.q || txHit(r.x, P.q)) && (((S.v7k || {}).cbank || 'all') === 'all' || (((S.v7k || {}).cbank === 'in') ? r.d > 0 : r.d < 0))), sk, { date: (r) => r.x.date + String(r.x.createdAt || 0).padStart(15, '0'), in: (r) => (r.d > 0 ? r.d : 0), out: (r) => (r.d < 0 ? -r.d : 0), bal: (r) => r.bal }, 'date');
   const before = rows.filter((r) => r.open || r.x.date < from).pop();
   const inS = list.reduce((s, r) => s + (r.d > 0 ? r.d : 0), 0), outS = list.reduce((s, r) => s + (r.d < 0 ? -r.d : 0), 0);
   const name = (x) => (x.kind === 'tr' ? `${bankName(x.fromId)} → ${bankName(x.toId)}` : x.kind === 'adj' ? '잔액 맞추기' : clubTxName(x));

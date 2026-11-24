@@ -1,8 +1,8 @@
 // 화면 그리기: 홈 · 달력 · 목록 · 계정별 · 설정 · 계정과목 편집 · 휴지통 · 대화 상자
 'use strict';
 
-const PARENT = { '받을 돈': '홈', '가족별': '홈', '전체 메뉴': '홈', '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
-  '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '미확인 정리': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
+const PARENT = { '카드 명세서': '카드 대금', '받을 돈': '홈', '가족별': '홈', '전체 메뉴': '홈', '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
+  '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '분류 대기': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
   '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정', '최근 한 일': '홈' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
@@ -24,10 +24,11 @@ function screenBody(L) {
     case '별도 통장': return viewSepBanks(L);
     case '통장 관리': return viewBankAdmin();
     case '사용할 기능': return viewFeatures();
-    case '카드 대금': return viewCards(L);
+    case '카드 대금': return typeof viewCards9 === 'function' ? viewCards9(L) : viewCards(L); // v39 카드 목록 (cards9.js)
+    case '카드 명세서': return viewCardStmt(L); // v39
     case '카드 추가': return viewCardAdd();
     case '파일 올리기': return viewFile(L);
-    case '미확인 정리': return viewUnc(L);
+    case '분류 대기': return viewUnc(L);
     case '자동 분류 규칙': return viewRules();
     case '파일 서식': return viewTemplates();
     case '반복 입력': return viewRepeats();
@@ -118,7 +119,8 @@ function homeBanks() {
 
 /* ───────── 통장 표 (엑셀처럼: 날짜 · 내용 · 지출 · 수입 · 잔액, 줄마다 잔액) ───────── */
 function bankTable(L, id) {
-  const rows = bankLedger(id).slice().reverse(); // 최근이 위
+  const kd = (S.v7k || {}).hbank || 'all'; // v39: 막대의 [전체 | 수입 | 지출]이 표에도 걸리게
+  const rows = bankLedger(id).slice().reverse().filter((r) => kd === 'all' || (!r.open && (kd === 'in' ? r.d > 0 : r.d < 0))); // 최근이 위
   const yr = new Date().getFullYear();
   const dTxt = (s) => { if (!s) return ''; const [y, m, d] = s.split('-'); return (+y !== yr ? y.slice(2) + '.' : '') + m + '.' + d; };
   const line = (r) => {
@@ -554,6 +556,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (D.type === 'v9Bill') {
+    body = viewV9Dlg(D); // 결제일 정하기 (cards9.js)
   } else if (/^v8/.test(D.type)) {
     body = viewV8Dlg(D); // 주인 이름 · 가족 · 받을 돈 (v38.js)
   } else if (D.type === 'v7Out') {
