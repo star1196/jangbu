@@ -239,8 +239,8 @@ function viewCal(L) {
     let body = '';
     if (xs.length && phone) {
       const net = xs.reduce((s, x) => s + signed(x), 0);
-      const hasIn = xs.some((x) => x.kind === 'in'), hasOut = xs.some((x) => x.kind === 'out' && leftBank(x)), hasCard = xs.some((x) => x.kind === 'out' && !leftBank(x));
-      body = `<span class="dots">${hasIn ? '<i style="background:var(--in)"></i>' : ''}${hasOut ? '<i style="background:var(--out)"></i>' : ''}${hasCard ? '<i style="background:var(--sub)"></i>' : ''}</span><span class="ctot ${clsOf(net)}">${short(net)}</span>`;
+      const hasIn = xs.some((x) => x.kind === 'in' && x.amount), hasOut = xs.some((x) => x.kind === 'out' && x.amount && leftBank(x)), hasCard = xs.some((x) => x.kind === 'out' && x.amount && !leftBank(x));
+      body = hasIn || hasOut || hasCard || net ? `<span class="dots">${hasIn ? '<i style="background:var(--in)"></i>' : ''}${hasOut ? '<i style="background:var(--out)"></i>' : ''}${hasCard ? '<i style="background:var(--sub)"></i>' : ''}</span>${net ? `<span class="ctot ${clsOf(net)}">${short(net)}</span>` : ''}` : ''; // v42: 0원인 날은 아무것도 안 찍음
     } else if (xs.length) {
       body = xs.slice(0, 2).map((x) => {
         if (!isMoney(x)) { const n = x.amount; return `<span class="ce">${ic(x.kind === 'tr' ? 'arrow-left-right' : x.kind === 'bill' ? 'credit-card' : 'landmark', 13, 'var(--sub)')}<span style="color:var(--ink)">${full ? won(n) + '원' : short(Math.abs(n)).replace('+', '')}</span></span>`; }
@@ -249,7 +249,8 @@ function viewCal(L) {
         + (xs.length > 2 ? `<span class="cmore">외 ${xs.length - 2}건</span>` : '');
     }
     const cls = ['cell', ds === t ? 'today' : '', d === S.calSel ? 'sel' : ''].join(' ');
-    cells.push(`<button class="${cls}" data-act="calPick" data-d="${d}" aria-label="${m + 1}월 ${d}일 ${xs.length}건"><span class="d ${dow === 0 && ds !== t ? 'sun' : ''}">${d}</span>${body}</button>`);
+    const red = dow === 0 || (typeof v42HoliName === 'function' && !!v42HoliName(ds)), dcls = ds === t ? '' : red ? 'sun' : dow === 6 ? 'sat' : ''; // v42: 일요일 · 공휴일 빨강 · 토요일 파랑 (날짜 숫자에만)
+    cells.push(`<button class="${cls}" data-act="calPick" data-d="${d}" aria-label="${m + 1}월 ${d}일 ${typeof v42HoliName === 'function' && v42HoliName(ds) ? v42HoliName(ds) + ' ' : ''}${xs.length}건"><span class="d ${dcls}">${d}</span>${body}</button>`);
   }
   let n = 1;
   while (cells.length % 7) cells.push(`<div class="cell out"><span class="d">${n++}</span></div>`);
@@ -266,9 +267,10 @@ function viewCal(L) {
       <div class="calmonth"><button class="iconbtn" data-act="calMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m + 1}월<button class="iconbtn" data-act="calMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>
       <span style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-left:auto;font-size:${px(15)}"><span>수입 ${money(sm.inc)}</span><span>지출 ${money(-sm.out)}</span></span>
     </div>
+    ${(() => { const L2 = [[monthTx.some((x) => x.kind === 'in' && x.amount), 'var(--in)', '수입'], [monthTx.some((x) => x.kind === 'out' && x.amount && leftBank(x)), 'var(--out)', '지출(통장·현금)'], [monthTx.some((x) => x.kind === 'out' && x.amount && !leftBank(x)), 'var(--sub)', '카드 · 장부에만']].filter((v) => v[0]); return phone && L2.length ? `<div class="v42legend">${L2.map(([, c, n]) => `<span><i style="background:${c}"></i>${n}</span>`).join('')}</div>` : ''; })()}
     <div class="cols">
       <section class="card" style="flex:3 1 540px;min-width:0;padding:${phone ? 8 : 14}px">
-        <div class="calweek">${DOW.map((w) => `<span>${w}</span>`).join('')}</div>
+        <div class="calweek">${DOW.map((w, i) => `<span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</span>`).join('')}</div>
         <div class="calgrid ${phone ? 'ph' : ''}">${cells.join('')}</div>
       </section>${side}
     </div>
@@ -447,8 +449,8 @@ function viewSettings() {
       ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('일정 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
-      ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint')) : ''}
-      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen') + rowB('보험사 목록', `${typeof insurersAll === 'function' ? insurersAll().length : 0}곳 · 추가 · 순서 · 숨기기`, 'v41InsOpen')) : ''}
+      ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('공휴일', '설 · 추석 · 대체공휴일 · 임시공휴일 더하기', 'v42HoliOpen')) : ''}
+      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen') + rowB('공휴일', '설 · 추석 · 대체공휴일 · 임시공휴일 더하기', 'v42HoliOpen') + rowB('보험사 목록', `${typeof insurersAll === 'function' ? insurersAll().length : 0}곳 · 추가 · 순서 · 숨기기`, 'v41InsOpen')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -558,6 +560,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 일정·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^v42/.test(D.type)) {
+    body = viewV42Dlg(D); // v42 (v42.js)
   } else if (/^v41/.test(D.type)) {
     body = viewV41Dlg(D); // v41 (v41.js)
   } else if (/^f10/.test(D.type)) {

@@ -90,7 +90,7 @@ function partLabel(t) {
     return rows;
   }
   if (isHold(t)) return [{ t: `보류 ${won(t.amount)}`, id: t.id }];
-  if (isUnc(t)) return [{ t: `미확인 ${won(t.amount)}`, id: t.id }];
+  if (isUnc(t)) return [{ t: `분류 대기 ${won(t.amount)}`, id: t.id }];
   return [{ t: `${a ? a.name : '기타'} ${won(t.amount)}`, id: t.id }];
 }
 function splitTreeHtml(x, opt) {

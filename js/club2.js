@@ -267,7 +267,7 @@ function viewClubHome(L) {
   const settings = Store.get('meta', 'settings') || {};
   const startCard = !settings.startDone ? `<section class="card card-pad" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="flex:1 1 200px"><b>처음 시작하기</b><br><span class="sub small">시작점 · 통장 잔액 · 회원별 마지막으로 낸 달 · 대출 남은 원금</span></span><button class="btn ink" data-act="go" data-to="처음 시작하기">시작</button></section>` : '';
   const chips = `<div class="chips">
-    <button class="chip" data-act="clubListF" data-f="unc">${T.unc.length ? '<span class="odot"></span>' : ''}미확인 ${T.unc.length}건</button>
+    <button class="chip" data-act="clubListF" data-f="unc">${T.unc.length ? '<span class="odot"></span>' : ''}분류 대기 ${T.unc.length}건</button>
     <button class="chip" data-act="clubListF" data-f="hold">보류 ${T.hold.length}건</button>
     <button class="chip" data-act="go" data-to="생일 처리">${ic('cake', 18)}생일 처리 · 이번 달 ${T.thisMonth.length}명</button>
     ${feat('loans') ? `<button class="chip" data-act="go" data-to="대출">${ic('hand-coins', 18)}대출 ${loanLeft ? won(loanLeft) + '원' : ''}</button>` : ''}</div>`;

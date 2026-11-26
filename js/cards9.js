@@ -10,7 +10,7 @@ const monthNav = (act) => `<div class="v9mon"><button class="iconbtn" data-act="
 
 /* ── 빨간 날이면 다음 영업일 (주말 + 양력 공휴일 · 설·추석 같은 음력 공휴일은 카드사 명세서로 확인) ── */
 const SOLAR_HOLI = ['01-01', '03-01', '05-05', '06-06', '08-15', '10-03', '10-09', '12-25'];
-const isRedDay = (d) => { const w = parseYmd(d).getDay(); return w === 0 || w === 6 || SOLAR_HOLI.includes(d.slice(5)); };
+const isRedDay = (d) => { if (typeof v42IsRed === 'function') return v42IsRed(d); const w = parseYmd(d).getDay(); return w === 0 || w === 6 || SOLAR_HOLI.includes(d.slice(5)); }; // v42: 설 · 추석 · 부처님오신날 · 대체공휴일 · 임시공휴일 (v42.js)
 billDateOf = (function (orig) { return function (card, ym) { let d = orig(card, ym); if (card && card.billShift) { let n = 0; while (isRedDay(d) && n++ < 7) d = addDays(d, 1); } return d; }; })(billDateOf);
 
 // 이 달 결제분의 이용 기간 [from, to]
@@ -31,6 +31,7 @@ function viewCards9(L) {
   const useT = list.reduce((s, c) => s + cardUseOf(c, ym), 0);
   const bills = list.map((c) => ({ c, b: billOf(c, ym) })).filter((v) => v.b && v.b.amount > 0);
   const dueT = bills.filter((v) => !v.b.paid).reduce((s, v) => s + v.b.amount, 0), paidT = bills.filter((v) => v.b.paid).reduce((s, v) => s + v.b.amount, 0);
+  const nextT = list.filter((c) => c.cardType !== 'check').reduce((s, c) => { const b = billOf(c, ym), nb = nextBillOf(c), v = b && !b.paid ? b : nb && !nb.paid ? nb : null; return s + (v ? v.amount : 0); }, 0); // v42: 카드마다 다음 결제 금액의 합
   const pairs = maybeSameCards().filter(([a, b]) => !((Store.get('meta', 'settings') || {}).notSameCards || []).includes(a.id + b.id));
   const pairHtml = pairs.slice(0, 2).map(([a, b]) => `<div class="warnbox">${ic('circle-alert', 22)}<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><span><b>같은 카드인가요?</b> ${[a, b].map((c) => `${esc(c.name)} (앞 ${esc(c.first4 || '—')} · 뒤 ${esc(c.last4 || '—')})`).join(' / ')}</span>
     <div class="chips"><button class="btn ink" data-act="cardMergePair" data-a="${a.id}" data-b="${b.id}">하나로 합치기</button><button class="btn" data-act="cardNotSame" data-k="${a.id + b.id}">다른 카드예요</button></div></div></div>`).join('');
@@ -38,14 +39,14 @@ function viewCards9(L) {
     const use = cardUseOf(c, ym), b = billOf(c, ym), nb = nextBillOf(c), credit = c.cardType !== 'check';
     const need = credit && !c.billingDay;
     return `<div class="v9card"><button class="v9cbtn" data-act="v9CardOpen" data-id="${c.id}">
-        <span class="v9cn">${ic('credit-card', 20)}<b>${esc(c.name)}</b><span class="badge" style="border-radius:6px">${cardTypeTxt(c)}</span>${c.last4 ? `<span class="sub small">··· ${esc(c.last4)}</span>` : ''}${ic('chevron-right', 18, 'var(--sub)')}</span>
-        <span class="v9cl"><span class="sub small">${+ym.slice(5)}월 사용액</span><b class="neg">−${won(use)}원</b></span>
-        <span class="v9cl"><span class="sub small">${credit ? (b ? `${b.date.slice(5).replace('-', '.')} 결제${b.paid ? ' ✓' : ' 예정'}` : nb ? `다음 결제 ${nb.date.slice(5).replace('-', '.')}` : c.billingDay ? `결제일 매달 ${c.billingDay}일` : '결제일 없음') : '체크 · 통장에서 바로'}</span><b>${credit && (b || nb) ? `${(b || nb).paid ? '' : '−'}${won((b || nb).amount)}원` : '—'}</b></span>
-      </button>${need ? `<button class="btn v9need" data-act="v9BillSet" data-id="${c.id}">${ic('circle-alert', 16, 'var(--warn)')}결제일 정하기</button>` : ''}</div>`;
+        <span class="v9cn">${ic('credit-card', 20)}<b>${esc(c.name)}</b><span class="badge v42ct" style="border-radius:6px">${cardTypeTxt(c)}</span>${c.last4 ? `<span class="sub small">··· ${esc(c.last4)}</span>` : ''}${ic('chevron-right', 18, 'var(--sub)')}</span>
+        <span class="v9cl"><span class="sub small">${+ym.slice(5)}월 사용액</span><b class="${use ? 'neg' : ''}">${use ? '−' : ''}${won(use)}원</b></span>
+        <span class="v9cl"><span class="sub small">${credit ? (b ? `${b.date.slice(5).replace('-', '.')} 결제${b.paid ? ' ✓' : ' 예정'}` : nb ? `다음 결제 ${nb.date.slice(5).replace('-', '.')}` : c.billingDay ? `결제일 매달 ${c.billingDay}일` : '결제일 없음') : '바로 출금'}</span><b>${credit && (b || nb) ? `${(b || nb).paid || !(b || nb).amount ? '' : '−'}${won((b || nb).amount)}원` : credit ? '—' : `${c.bankId ? esc(bankName(c.bankId)) : '연결 통장'}에서`}</b></span>
+      </button>${credit && /체크/.test(c.name) && !c.typeOk ? `<div class="warnbox v42chk">${ic('circle-alert', 20)}<div style="display:flex;flex-direction:column;gap:8px"><span>이름에 「체크」가 있어요. <b>체크카드인가요?</b></span><div class="chips"><button class="btn ink" data-act="v42CardType" data-id="${c.id}" data-v="check">예, 체크</button><button class="btn" data-act="v42CardType" data-id="${c.id}" data-v="credit">아니요, 신용</button></div></div></div>` : ''}<div class="chips v42ctrow"><span class="sub small">카드 종류</span><button class="chip ${credit ? 'on' : ''}" data-act="v42CardType" data-id="${c.id}" data-v="credit">신용</button><button class="chip ${credit ? '' : 'on'}" data-act="v42CardType" data-id="${c.id}" data-v="check">체크</button></div>${need && !(/체크/.test(c.name) && !c.typeOk) ? `<button class="btn v9need" data-act="v9BillSet" data-id="${c.id}">${ic('circle-alert', 16, 'var(--warn)')}결제일 정하기</button>` : ''}</div>`;
   };
   return `<div class="stack" style="max-width:900px">
     ${monthNav('v9CardMon')}
-    <section class="card card-pad v9csum"><div><span class="sub small">${+ym.slice(5)}월 전체 카드 사용액</span><b class="neg">−${won(useT)}원</b></div><div><span class="sub small">${+ym.slice(5)}월 결제 예정</span><b>${won(dueT)}원</b>${paidT ? `<span class="sub small">결제됨 ✓ ${won(paidT)}원</span>` : ''}</div></section>
+    <section class="card card-pad v9csum"><div><span class="sub small">${+ym.slice(5)}월 전체 카드 사용액</span><b class="${useT ? 'neg' : ''}">${useT ? '−' : ''}${won(useT)}원</b></div><div><span class="sub small">다음 결제 예정 합계</span><b>${nextT ? '−' : ''}${won(nextT)}원</b>${paidT ? `<span class="sub small">결제됨 ✓ ${won(paidT)}원</span>` : ''}</div></section>
     ${pairHtml}
     ${list.map(row).join('') || `<section class="card"><div class="empty">${ic('credit-card', 40, 'var(--sub)')}<span>등록한 카드가 없어요.</span></div></section>`}
     <div style="display:flex;flex-wrap:wrap;gap:10px"><button class="btn" style="flex:1 1 200px;min-height:52px" data-act="goAddCard">${ic('plus', 18)}카드 추가</button>${feat('instView') ? `<button class="btn" style="flex:1 1 200px;min-height:52px" data-act="goInst">${ic('list', 18)}할부 모아보기</button>` : ''}${closed.length ? `<button class="btn ghost" data-act="toggleClosedCards">${S.showClosedCards ? '해지 카드 숨기기' : `해지 카드 보기 (${closed.length})`}</button>` : ''}</div>

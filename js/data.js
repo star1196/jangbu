@@ -38,7 +38,7 @@ const DATA = (() => {
     ['여행', 'out', 'plane', 5], ['외식·식사', 'out', 'utensils', 0], ['용돈', 'out', 'hand-coins', 6],
     ['의류·잡화', 'out', 'shirt', 6], ['자동차(주유·정비)', 'out', 'car', 5], ['저축·적금', 'out', 'piggy-bank', 4],
     ['주거(월세)', 'out', 'house', 0], ['취미·여가', 'out', 'ticket', 3], ['카페·간식', 'out', 'coffee', 2],
-    ['통신비', 'out', 'smartphone', 6], ['기타지출', 'out', 'ellipsis', 7],
+    ['통신비', 'out', 'smartphone', 6], ['기타지출', 'out', 'receipt', 7],
     ['급여', 'in', 'wallet', 0], ['기타수입', 'in', 'coins', 7], ['보험금', 'in', 'umbrella', 6],
     ['부수입', 'in', 'briefcase', 1], ['상여금', 'in', 'award', 2], ['용돈수입', 'in', 'banknote', 5],
     ['이자·배당', 'in', 'trending-up', 3], ['적금·예금 만기', 'in', 'piggy-bank', 4], ['환급', 'in', 'rotate-ccw', 3]
@@ -56,7 +56,7 @@ const DATA = (() => {
   // 친구회(계모임) 기본 계정 (편집 가능). meet: 모임 지출(모임별 보기) · nonStat: 수입·지출 통계에서 빼는 것(대출 원금 오감)
   // 2026-11: 계정 = 무엇에 썼나 / 모임(정기모임·임시모임·여행) = 어느 모임에서. 둘을 따로 적음.
   const CLUB_ACCOUNTS = [
-    ['경조사(축의·조의)', 'out', 'heart', 5], ['교통·주차', 'out', 'car', 2], ['꽃·화환', 'out', 'star', 6], ['기부', 'out', 'hand-coins', 3], ['기타지출', 'out', 'ellipsis', 7],
+    ['경조사(축의·조의)', 'out', 'heart', 5], ['교통·주차', 'out', 'car', 2], ['꽃·화환', 'out', 'star', 6], ['기부', 'out', 'hand-coins', 3], ['기타지출', 'out', 'receipt', 7],
     ['대출 지급', 'out', 'banknote', 4, { nonStat: true, loanOut: true }], ['명절선물', 'out', 'package', 3], ['문구·인쇄', 'out', 'printer', 1], ['생일선물', 'out', 'cake', 6],
     ['선물(기타)', 'out', 'gift', 5], ['수수료(은행)', 'out', 'landmark', 4], ['숙소', 'out', 'building', 1], ['식사', 'out', 'utensils', 0], ['우정맞춤', 'out', 'shirt', 2],
     ['입장·체험', 'out', 'ticket', 2], ['장보기', 'out', 'shopping-basket', 0], ['카페·간식', 'out', 'coffee', 3], ['2차·주류', 'out', 'receipt', 5],

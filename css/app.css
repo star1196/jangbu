@@ -1508,6 +1508,36 @@ button.sumline.on { background: var(--soft); font-weight: 700; }
 .v41hb { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
 body.v41printing #app > *:not(.dlgwrap):not(.dim) { }
 @media print { body.v41printing .content, body.v41printing nav, body.v41printing header, body.v41printing .h3main, body.v41printing .dlg-btns, body.v41printing .tabbar { display: none !important; } body.v41printing .dlg { position: static !important; box-shadow: none !important; max-width: none !important; } }
-.phone .f10add { min-width: 40px; padding: 0 8px; } .phone .f10add .f10addt { display: none; }
+.phone .f10add { min-width: 40px; padding: 0 8px; gap: 2px; min-height: 36px; font-size: calc(14px * var(--fs)); }
 .phone .v41q { min-width: 32px; width: 32px; }
 .v41chart svg { max-width: 100%; height: auto; }
+
+/* ───────── v42 (3차): 휴대폰 머리줄 · 달력 · 목록 · 카드 ───────── */
+.phone .top { gap: 2px; padding-left: 4px; padding-right: 4px; }
+.phone .top-nav .iconbtn { width: 38px; }
+.phone .top-title { overflow: visible; text-overflow: clip; max-width: none; }
+.phone .top-mid { overflow: visible; }
+.v42right { gap: 2px; align-items: center; min-width: 0 !important; }
+.v42menu { position: fixed !important; top: calc(56px + env(safe-area-inset-top)); right: 8px; left: auto !important; bottom: auto !important; transform: none !important; width: auto !important; min-width: 200px; max-width: 260px; padding: 6px !important; gap: 0 !important; border-radius: 14px !important; }
+.v42mi { display: flex; align-items: center; gap: 12px; min-height: 48px; width: 100%; padding: 0 12px; border: 0; background: none; border-radius: 10px; font-size: calc(16px * var(--fs)); text-align: left; color: var(--ink); }
+.v42mi:disabled { color: #A3A29D; }
+.v42mic { width: 20px; text-align: center; font-weight: 800; font-size: 18px; }
+.calgrid .cell .sun, .calweek .sun { color: #C0605A; }
+.calgrid .cell .sat, .calweek .sat { color: #5B7BAF; }
+.v42legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: calc(12px * var(--fs)); color: var(--sub); padding: 0 4px; }
+.v42legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.v42ltop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.v42ltop .seg { flex: 0 1 240px; }
+.v42ltop .calhead { margin: 0; flex: 1 1 auto; }
+.v42lrow { display: flex; align-items: center; gap: 8px; }
+.v42fbtn { display: inline-flex; align-items: center; gap: 4px; }
+.v42n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 10px; background: var(--accent-button, var(--ink)); color: #fff; font-size: 12px; }
+.v42fold, .v42lmore { display: none; flex-direction: column; gap: 10px; }
+.v42fold.open { display: flex; } .v42lmore.open { display: flex; flex-direction: row; flex-wrap: wrap; }
+.v42fold > .chip { align-self: flex-start; }
+.v42lmore .btn, .v42lmore .chip { min-height: 40px; font-size: calc(14px * var(--fs)); }
+.v42ctrow { padding: 4px 16px 12px; gap: 6px; align-items: center; }
+.v42ctrow .chip { min-height: 34px; padding: 0 12px; font-size: calc(13px * var(--fs)); }
+.v42chk { margin: 0 12px 12px; }
+.v42holi { max-height: 46vh; overflow-y: auto; }
+.v42holi .drow.off span { text-decoration: line-through; color: var(--sub); }

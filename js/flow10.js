@@ -563,7 +563,7 @@ const F10_ACT = {
   flNewAcc: async () => {
     const f = S.f, F = flF(), nm = String(F.newName || '').trim().slice(0, 20), kind = F.newKind || f.kind; if (!nm) { flErr('이름을 적어 주세요.'); return; }
     const same = Store.all('accounts').find((a) => a.kind === kind && norm(a.name) === norm(nm));
-    const a = same || await Store.put('accounts', { name: nm, kind, icon: kind === 'in' ? 'coins' : 'circle', color: 7, hidden: false, order: Store.all('accounts').length });
+    const a = same || await Store.put('accounts', { name: nm, kind, icon: kind === 'in' ? 'coins' : (typeof iconGuess === 'function' ? iconGuess({ name: nm, kind }) : 'receipt'), color: 7, hidden: false, order: Store.all('accounts').length });
     if (a.hidden) await Store.put('accounts', { ...a, hidden: false });
     f.accId = a.id; f.accTouched = true; F.hist.pop(); F.t = kind === 'in' ? 'inc' : 'exp'; toast(same ? `「${a.name}」 계정을 골랐어요` : `새 계정 「${a.name}」을 만들었어요`); flAfterAcc();
   },

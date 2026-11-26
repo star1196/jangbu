@@ -11,7 +11,7 @@ const countedClub = (x) => !nonStat(x) && !isUnc(x) && !x.recordOnly; // 기록�
 function clubUncBand() {
   const n = clubTx().filter(isUncClub).length; if (!n) return '';
   const nin = ugTxs().length;
-  return `<button class="uncband" data-act="clubUncGo">${ic('circle-help', 22)}<span style="flex:1;text-align:left"><b>미확인 ${n}건</b>${nin ? ` <span class="small">· 입금 ${nin} · 지출 ${n - nin}</span>` : ''}</span><span class="uncgo">정리하기 ${ic('chevron-right', 16)}</span></button>`;
+  return `<button class="uncband" data-act="clubUncGo">${ic('circle-help', 22)}<span style="flex:1;text-align:left"><b>분류 대기 ${n}건</b>${nin ? ` <span class="small">· 입금 ${nin} · 지출 ${n - nin}</span>` : ''}</span><span class="uncgo">정리하기 ${ic('chevron-right', 16)}</span></button>`;
 }
 
 /* ── 통장 내역: 날짜 · 내용 · 입금 · 출금 · 잔액 (줄마다 잔액) ── */
@@ -54,7 +54,7 @@ function viewClubFlow(kind, L) {
   const chip = (act, v, cur, label) => `<button class="chip ${cur === v ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}">${esc(label)}</button>`;
   return `<div class="stack">
     <section class="card card-pad"><span class="sub small">${kind === 'in' ? '수입' : '지출'} 합계 · ${esc(P.p)}</span><div class="bigamt ${kind === 'in' ? 'pos' : 'neg'}">${kind === 'in' ? '+' : '−'}${won(total)}원</div>
-      ${uncN ? `<button class="linkbtn" data-act="clubUncGo">미확인 ${uncN}건은 합계에 안 들어가요 · 정리하기</button>` : ''}</section>
+      ${uncN ? `<button class="linkbtn" data-act="clubUncGo">분류 대기 ${uncN}건은 합계에 안 들어가요 · 정리하기</button>` : ''}</section>
     ${moveSeg(key)}${cBankChips()}
     ${pfBar(key, '1년', null, kind === 'in' ? '이름 · 계정 · 메모 · 금액 찾기' : '가맹점 · 계정 · 모임 · 메모 · 금액 찾기')}
     <div class="cols"><section class="card card-pad" style="flex:1 1 300px;min-width:0"><h2 class="h2" style="margin-bottom:8px">계정별</h2>${sumRows(byAcc, total) || '<span class="sub">없어요.</span>'}</section>
