@@ -66,7 +66,7 @@ function v42HoliName(d) {
   if (holiOff().includes(d)) return '';
   return holidaysOf(+d.slice(0, 4))[d] || '';
 }
-const v42IsRed = (d) => { const w = parseYmd(d).getDay(); return w === 0 || w === 6 || !!v42HoliName(d); };
+const v42IsRed = (d) => { if (typeof v43IsRed === 'function') return v43IsRed(d); const w = parseYmd(d).getDay(); return w === 0 || w === 6 || !!v42HoliName(d); }; // v43: 직접 고친 공휴일 · 쉬는 날 여부
 function viewHoliDlg(D) {
   const y = D.y || +todayStr().slice(0, 4), H = holidaysOf(y), ex = holiExtra().filter((h) => h.d.startsWith(String(y))), off = holiOff();
   const rows = [...Object.entries(H).map(([d, n]) => ({ d, n, base: 1 })), ...ex.map((h) => ({ d: h.d, n: h.n || '임시공휴일', ex: 1 }))].sort((a, b) => (a.d < b.d ? -1 : 1));
@@ -110,6 +110,7 @@ function v42ListFold() {
   if (pf) fold.appendChild(pf);
   // ⋯ 안: 내려받기 · 인쇄 · 비교 요약 · 여러 건 선택
   [...bar.querySelectorAll('[data-act="v7Out"], [data-act="v41CmpOpen"]')].forEach((b) => more.insertBefore(b, more.firstChild));
+  more.insertAdjacentHTML('afterbegin', '<button class="btn ink" data-act="v43QuickPdf">PDF 바로</button>'); // v43: 목록 → ⋯ → PDF 바로 (3번)
   bar.replaceWith(top); top.after(row); row.after(more); more.after(fold);
   if (S.selMode) more.classList.add('open');
 }

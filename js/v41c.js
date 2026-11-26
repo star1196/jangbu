@@ -73,7 +73,7 @@ viewAcct = (function (orig) {
     const big = cats.filter((c) => c.id && c.v / (tot || 1) >= 0.03), small = cats.filter((c) => !big.includes(c)), sv = small.reduce((s, c) => s + c.v, 0);
     const C = { cats: [...big, ...(sv ? [{ id: '', n: '기타', v: sv, c: '#A39A92' }] : [])].map((c) => ({ ...c, pt: tot ? Math.round((c.v / tot) * 100) : 0 })), tot };
     const mode = S.v41chart || 'pie', wide = L !== 'phone';
-    let g = mode === 'pie' ? h3Pie(C, wide ? 560 : 360, wide ? 380 : 300, wide ? 110 : 58) : h3Bars(C);
+    let g = mode === 'pie' ? h3Pie(C, wide ? 560 : 410, wide ? 380 : 300, wide ? 110 : 52) : h3Bars(C);
     if (kind === 'in') g = g.replace(/−/g, '+').replace('지출 합계', '수입 합계').replace('fill="#3B5F8F"', 'fill="#B5473F"');
     let i = 0; g = g.replace(/<(path|circle) (d=|cx=)/g, (m, tag, a) => { const c = C.cats[i++]; return c && c.id ? `<${tag} data-act="acctOpen" data-id="${c.id}" data-ym="${S.acctYM}" style="cursor:pointer" ${a}` : m; });
     const card = `<section class="card card-pad v41chart"><div class="secrow"><b>${S.acctYM.replace('-', '년 ')}월 ${kind === 'out' ? '지출' : '수입'} · 계정별</b><div class="seg" style="flex:0 0 auto">${[['pie', '원형'], ['bar', '가로 막대']].map(([k, l]) => `<button class="${mode === k ? 'on' : ''}" data-act="v41Chart" data-v="${k}">${l}</button>`).join('')}</div><button class="btn" data-act="v41CmpOpen">비교 요약</button></div>${g}<span class="sub small">조각을 누르면 그 계정 내역 · 3% 미만은 기타</span></section>`;
