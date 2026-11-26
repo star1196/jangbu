@@ -23,7 +23,7 @@ function backupFileName(ts) {
 }
 
 /* 묶음 이름을 사람 말로 (확인 화면 건수 풀이) */
-const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것', notes: '할 일·기념일', photos: '영수증 사진', members: '회원', loans: '대출', clauses: '회칙 조항', decisions: '결의·개정 기록' };
+const COL_NAMES = { tx: '내역', banks: '통장', payMethods: '카드·결제수단', accounts: '계정과목', rules: '자동 분류 규칙', templates: '파일 모양', imports: '올린 파일 기록', meta: '설정', repeats: '반복 입력', savings: '적금·예금', plans: '고정 계획표', trips: '여행 묶음', reminders: '기억할 것', notes: '일정·기념일', photos: '영수증 사진', members: '회원', loans: '대출', clauses: '회칙 조항', decisions: '결의·개정 기록' };
 const liveCount = (cols) => (cols.tx || []).filter((x) => !x.deleted).length;
 
 // v36: 이 백업의 마지막 기록 (가장 나중에 넣거나 고친 것: 날짜·시각·내용) + 기록 수
@@ -361,7 +361,7 @@ async function createFromBackup(form) {
   }
 }
 
-/* 홈 할 일: 백업한 지 7일이 지났거나 아직 안 했으면 */
+/* 홈 일정: 백업한 지 7일이 지났거나 아직 안 했으면 */
 function backupTodo() {
   if (!Store.all('tx').some((x) => !x.deleted)) return '';
   const last = syncInfo().lastSave;

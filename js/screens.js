@@ -4,7 +4,7 @@
 const PARENT = { '카드 명세서': '카드 대금', '받을 돈': '홈', '가족별': '홈', '전체 메뉴': '홈', '계정과목 편집': '설정', '휴지통': '설정', '통장': '홈', '별도 통장': '홈', '통장 관리': '설정', '사용할 기능': '설정',
   '카드 대금': '홈', '카드 추가': '홈', '파일 올리기': '홈', '분류 대기': '홈', '자동 분류 규칙': '설정', '파일 서식': '설정',
   '반복 입력': '설정', '적금·예금': '홈', '고정 계획표': '설정',
-  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '할 일·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정', '최근 한 일': '홈' };
+  '분류 사전': '설정', '검색': '홈', '여행': '목록', '여행 상세': '여행', '연도별 모아보기': '계정별', '기억할 것': '설정', '금고': '설정', '엑셀 옮기기': '설정', '처음 시작하기': '설정', '현금영수증': '설정', '보안·잠금': '설정', '저장 공간': '설정', '할부 모아보기': '홈', '내역 보기': '홈', '일정·기념일': '홈', '홈 꾸미기': '설정', '중복 점검': '설정', '보안 점검': '설정', '최근 한 일': '홈' };
 if (typeof CLUB_PARENT !== 'undefined') Object.assign(PARENT, CLUB_PARENT); // 친구회 화면 (club.js)
 
 function screenBody(L) {
@@ -45,7 +45,7 @@ function screenBody(L) {
     case '처음 시작하기': return viewStart();
     case '현금영수증': return viewCashRc(L);
     case '내역 보기': return viewDrill(L); // 홈 숫자 → 조건 걸린 내역 (home2.js)
-    case '할 일·기념일': return viewNotes();
+    case '일정·기념일': return viewNotes();
     case '홈 꾸미기': return viewHome3Cfg(); // v38 새 홈 편집 (home3.js)
     case '전체 메뉴': return viewAllMenu(L); // v38 (home3.js)
     case '받을 돈': return viewRecv(L); // v38 (v38.js)
@@ -67,7 +67,7 @@ function txRow(x, opt) {
   if (!sub) {
     if (x.kind === 'tr') sub = '이체' + (x.memo ? ' · ' + x.memo : '');
     else if (x.kind === 'adj') sub = bankName(x.bankId) + (x.memo ? ' · ' + x.memo : '');
-    else sub = [x.archived ? '보관 (시작점 이전)' : isUnc(x) ? '미확인' : acc ? acc.name : '미확인', x.splitId && x.memo ? x.memo : '', x.splitId ? `나눔 ${x.splitIdx || ''}/${x.splitN || ''}` : '', x.photoId ? '영수증 사진' : '', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : '', x.internal ? '장부에만' : '', x.bankMemo ? '통장: ' + x.bankMemo : '', !x.splitId && x.memo ? x.memo : ''].filter(Boolean).join(' · ');
+    else sub = [x.archived ? '보관 (시작점 이전)' : isUnc(x) ? '분류 대기' : acc ? acc.name : '분류 대기', x.splitId && x.memo ? x.memo : '', x.splitId ? `나눔 ${x.splitIdx || ''}/${x.splitN || ''}` : '', x.photoId ? '영수증 사진' : '', pay ? pay.name : '', x.bankId ? bankName(x.bankId) : '', x.internal ? '장부에만' : '', x.bankMemo ? '통장: ' + x.bankMemo : '', !x.splitId && x.memo ? x.memo : ''].filter(Boolean).join(' · ');
   }
   const chk = S.selMode && opt.selectable ? `<span class="chk ${on ? 'on' : ''}">${on ? ic('check', 16) : ''}</span>` : '';
   const dot = isUnc(x) ? '<span class="undot"></span>' : '';
@@ -307,7 +307,7 @@ function viewList(L) {
   const chips = ['전체', ...(feat('banks') ? ['통장별'] : []), ...(feat('cards') ? ['카드별'] : []), ...(feat('trips') ? ['묶음'] : [])].map((k) =>`<button class="chip ${k === grp ? 'on' : ''}" data-act="listGroup" data-k="${k}">${k}</button>`).join('') + `<button class="chip inner ${F.inner ? 'on' : ''}" data-act="listInner">장부에만</button><button class="chip" data-act="c7SwapNew">${ic('repeat', 16)}맞바꿈 넣기</button>`;
   const fchips = [
     F.accId ? `<button class="chip on" data-act="clearF">${esc((accOf(F.accId) || {}).name || '')} ${ic('x', 14)}</button>` : '',
-    F.unc ? `<button class="chip on" data-act="clearF">미확인만 ${ic('x', 14)}</button>` : ''
+    F.unc ? `<button class="chip on" data-act="clearF">분류 대기만 ${ic('x', 14)}</button>` : ''
   ].join('');
   const bankSubChips = F.bankGroup ? `<div class="chips" style="gap:6px">${banksAll().map((b) => `<button class="chip ${b.id === F.bankId ? 'on' : ''}" style="min-height:40px;font-size:${px(13)}" data-act="listBank" data-id="${b.id}">${esc(b.name)}${b.type === 'sep' ? ' · 별도' : ''}</button>`).join('') || '<span class="sub small">통장이 없어요.</span>'}
     ${F.bankId ? `<button class="linkbtn" data-act="openBank" data-id="${F.bankId}">통장 표로 보기 (이체·잔액 포함)</button>` : ''}</div>` : '';
@@ -318,7 +318,7 @@ function viewList(L) {
       ? [['날짜', dateLabel(det.date, true)], ['보내는 통장', `${bankName(det.fromId)} −${won(det.amount)}원`], ['받는 통장', `${bankName(det.toId)} +${won(det.amount)}원`], ['메모', det.memo || '—'], ['합계', '이체는 수입·지출에 안 들어가요']]
       : det.kind === 'adj'
         ? [['날짜', dateLabel(det.date, true)], ['통장', bankName(det.bankId)], ...(det.bankMemo ? [['통장 메모', det.bankMemo]] : []), ['내 메모', det.memo || '—']]
-        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '미확인' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ...(det.bankMemo ? [['통장 메모', det.bankMemo]] : []), ['내 메모', det.memo || '—'], ...(det.dev ? [['넣은 기기', det.dev]] : []),
+        : [['날짜', dateLabel(det.date, true)], ['분류', isUnc(det) ? '분류 대기' : (acc || {}).name], ['결제', (pay || {}).name || '—'], ...(det.bankId ? [['통장', bankName(det.bankId)]] : []), ...(det.bankMemo ? [['통장 메모', det.bankMemo]] : []), ['내 메모', det.memo || '—'], ...(det.dev ? [['넣은 기기', det.dev]] : []),
           ...(det.discount || det.pointUsed ? [['아낀 돈', `할인 ${won(det.discount || 0)}원 · 포인트 ${won(det.pointUsed || 0)}원`]] : []),
           ...(startDate() && det.date < startDate() ? [['합계', '시작점 이전이라 합계에서 빠져요']] : []),
           ...(isSep(det.bankId) ? [['합계', '별도 통장 안의 돈이라 가계부 합계에서 빠져요']] : [])];
@@ -445,9 +445,10 @@ function viewSettings() {
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
       ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
-      ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('할 일 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
+      ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('일정 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
-      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen')) : ''}
+      ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint')) : ''}
+      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen') + rowB('보험사 목록', `${typeof insurersAll === 'function' ? insurersAll().length : 0}곳 · 추가 · 순서 · 숨기기`, 'v41InsOpen')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -554,9 +555,11 @@ function viewDialog() {
   } else if (/^(rmMenu|rmDel)$/.test(D.type)) {
     body = viewRmDlg(D); // 고치기 · 지우기 (edit3.js)
   } else if (/^(hbRecon|hnNote|hbRecRec)$/.test(D.type)) {
-    body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
+    body = viewHome2Dlg(D); // 잔액 맞추기 · 일정·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^v41/.test(D.type)) {
+    body = viewV41Dlg(D); // v41 (v41.js)
   } else if (/^f10/.test(D.type)) {
     body = viewF10Dlg(D); // 색상 테마 · 예전 입력 (flow10.js)
   } else if (D.type === 'v9Bill') {
@@ -679,7 +682,7 @@ function viewDialog() {
       <div class="drow" style="border-top:0"><span class="sub">통장</span><b>${esc(bankName(x.bankId))}</b></div>
       <div class="drow"><span class="sub">날짜</span><b>${dateLabel(x.date, true)}</b></div>
       <div class="drow"><span class="sub">조정한 금액</span>${txAmt(x)}</div>
-      <span class="sub small">${x.kind === 'bill' ? '대금이 실제로 안 나갔으면 휴지통으로 옮기세요. 다시 할 일에 떠요.' : '잘못 넣었으면 휴지통으로 옮긴 뒤 다시 [잔액 맞추기]를 해 주세요.'}</span>
+      <span class="sub small">${x.kind === 'bill' ? '대금이 실제로 안 나갔으면 휴지통으로 옮기세요. 다시 일정에 떠요.' : '잘못 넣었으면 휴지통으로 옮긴 뒤 다시 [잔액 맞추기]를 해 주세요.'}</span>
       <div class="dlg-btns"><button class="btn" data-act="closeDlg">닫기</button><button class="btn ink" data-act="adjDel" data-id="${x.id}">휴지통으로</button></div></div>`;
   } else if (D.type === 'delBank') {
     const b = bankOf(D.id);

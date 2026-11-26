@@ -321,10 +321,10 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right">${!isClub && !isHome && typeof f10AddBtn === 'function' ? f10AddBtn() : ''}${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
+      <div class="top-right">${typeof helpBtn === 'function' ? helpBtn() : ''}${!isClub && !isHome && typeof f10AddBtn === 'function' ? f10AddBtn() : ''}${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
-    ${clubBar ? `<div class="homebar"><button class="b2" data-act="clubPlus">${ic('plus', 20)}입력</button></div>` : ''}
+    ${clubBar ? `<div class="homebar"><button class="b2" data-act="${typeof flClubOpen === 'function' ? 'v41ClubIn' : 'clubPlus'}">${ic('plus', 20)}입력</button></div>` : ''}
     ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
     ${compact ? `<nav class="tabbar" aria-label="메뉴">${nav()}</nav>` : ''}
   </main>
@@ -417,7 +417,7 @@ function afterOpen() {
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
   if (typeof v7FeatNotice === 'function') v7FeatNotice();
   if (typeof v8OwnerAsk === 'function') v8OwnerAsk();
-  setTimeout(() => { if (typeof f10AutoBackup === 'function') f10AutoBackup().catch(() => {}); }, 700); // v40: 업데이트 뒤 처음 한 번 자동 백업 // v38: 주인 이름 한 번 묻기
+  setTimeout(() => { if (typeof v41Upgrade === 'function') v41Upgrade().catch(() => {}); }, 700); // v40: 업데이트 뒤 처음 한 번 자동 백업 // v38: 주인 이름 한 번 묻기
   S.h3hide = Store.current().type !== 'club' && (Store.get('meta', 'settings') || {}).home3HideStart !== false; // v39: 잠금 풀고 처음 홈 금액은 •••••• (누르면 보임) // v37: 꺼져 있던 기능을 켰으면 알림
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
   // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
@@ -645,7 +645,7 @@ const ACT = {
   ...UNDO_ACT, // 되돌리기 · 최근 한 일 (undo2.js · v35)
   ...SEC_ACT, // 화면 가림 · 보안 점검 (sec.js · v33)
   ...EDIT3_ACT,
-  ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 할 일·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
+  ...HOME2_ACT, // 가계부 홈 · 바로 내역 · 일정·기념일 · 홈 꾸미기 · 잔액 맞추기 (home2.js · v32)
   ...LEDGER2_ACT, // 통장 메모 · 내 메모 · 장부에만 · 짝 지우기 (ledger2.js)
   ...CLUB7_ACT,
   ...B2_ACT,
@@ -715,6 +715,7 @@ const ACT = {
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
+  ...V41_ACT, // v41 보험사 · 목록 거르기 · 나누기 · 보험 · 일정 · 도움말 (v41.js)
   ...F10_ACT, // v40 단계별 입력 · 색상 테마 · 받을 돈 마무리 (flow10.js)
   ...PW_ACT, // 돈 넣는 방식 · 카드값 결제 연결 (payway.js · v34 · 맨 뒤라야 카드값 결제를 덮음)
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
@@ -744,6 +745,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV41Input(el)) return; // v41
   if (onF10Input(el)) return; // v40 단계별 입력
   if (onV9Input(el)) return; // v39 결제일 정하기
   if (onV8Input(el)) return; // v38
@@ -753,7 +755,7 @@ $app.addEventListener('input', (e) => {
   if (onV36Input(el)) return; // v36 (v36.js)
   if (onPwInput(el)) return; // 메모 칸 (payway.js · v35)
   if (onEdit3Input(el)) return; // 중복 점검 체크 (edit3.js)
-  if (onHome2Input(el)) return; // 잔액 맞추기 · 할 일·기념일 칸 (home2.js)
+  if (onHome2Input(el)) return; // 잔액 맞추기 · 일정·기념일 칸 (home2.js)
   if (onLedger2Input(el)) return; // 내 메모 칸 (ledger2.js)
   if (onE8Input(el)) return;
   if (onB4Input(el)) return;

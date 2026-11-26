@@ -1,4 +1,4 @@
-// 가계부 홈 살리기 (2026-11-17 v32): 홈 숫자 이름 · 누르면 바로 내역 · 지난달 비교 · 카드별 · 할 일·기념일 · 홈 꾸미기 · 통장 잔액 맞추기
+// 가계부 홈 살리기 (2026-11-17 v32): 홈 숫자 이름 · 누르면 바로 내역 · 지난달 비교 · 카드별 · 일정·기념일 · 홈 꾸미기 · 통장 잔액 맞추기
 // 주민가계부(가계부 · 병원 장부) 전용. 저장은 그 장부 안에만 (설정 meta · notes · banks)
 'use strict';
 
@@ -26,7 +26,7 @@ function rangeTag(a, b) {
 const manTxt2 = (n) => { const a = Math.abs(n); return a >= 10000 ? `${Math.round(a / 1000) / 10}만 원` : `${won(a)}원`; };
 
 /* ───────── 홈 꾸미기 설정 (장부마다) ───────── */
-const HOME_BLOCKS = [['inc', '수입'], ['out', '지출 (사용일 기준)'], ['bank', '통장에서 나간 돈 (결제일 기준)'], ['cmp', '지난달 비교'], ['cards', '카드별 사용 · 결제 예정'], ['todo', '할 일 · 기념일'], ['banks', '통장 잔액']];
+const HOME_BLOCKS = [['inc', '수입'], ['out', '지출 (사용일 기준)'], ['bank', '통장에서 나간 돈 (결제일 기준)'], ['cmp', '지난달 비교'], ['cards', '카드별 사용 · 결제 예정'], ['todo', '일정 · 기념일'], ['banks', '통장 잔액']];
 const TODO_SPANS = [['1주', 7], ['2주', 14], ['1달', 31], ['3달', 92]];
 function homeCfg() {
   const h = (Store.get('meta', 'settings') || {}).home || {};
@@ -80,7 +80,7 @@ function viewDrill() {
       ${list.slice(0, 500).map((x) => txRow(x, { act: 'openTx' })).join('') || `<div class="empty">${ic('search', 28, 'var(--sub)')}이 조건에 맞는 내역이 없어요.</div>`}</section></div>`;
 }
 
-/* ───────── 할 일 · 기념일 (notes) ───────── */
+/* ───────── 일정 · 기념일 (notes) ───────── */
 const notesAll = () => Store.all('notes').filter((n) => !n.deleted);
 function noteOccs(n, from, to) {
   if (!n.yearly) return n.date >= from && n.date <= to ? [n.date] : [];
@@ -93,7 +93,7 @@ const ddTxt = (d) => { const dd = Math.round((parseYmd(d) - parseYmd(todayStr())
 function noteRow(n, occ, opt) {
   const done = n.done && n.done[occ];
   return `<div class="todo note ${done ? 'done' : ''}"><button class="tchk ${done ? 'on' : ''}" data-act="noteDone" data-id="${n.id}" data-o="${occ}" aria-label="${esc(n.title)} ${done ? '완료 취소' : '완료'}">${done ? ic('check', 16) : ''}</button>
-    <div class="tm" role="button" tabindex="0" data-act="noteEdit" data-id="${n.id}"><span class="tt">${esc(n.title)} <span class="tag ${n.type === 'anniv' ? 'anniv' : ''}">${n.type === 'anniv' ? '기념일' : '할 일'}</span>${n.yearly ? ' <span class="tag">매년</span>' : ''}</span>
+    <div class="tm" role="button" tabindex="0" data-act="noteEdit" data-id="${n.id}"><span class="tt">${esc(n.title)} <span class="tag ${n.type === 'anniv' ? 'anniv' : ''}">${n.type === 'anniv' ? '기념일' : '일정'}</span>${n.yearly ? ' <span class="tag">매년</span>' : ''}</span>
       <span class="sub small">${occ.replace(/-/g, '.')} · ${ddTxt(occ)}${n.memo ? ' · ' + esc(n.memo) : ''}${done && opt && opt.at ? ` · 완료 ${new Date(done).toLocaleDateString('ko-KR')}` : ''}</span></div></div>`;
 }
 function homeTodoBlock(autoHtml) {
@@ -103,18 +103,18 @@ function homeTodoBlock(autoHtml) {
   const ns = notesAll().flatMap((n) => noteOccs(n, from, to).map((o) => ({ date: o, n, html: noteRow(n, o) })));
   const items = [...autos, ...ns].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.auto ? -1 : 1)));
   const shown = S.todoAll ? items : items.slice(0, C.n);
-  return `<section class="card hblock todoblk" style="padding:18px 22px 10px"><div class="secrow"><h2 class="h2">할 일 · 기념일</h2><span class="chips" style="gap:6px"><button class="btn" data-act="goDup">중복 점검</button><button class="btn" data-act="noteNew">${ic('plus', 16)}넣기</button><button class="btn" data-act="go" data-to="할 일·기념일">기록</button></span></div>
+  return `<section class="card hblock todoblk" style="padding:18px 22px 10px"><div class="secrow"><h2 class="h2">일정 · 기념일</h2><span class="chips" style="gap:6px"><button class="btn" data-act="goDup">중복 점검</button><button class="btn" data-act="noteNew">${ic('plus', 16)}넣기</button><button class="btn" data-act="go" data-to="일정·기념일">기록</button></span></div>
     ${shown.map((i) => i.html).join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}
     ${items.length > C.n ? `<button class="linkbtn" data-act="todoMore">${S.todoAll ? '접기' : `더 보기 (${items.length - C.n}개 더)`}</button>` : ''}
     <span class="sub small" style="display:block;margin-top:4px">앞뒤 ${C.span} · 최대 ${C.n}개 (설정 → 홈 꾸미기)</span></section>`;
 }
 function viewNotes() {
   const P = pfOf('hnotes', '전체'), [from, to] = pfRange('hnotes', '전체');
-  const ns = notesAll().filter((n) => qHit(`${n.title} ${n.memo || ''} ${n.type === 'anniv' ? '기념일' : '할 일'}`, P.q));
+  const ns = notesAll().filter((n) => qHit(`${n.title} ${n.memo || ''} ${n.type === 'anniv' ? '기념일' : '일정'}`, P.q));
   const rows = applySort(ns.map((n) => ({ n, d: nextOcc(n) })).sort((a, b) => (a.d < b.d ? 1 : -1)), 'hnotes');
   const doneL = applySort(ns.flatMap((n) => Object.entries(n.done || {}).filter(([o]) => o >= from && o <= to).map(([o, at]) => ({ n, o, at }))).sort((a, b) => (a.o < b.o ? 1 : -1)), 'hnotesDone');
   return `<div class="stack" style="max-width:820px">
-    <div class="chips"><button class="btn ink" data-act="noteNew">${ic('plus', 18)}할 일 · 기념일 넣기</button></div>
+    <div class="chips"><button class="btn ink" data-act="noteNew">${ic('plus', 18)}일정 · 기념일 넣기</button></div>
     ${pfBar('hnotes', '전체', null, '내용 · 메모 찾기')}
     <section class="card" style="padding:6px 20px 10px"><div class="secrow"><h2 class="h2">모든 기록 <span class="sub small" style="font-weight:400">${rows.length}개 · 다음 날짜</span></h2>${sortBtn('hnotes')}</div>
       ${rows.map(({ n, d }) => noteRow(n, d)).join('') || '<div class="empty">아직 없어요. 결혼기념일(매년), 자동차 보험 갱신 같은 것을 넣어 보세요.</div>'}</section>
@@ -195,7 +195,7 @@ function viewHomeCfg() {
     <section class="card" style="padding:4px 18px">${C.order.map((k, i) => `<div class="row" style="min-height:58px;cursor:default"><span class="k">${esc((HOME_BLOCKS.find(([b]) => b === k) || [])[1] || k)}</span>
       <button class="iconbtn" data-act="hcMove" data-k="${k}" data-n="-1" ${i ? '' : 'disabled'} aria-label="위로">${ic('chevron-up', 18)}</button><button class="iconbtn" data-act="hcMove" data-k="${k}" data-n="1" ${i < C.order.length - 1 ? '' : 'disabled'} aria-label="아래로">${ic('chevron-down', 18)}</button>
       <button class="hidebtn" data-act="hcToggle" data-k="${k}" aria-pressed="${!C.off[k]}">${C.off[k] ? '꺼짐' : '켜짐'}<span class="tg ${C.off[k] ? '' : 'on'}"><i></i></span></button></div>`).join('')}</section>
-    <section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">할 일 · 기념일</h2>
+    <section class="card card-pad"><h2 class="h2" style="margin-bottom:8px">일정 · 기념일</h2>
       <span class="label">보이는 기간 (오늘 앞뒤)</span><div class="seg">${TODO_SPANS.map(([k]) => `<button class="${C.span === k ? 'on' : ''}" data-act="hcSpan" data-v="${k}">${k}</button>`).join('')}</div>
       <span class="label" style="margin-top:10px">보이는 개수</span><div class="seg">${[3, 5, 10].map((n) => `<button class="${C.n === n ? 'on' : ''}" data-act="hcN" data-v="${n}">${n}개</button>`).join('')}</div></section></div>`;
 }
@@ -263,8 +263,8 @@ function viewHome2Dlg(D) {
   }
   if (D.type === 'hnNote') {
     const d = D.d;
-    return `<div class="dlg" style="max-width:500px"><h2 class="dlg-title">${D.id ? '할 일 · 기념일 고치기' : '할 일 · 기념일 넣기'}</h2>
-      <div class="seg"><button class="${d.type !== 'anniv' ? 'on' : ''}" data-act="hnType" data-v="todo">할 일</button><button class="${d.type === 'anniv' ? 'on' : ''}" data-act="hnType" data-v="anniv">기념일</button></div>
+    return `<div class="dlg" style="max-width:500px"><h2 class="dlg-title">${D.id ? '일정 · 기념일 고치기' : '일정 · 기념일 넣기'}</h2>
+      <div class="seg"><button class="${d.type !== 'anniv' ? 'on' : ''}" data-act="hnType" data-v="todo">일정</button><button class="${d.type === 'anniv' ? 'on' : ''}" data-act="hnType" data-v="anniv">기념일</button></div>
       <label class="field"><span class="label">날짜</span><input class="input" type="date" data-hn="date" value="${esc(d.date)}"></label>
       <label class="field"><span class="label">내용</span><input class="input" data-hn="title" value="${esc(d.title)}" maxlength="40" placeholder="예: 결혼기념일, 자동차 보험 갱신" data-autofocus></label>
       <label class="check"><input type="checkbox" data-hn="yearly" ${d.yearly ? 'checked' : ''}>매년 반복</label>
@@ -285,7 +285,7 @@ function onHome2Input(el) {
 }
 const HOME2_ACT = {
   goHomeCfg: () => go('홈 꾸미기'),
-  goNotes: () => go('할 일·기념일'),
+  goNotes: () => go('일정·기념일'),
   hDrill: (el, e) => {
     if (e) e.stopPropagation();
     const k = el.dataset.k; let [from, to] = homeRange();
@@ -303,7 +303,7 @@ const HOME2_ACT = {
     if (!d.date) { if (e) e.textContent = '날짜를 넣어 주세요.'; return; }
     const before = D.id ? { ...Store.get('notes', D.id) } : null;
     const s = await Store.put('notes', { ...(before || { done: {} }), date: d.date, title: d.title.trim(), type: d.type, yearly: !!d.yearly, memo: String(d.memo || '').trim(), deleted: false });
-    S.dialog = null; render(); toast(before ? '고쳤어요' : `${d.type === 'anniv' ? '기념일' : '할 일'}을 넣었어요${d.yearly ? ' · 매년' : ''}`, { items: [{ col: 'notes', id: s.id, before }] });
+    S.dialog = null; render(); toast(before ? '고쳤어요' : `${d.type === 'anniv' ? '기념일' : '일정'}을 넣었어요${d.yearly ? ' · 매년' : ''}`, { items: [{ col: 'notes', id: s.id, before }] });
   },
   hnDel: async () => { const n = Store.get('notes', S.dialog.id), before = { ...n }; await Store.put('notes', { ...n, deleted: true, deletedAt: Date.now() }); S.dialog = null; render(); toast('지웠어요', { items: [{ col: 'notes', id: n.id, before }] }); },
   noteDone: async (el, e) => {

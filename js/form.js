@@ -136,7 +136,7 @@ function viewSheet() {
       ['구분', f.kind === 'in' ? '수입' : '지출'],
       ['날짜', dateLabel(`${f.y}-${f.mo}-${f.d}`, true)],
       ['가맹점', f.merchant || '—'],
-      ['분류', acc ? acc.name : '미확인 (나중에 정리해요)'],
+      ['분류', acc ? acc.name : '분류 대기 (나중에 정해요)'],
       ['결제', f.payId === LINK_PAY ? (f.linkId ? `통장 기록에 연결 · ${(Store.get('tx', f.linkId) || {}).merchant || ''} ${won((Store.get('tx', f.linkId) || {}).amount || 0)}원 (새 줄 없음)` : '통장 기록에 연결 · 아직 안 고름') : f.payId === INNER_PAY ? `${innerLabel(f.kind)} · 통장·현금 잔액은 그대로, 통계에는 들어가요` : pay ? (pay.kind === 'card' ? `${cardLabel(pay)} · ${cardTypeTxt(pay)}` : pay.name) : '—'],
       ...(pay && pay.kind === 'card' && pay.cardType !== 'check' && f.inst > 1 ? [['할부', `${f.inst}개월 · 매달 약 ${won(Math.trunc(f.amount / f.inst))}원씩 카드 대금에`]] : []),
       ...(pay && pay.kind === 'card' && pay.cardType === 'check' && pay.bankId ? [['통장', `${bankName(pay.bankId)}에서 바로 나가요`]] : []),

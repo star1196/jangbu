@@ -19,24 +19,24 @@ async function f10AutoBackup() {
 
 /* ───────── 7. 색상 테마 3가지 (4a 값 그대로) ───────── */
 const TH10 = {
-  coral: { n: '코랄 핑크', memo: '기본', a: '#EE6F67', btn: '#D85B53', tint: '#FDECEA', a2: '#AB504A', soft: '#FEF6F6', tint2: '#FBDFDE', line: '#F7BEBB', g1: '#F5A9A4', g2: '#F9CDCA' },
-  magenta: { n: '마젠타 핑크', memo: '', a: '#D0377A', btn: '#D0377A', tint: '#FBE6EF', a2: '#BF3370', soft: '#FDF4F8', tint2: '#F5D3E2', line: '#EAA5C3', g1: '#E387AF', g2: '#EFB9D0' },
-  purple: { n: '퍼플', memo: '', a: '#7A4FC2', btn: '#7A4FC2', tint: '#F0EAFA', a2: '#7A4FC2', soft: '#F8F6FD', tint2: '#E2D8F2', line: '#C3B0E4', g1: '#AF95DA', g2: '#D0C1EA' }
+  coral: { n: '코랄 핑크', memo: '기본', a: '#EE6F67', btn: '#D85B53', tint: '#FDECEA', a2: '#AB504A', soft: '#FEF6F6', tint2: '#FBDFDE', line: '#F7BEBB', g1: '#F5A9A4', g2: '#F9CDCA', bg: '#FFF7F5', pal: ['#E8877E', '#F0A882', '#E3C18A', '#C99AAE', '#A98BC2', '#9C93AE', '#D2B4A6', '#A39A92'] },
+  magenta: { n: '마젠타 핑크', memo: '', a: '#D0377A', btn: '#D0377A', tint: '#FBE6EF', a2: '#BF3370', soft: '#FDF4F8', tint2: '#F5D3E2', line: '#EAA5C3', g1: '#E387AF', g2: '#EFB9D0', bg: '#FDF5F8', pal: ['#D0538C', '#E390B5', '#C98BC9', '#9B7BC4', '#E2A97F', '#D6BE8A', '#B79AA8', '#A39A92'] },
+  purple: { n: '퍼플', memo: '', a: '#7A4FC2', btn: '#7A4FC2', tint: '#F0EAFA', a2: '#7A4FC2', soft: '#F8F6FD', tint2: '#E2D8F2', line: '#C3B0E4', g1: '#AF95DA', g2: '#D0C1EA', bg: '#F8F5FD', pal: ['#8A62CC', '#B497DE', '#D08BB8', '#E2A9A0', '#D9BB86', '#A69CC0', '#C7B6E0', '#A39A92'] }
 };
 const TH10_ORDER = ['coral', 'magenta', 'purple'];
 const th10Key = () => (TH10[f10St().theme10] ? f10St().theme10 : 'coral');
 const TH10_PAL0 = (DATA.PALETTES['세이지 뮤트'] || []).slice();
 function hexMix(a, b, t) { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('').toUpperCase(); }
 // 그래프 · 계정 아이콘: 테마색 단계 + 기타 #A39A92
-const th10Pal = (t) => [t.a, t.g1, t.a2, t.g2, hexMix(t.a, t.a2, 0.5), hexMix(t.g1, t.g2, 0.5), hexMix(t.a2, '#FFFFFF', 0.35), '#A39A92'];
+const th10Pal = (t) => t.pal || [t.a, t.g1, t.a2, t.g2, hexMix(t.a, t.a2, 0.5), hexMix(t.g1, t.g2, 0.5), hexMix(t.a2, '#FFFFFF', 0.35), '#A39A92']; // v41: 테마마다 차분한 8색 (빨강 · 파랑 없음)
 const TH10_VARS = ['--accent', '--accent-button', '--accent-tint', '--accent-ink', '--accent-soft', '--accent-tint-2', '--accent-line'];
 function th10Apply() {
   const r = document.documentElement, P = DATA.PALETTES['세이지 뮤트'];
-  const on = typeof S !== 'undefined' && S && S.mode === 'app' && f10Home();
+  const on = typeof S !== 'undefined' && S && S.mode === 'app' && !!Store.current(); // v41: 친구회도 색상 테마 (장부마다)
   if (!on) { delete r.dataset.accent; TH10_VARS.forEach((k) => r.style.removeProperty(k)); if (P) TH10_PAL0.forEach((c, i) => { P[i] = c; }); return; }
   const k = th10Key(), t = TH10[k]; r.dataset.accent = k;
   [t.a, t.btn, t.tint, t.a2, t.soft, t.tint2, t.line].forEach((v, i) => r.style.setProperty(TH10_VARS[i], v));
-  r.style.setProperty('--bg', '#FAFAF9'); // 홈 · 설정 바탕 회백 (핑크 · 초록 바탕 없음)
+  r.style.setProperty('--bg', f10St().bgTint === false ? '#FAFAF9' : t.bg); // v41: 홈 · 목록 · 설정 바탕은 테마색 아주 옅게 (설정에서 끌 수 있음) · 입력 창은 흰색
   if (P) th10Pal(t).forEach((c, i) => { P[i] = c; });
 }
 // 초록(세이지) 빼기: 받을 돈 꼬리표 · 장부 종류 색
@@ -69,7 +69,11 @@ function viewF10Dlg(D) {
 
 /* ───────── 1. 단계별 입력 (한 창 · 질문 하나) ───────── */
 const FL_IN = [['급여', '급여', 'wallet'], ['상여', '상여금', 'award'], ['용돈', '용돈수입', 'banknote'], ['이자', '이자·배당', 'trending-up'], ['적금 만기', '적금·예금 만기', 'piggy-bank'], ['환급', '환급', 'rotate-ccw'], ['기타', '기타수입', 'coins']];
-const FL_GIVE = [['대신 냄', 'receipt'], ['빌려줌', 'hand-coins'], ['빌림', 'arrow-down'], ['돌려받음', 'rotate-ccw']];
+const FL_GIVE = [['대신 냄', 'receipt'], ['빌려줌', 'hand-coins'], ['빌림', 'arrow-down'], ['돌려받음', 'rotate-ccw'], ['갚음', 'banknote']]; // v41: 갚음(빌린 돈 갚기)도 여기서
+const recvByDir = (dir) => Store.all('recv').filter((r) => !r.deleted && (r.dir || 'get') === (dir || 'get'));
+const FL_FIN = { 돌려받음: 'get', 갚음: 'pay' };
+const flPayDir = (F) => F.dir === 'pay';
+const FW = (F) => (flPayDir(F) ? { got: '갚았나요?', bank: '통장에서', dep: '이 출금인가요?', depSub: '금액이 비슷한 출금', depNo: '비슷한 출금이 아직 없어요.', amt: '얼마 갚았나요?', many: '한 번에 갚을까요?', done: '갚음 처리', keep: '계속 갚을 돈', got2: '갚음', sign: '−' } : { got: '받았나요?', bank: '통장으로', dep: '이 입금인가요?', depSub: '금액이 비슷한 입금', depNo: '비슷한 입금이 아직 없어요.', amt: '얼마 받았나요?', many: '한 번에 받을까요?', done: '받음 처리', keep: '계속 받을 돈', got2: '받음', sign: '+' });
 const GIVE_ACC = '주고받을 돈';
 const SAVE_LIKE = /적금|예금|청약|저축/;
 const flF = () => (S.f && S.f.flow ? S.f.flow : null);
@@ -136,7 +140,7 @@ function flRvWho(F) { const rs = flRv(F), w = [...new Set(rs.map((r) => r.who))]
 function flMatchFind(F, f) {
   if (F.noMatch || !f.amount || typeof pwCands !== 'function') return null;
   const date = flDate(f);
-  if (F.k === 'give') { if (F.gk === '돌려받음') return null; return pwCands({ kind: F.gk === '빌림' ? 'in' : 'out', amount: f.amount, date, any: true, max: 1, filter: (x) => !x.recvId && !x.recvPay })[0] || null; }
+  if (F.k === 'give') { if (FL_FIN[F.gk]) return null; return pwCands({ kind: F.gk === '빌림' ? 'in' : 'out', amount: f.amount, date, any: true, max: 1, filter: (x) => !x.recvId && !x.recvPay })[0] || null; }
   if (f.kind === 'tr' || f.payId === INNER_PAY) return null;
   const p = payOf(f.payId); if (!p || p.kind === 'cash') return null;
   return pwCands({ kind: f.kind, amount: f.amount, date, max: 1, filter: (x) => !x.recvId && !x.recvPay && (p.kind === 'card' ? x.payMethodId === p.id : !f.bankId || x.bankId === f.bankId) })[0] || null;
@@ -194,9 +198,9 @@ const FL_STEP = {
   },
   amt: (F, f) => {
     const [txt, c] = flAmtTxt(f, F), a = accOf(f.accId);
-    const sub = F.mode === 'recv' ? (F.how === 'bank' ? '입금 금액으로 채웠어요' : '받을 돈 금액으로 채웠어요') : F.k === 'give' ? `${F.who} · ${F.gk}` : F.k === 'tr' ? (F.trk === 'sav' ? `${(Store.get('savings', F.savId) || {}).name || '적금'} 넣기` : '통장끼리') : F.k === 'ins' && F.ik === 'claim' ? '돌려받을 병원비' : F.split ? '나눠서 넣기' : a ? a.name : '';
+    const sub = F.mode === 'recv' ? (F.how === 'bank' ? (flPayDir(F) ? '출금 금액으로 채웠어요' : '입금 금액으로 채웠어요') : (flPayDir(F) ? '갚을 돈 금액으로 채웠어요' : '받을 돈 금액으로 채웠어요')) : F.k === 'give' ? `${F.who} · ${F.gk}` : F.k === 'tr' ? (F.trk === 'sav' ? `${(Store.get('savings', F.savId) || {}).name || '적금'} 넣기` : '통장끼리') : F.k === 'ins' && F.ik === 'claim' ? '돌려받을 병원비' : F.split ? '나눠서 넣기' : a ? a.name : '';
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', 'del'];
-    return { q: F.mode === 'recv' ? '얼마 받았나요?' : F.k === 'ins' && F.ik === 'claim' ? '얼마를 청구했나요?' : '얼마인가요?', sub, body: `<label class="fl-amt" style="color:${c}"><span class="fl-sign">${f.amount ? esc(txt.replace(/[\d,]/g, '')) : ''}</span><input class="fl-amtin" data-fl="amt" value="${f.amount ? comma(f.amount) : ''}" style="width:${flAmtW(f.amount)}em;color:${c}" placeholder="0" inputmode="${layout() === 'phone' ? 'none' : 'numeric'}" autocomplete="off" aria-label="금액"><span class="fl-won">원</span></label>
+    return { q: F.mode === 'recv' ? FW(F).amt : F.k === 'ins' && F.ik === 'claim' ? '얼마를 청구했나요?' : '얼마인가요?', sub, body: `<label class="fl-amt" style="color:${c}"><span class="fl-sign">${f.amount ? esc(txt.replace(/[\d,]/g, '')) : ''}</span><input class="fl-amtin" data-fl="amt" value="${f.amount ? comma(f.amount) : ''}" style="width:${flAmtW(f.amount)}em;color:${c}" placeholder="0" inputmode="${layout() === 'phone' ? 'none' : 'numeric'}" autocomplete="off" aria-label="금액"><span class="fl-won">원</span></label>
       <div class="fl-quick">${[['+1천', 1000], ['+5천', 5000], ['+1만', 10000], ['+5만', 50000], ['+10만', 100000]].map(([l, v]) => `<button type="button" class="fl-qb" data-act="flAdd" data-v="${v}">${l}</button>`).join('')}</div>
       <div class="fl-pad">${keys.map((k) => `<button type="button" class="fl-key" data-act="flKey" data-v="${k}" aria-label="${k === 'del' ? '지우기' : k}">${k === 'del' ? '←' : k}</button>`).join('')}</div>`, cta: [['flAmtNext', '다음', 1]] };
   },
@@ -224,9 +228,9 @@ const FL_STEP = {
   },
   give: () => ({ note: '내 수입·지출 아님', q: '어떤 돈인가요?', sub: '주고받을 돈', body: flGrid(2, FL_GIVE.map(([n, i]) => flTile(n, n, i)), '', 'h104') }),
   peer: (F, f) => {
-    const names = F.gk === '돌려받음' ? [...new Set(recvAll().filter(recvOpen).map((r) => r.who))] : flPeers(F);
-    if (F.gk === '돌려받음' && !names.length) return { note: '내 수입·지출 아님', q: '누구에게서 받았나요?', sub: '돌려받음', body: '<div class="fl-empty">아직 받을 돈이 없어요.</div>' };
-    return { note: F.k === 'give' ? '내 수입·지출 아님' : '', q: F.k === 'ins' ? '어느 보험사인가요?' : F.gk === '돌려받음' ? '누구에게서 받았나요?' : '누구와인가요?', sub: F.k === 'ins' ? '병원비 돌려받기 · 실손' : F.gk, body: flGrid(3, [...names.map((n) => flTile(n, n, '', { ini: flIni(n), on: F.who === n, s: F.gk === '돌려받음' ? won(recvAll().filter((r) => recvOpen(r) && r.who === n).reduce((s, r) => s + recvLeft(r), 0)) + '원' : '' })), ...(F.gk === '돌려받음' ? [] : [flTile('new', '새 사람', 'plus', { add: 1 })])]) };
+    const fin = FL_FIN[F.gk], names = fin ? [...new Set(recvByDir(fin).filter(recvOpen).map((r) => r.who))] : flPeers(F);
+    if (fin && !names.length) return { note: '내 수입·지출 아님', q: fin === 'pay' ? '누구에게 갚았나요?' : '누구에게서 받았나요?', sub: F.gk, body: `<div class="fl-empty">아직 ${fin === 'pay' ? '갚을' : '받을'} 돈이 없어요.</div>` };
+    return { note: F.k === 'give' ? '내 수입·지출 아님' : '', q: F.k === 'ins' ? '어느 보험사인가요?' : F.gk === '돌려받음' ? '누구에게서 받았나요?' : F.gk === '갚음' ? '누구에게 갚았나요?' : '누구와인가요?', sub: F.k === 'ins' ? '병원비 돌려받기 · 실손' : F.gk, body: flGrid(3, [...names.map((n) => flTile(n, n, '', { ini: flIni(n), on: F.who === n, s: fin ? won(recvByDir(fin).filter((r) => recvOpen(r) && r.who === n).reduce((s, r) => s + recvLeft(r), 0)) + '원' : '' })), ...(fin ? [] : [flTile('new', '새 사람', 'plus', { add: 1 })])]) };
   },
   ins: () => ({ q: '어떤 보험 돈인가요?', sub: '둘 중 하나', body: flGrid(1, [flTile('claim', '병원비 돌려받기', 'pill', { s: '실손 · 수입 아님' }), flTile('pay', '보험금 수입', 'umbrella', { s: '진단금 · 만기' })], '', 'h96') }),
   trk: () => ({ q: '어떤 이체인가요?', sub: '수입 · 지출에 안 잡혀요', body: flGrid(2, [flTile('move', '통장끼리', 'arrow-left-right'), flTile('sav', '적금 넣기', 'piggy-bank')], '', 'h104') }),
@@ -257,18 +261,18 @@ const FL_STEP = {
   },
   // ── 받을 돈 마무리 (1s~1y) ──
   many: (F) => {
-    const rs = recvAll().filter((r) => recvOpen(r) && r.who === F.who).sort((a, b) => (a.date < b.date ? 1 : -1)), on = new Set(F.ids || []), sum = rs.filter((r) => on.has(r.id)).reduce((s, r) => s + recvLeft(r), 0), all = rs.length && rs.every((r) => on.has(r.id));
-    return { q: '한 번에 받을까요?', sub: `선택 합계 ${won(sum)}원`, body: `<div class="fl-tool"><span class="sub small">${esc(F.who)} · ${rs.length}건</span><button type="button" class="btn" data-act="flAll">${all ? '선택 끄기' : '전체 선택'}</button></div>`
-      + rs.map((r) => flRow(r.id, r.what || r.memo || r.kind, `${+r.date.slice(5, 7)}월 ${+r.date.slice(8)}일 · ${r.kind}`, won(recvLeft(r)) + '원', '', { ck: on.has(r.id), act: 'flChk', on: on.has(r.id), c: AMT_C.g })).join(''), cta: [['flManyNext', sum ? `한 번에 받음 처리 · ${won(sum)}원` : '받을 것을 골라 주세요', 1]] };
+    const rs = recvByDir(F.dir).filter((r) => recvOpen(r) && r.who === F.who).sort((a, b) => (a.date < b.date ? 1 : -1)), on = new Set(F.ids || []), sum = rs.filter((r) => on.has(r.id)).reduce((s, r) => s + recvLeft(r), 0), all = rs.length && rs.every((r) => on.has(r.id));
+    return { q: FW(F).many, sub: `선택 합계 ${won(sum)}원`, body: `<div class="fl-tool"><span class="sub small">${esc(F.who)} · ${rs.length}건</span><button type="button" class="btn" data-act="flAll">${all ? '선택 끄기' : '전체 선택'}</button></div>`
+      + rs.map((r) => flRow(r.id, r.what || r.memo || r.kind, `${+r.date.slice(5, 7)}월 ${+r.date.slice(8)}일 · ${r.kind}`, won(recvLeft(r)) + '원', '', { ck: on.has(r.id), act: 'flChk', on: on.has(r.id), c: AMT_C.g })).join(''), cta: [['flManyNext', sum ? `한 번에 ${FW(F).done} · ${won(sum)}원` : '골라 주세요', 1]] };
   },
-  got: (F) => ({ q: '받았나요?', sub: `${flRvWho(F)} · ${flRv(F).length > 1 ? flRv(F).length + '건' : (flRv(F)[0] || {}).kind || ''} ${won(flRvSum(F))}원`, body: flGrid(3, [flTile('bank', '통장으로', 'landmark'), flTile('cash', '현금', 'banknote'), flTile('later', '아직', 'clock')]) }),
+  got: (F) => ({ q: FW(F).got, sub: `${flRvWho(F)} · ${flRv(F).length > 1 ? flRv(F).length + '건' : (flRv(F)[0] || {}).kind || ''} ${won(flRvSum(F))}원`, body: flGrid(3, [flTile('bank', FW(F).bank, 'landmark'), flTile('cash', '현금', 'banknote'), flTile('later', '아직', 'clock')]) + (flRv(F).length === 1 ? `<button type="button" class="linkbtn fl-more" data-act="flRvView" data-id="${flRv(F)[0].id}">자세히 · 고치기 · 지우기</button>` : '') }),
   dep: (F) => {
-    const sum = flRvSum(F), L = recvCands(sum);
+    const sum = flRvSum(F), L = flPayDir(F) ? liveTx().filter((x) => x.kind === 'out' && !x.recvId && !x.recordOnly && !x.internal).sort((a, b) => (Math.abs(a.amount - sum) - Math.abs(b.amount - sum)) || (a.date < b.date ? 1 : -1)).slice(0, 8) : recvCands(sum);
     if (!F.dep && L.length && L[0].amount === sum) F.dep = L[0].id;
-    return { q: '이 입금인가요?', sub: '금액이 비슷한 입금', body: (L.map((x) => flRow(x.id, x.merchant || txTitle(x), `${+x.date.slice(5, 7)}월 ${+x.date.slice(8)}일 · ${bankName(x.bankId)}`, '+' + won(x.amount) + '원', 'landmark', { act: 'flDep', on: F.dep === x.id, c: AMT_C.g })).join('') || '<div class="fl-empty">비슷한 입금이 아직 없어요.</div>')
+    return { q: FW(F).dep, sub: FW(F).depSub, body: (L.map((x) => flRow(x.id, x.merchant || txTitle(x), `${+x.date.slice(5, 7)}월 ${+x.date.slice(8)}일 · ${x.bankId ? bankName(x.bankId) : (payOf(x.payMethodId) || {}).name || ''}`, FW(F).sign + won(x.amount) + '원', 'landmark', { act: 'flDep', on: F.dep === x.id, c: AMT_C.g })).join('') || `<div class="fl-empty">${FW(F).depNo}</div>`)
       + '<button type="button" class="linkbtn" data-act="flDepNone">목록에 없어요 · 금액만 넣기</button>', cta: [['flDepNext', '다음', 1]] };
   },
-  left: (F, f) => { const sum = flRvSum(F), claim = flRv(F).some((r) => r.kind === '보험 청구'); return { q: `남은 ${won(sum - f.amount)}원은?`, sub: `${won(sum)}원 중 ${won(f.amount)}원 받음`, body: flGrid(2, [flTile('myExp', claim ? '본인부담' : '내 지출로', 'wallet', { s: claim ? '내 지출로' : '' }), flTile('keep', '계속 받을 돈', 'clock')], '', 'h104') }; },
+  left: (F, f) => { const sum = flRvSum(F), claim = flRv(F).some((r) => r.kind === '보험 청구'); if (flPayDir(F)) return { q: `남은 ${won(sum - f.amount)}원은?`, sub: `${won(sum)}원 중 ${won(f.amount)}원 갚음`, body: flGrid(2, [flTile('keep', '계속 갚을 돈', 'clock'), flTile('forgive', '안 갚아도 됨', 'check')], '', 'h104') }; return { q: `남은 ${won(sum - f.amount)}원은?`, sub: `${won(sum)}원 중 ${won(f.amount)}원 받음`, body: flGrid(2, [flTile('myExp', claim ? '본인부담' : '내 지출로', 'wallet', { s: claim ? '의료비 지출로' : '' }), flTile('keep', '계속 받을 돈', 'clock')], '', 'h104') }; },
   leftCat: (F, f) => {
     const short = flRvSum(F) - f.amount, rs = flRv(F), sug = [];
     rs.forEach((r) => { const x = r.txId && Store.get('tx', r.txId); if (x && x.accountId && accOf(x.accountId) && accOf(x.accountId).name !== GIVE_ACC) sug.push(x.accountId); });
@@ -278,7 +282,7 @@ const FL_STEP = {
     return { q: '어느 계정인가요?', sub: `−${won(short)}원 · 내 지출로`, body: flGrid(3, top.map((id, i) => flTile(id, accOf(id).name, accOf(id).icon, { star: i === 0 })), '추천')
       + (F.allAcc ? flGrid(3, visibleAccs('out').filter((a) => !top.includes(a.id) && a.name !== GIVE_ACC).map((a) => flTile(a.id, a.name, a.icon)), '가나다') : flGrid(1, [flTile('all', '전체 계정 보기', 'list')], '', 'wide')) };
   },
-  over: (F, f) => ({ q: `${won(f.amount - flRvSum(F))}원 더 받았어요`, sub: `${won(flRvSum(F))}원보다 많이 받음`, body: flGrid(2, [flTile('next', '다음 받을 돈에 미리', 'clock'), flTile('inc', '수입으로', 'trending-up')], '', 'h104') }),
+  over: (F, f) => (flPayDir(F) ? { q: `${won(f.amount - flRvSum(F))}원 더 갚았어요`, sub: `${won(flRvSum(F))}원보다 많이 갚음`, body: flGrid(2, [flTile('next', '다음 갚을 돈에 미리', 'clock'), flTile('inc', '내 지출로', 'wallet')], '', 'h104') } : { q: `${won(f.amount - flRvSum(F))}원 더 받았어요`, sub: `${won(flRvSum(F))}원보다 많이 받음`, body: flGrid(2, [flTile('next', '다음 받을 돈에 미리', 'clock'), flTile('inc', '수입으로', 'trending-up')], '', 'h104') }),
   depFirst: (F) => {
     const x = Store.get('tx', F.dep); if (!x) return FL_STEP.many(F);
     const n = (F.ids || []).length, sum = flRvSum(F), d = parseYmd(x.date);
@@ -294,7 +298,7 @@ function flPlan(F, f) {
   const k = F.k;
   if (k === 'in') return ['what', 'inc', ...((accOf(f.accId) || {}).name === '급여' ? ['who'] : []), 'amt', 'inTo', 'conf'];
   if (k === 'out') return ['what', 'exp', 'amt', 'pay', 'conf'];
-  if (k === 'give') return F.gk === '돌려받음' ? ['what', 'give', 'peer'] : ['what', 'give', 'peer', 'amt', 'conf'];
+  if (k === 'give') return FL_FIN[F.gk] ? ['what', 'give', 'peer'] : ['what', 'give', 'peer', 'amt', 'conf'];
   if (k === 'ins') return F.ik === 'claim' ? ['what', 'ins', 'amt', 'peer', 'conf'] : ['what', 'ins', 'amt', 'inTo', 'conf'];
   if (k === 'tr') return F.trk === 'sav' ? ['what', 'trk', 'sav', 'bank', 'amt', 'conf'] : ['what', 'trk', 'from', 'to', 'amt', 'conf'];
   return ['what', 'x', 'x', 'x', 'conf'];
@@ -372,7 +376,7 @@ function flPickApply(v) {
   if (t === 'peer') {
     if (v === 'new') { flGo('newWho', { whoFor: 'peer', newName: '' }); return; }
     F.who = v;
-    if (F.gk === '돌려받음') { const ids = recvAll().filter((r) => recvOpen(r) && r.who === v).map((r) => r.id); flGo('many', { mode: 'recv', ids, fromMany: true, how: '' }); return; }
+    if (FL_FIN[F.gk]) { const dir = FL_FIN[F.gk], ids = recvByDir(dir).filter((r) => recvOpen(r) && r.who === v).map((r) => r.id); flGo('many', { mode: 'recv', dir, ids, fromMany: true, how: '' }); return; }
     if (F.k === 'ins') { flGo('conf'); return; }
     flGo('amt'); return;
   }
@@ -397,7 +401,7 @@ function flPickApply(v) {
     if (v === 'later') { S.f = null; render(); toast('아직 안 받았어요 · 그대로 둘게요'); return; }
     F.how = v; if (v === 'bank') { flGo('dep'); return; } f.amount = flRvSum(F); flGo('amt'); return;
   }
-  if (t === 'left') { F.short = v; if (v === 'keep') { flRecvSave(); return; } flGo('leftCat'); return; }
+  if (t === 'left') { F.short = v; if (v === 'keep' || v === 'forgive') { flRecvSave(); return; } flGo('leftCat'); return; }
   if (t === 'leftCat') { if (v === 'all') { F.allAcc = true; render(); return; } F.acc = v; flRecvSave(); return; }
   if (t === 'over') { F.over = v; flRecvSave(); }
 }
@@ -477,6 +481,7 @@ async function flRecvSave() {
       if (left - amt > 0) shorts.push([nr, left - amt]);
       items.push({ col: 'recv', id: r.id, before: { ...r } }); await Store.put('recv', nr);
     }
+    if (shorts.length && F.short === 'forgive') { for (const [r, a] of shorts) await Store.put('recv', { ...Store.get('recv', r.id), close: { date, how: 'other', amt: a, to: '안 갚아도 됨' } }); }
     if (shorts.length && F.short === 'myExp') {
       const tot = shorts.reduce((s, [, a]) => s + a, 0), acc = F.acc || ((visibleAccs('out')[0]) || {}).id, claim = shorts.some(([r]) => r.kind === '보험 청구');
       const s = await Store.put('tx', { kind: 'out', date, amount: tot, merchant: `${who} 차액 (${claim ? '본인부담' : '내 지출로'})`, memo: `받을 돈 차액 · ${shorts.map(([r]) => r.what || r.kind).join(', ')}`.slice(0, 200), accountId: acc, payMethodId: null, internal: true, status: '확인', source: '장부에만', recvClose: shorts[0][0].id, deleted: false });
@@ -484,7 +489,14 @@ async function flRecvSave() {
       for (const [r, a] of shorts) await Store.put('recv', { ...Store.get('recv', r.id), close: { date, how: 'myExp', amt: a, accId: acc, txId: s.id } });
     }
     const extra = got - sum;
-    if (extra > 0 && F.over === 'inc') {
+    if (extra > 0 && F.over === 'inc' && flPayDir(F)) {
+      const a = Store.all('accounts').find((x) => x.kind === 'out' && x.name === '기타지출' && !x.hidden) || visibleAccs('out')[0];
+      const s = await Store.put('tx', { kind: 'out', date, amount: extra, merchant: `${who} 더 갚은 돈`, memo: '갚을 돈보다 더 갚음', accountId: a ? a.id : null, payMethodId: null, internal: true, status: a ? '확인' : '미확인', source: '장부에만', deleted: false });
+      items.push({ col: 'tx', id: s.id, before: null });
+    } else if (extra > 0 && F.over === 'next' && flPayDir(F)) {
+      const n = await Store.put('recv', { date, who: rs[0].who, kind: '미리 줌', amount: extra, memo: '다음 갚을 돈에서 뺄 돈', what: '미리 준 돈', receipts: [], deleted: false });
+      items.push({ col: 'recv', id: n.id, before: null });
+    } else if (extra > 0 && F.over === 'inc') {
       const a = Store.all('accounts').find((x) => x.kind === 'in' && x.name === '기타수입' && !x.hidden) || visibleAccs('in')[0];
       const s = await Store.put('tx', { kind: 'in', date, amount: extra, merchant: `${who} 더 받은 돈`, memo: '받을 돈보다 더 받음', accountId: a ? a.id : null, payMethodId: null, internal: true, status: a ? '확인' : '미확인', source: '장부에만', deleted: false });
       items.push({ col: 'tx', id: s.id, before: null });
@@ -494,18 +506,19 @@ async function flRecvSave() {
     }
     if (link) {
       items.push({ col: 'tx', id: link.id, before: { ...link } });
-      const acc = link.accountId ? null : await flAcc(GIVE_ACC, 'in', 'hand-coins', true);
-      await Store.put('tx', { ...link, ...(acc ? { accountId: acc.id, status: '확인' } : {}), recvPay: rs.map((r) => r.id).join(','), recvPaySum: Math.min(got, sum), memo: link.memo || `받을 돈 ${who}` });
+      const acc = link.accountId ? null : await flAcc(GIVE_ACC, link.kind, 'hand-coins', true);
+      if (flPayDir(F)) await Store.put('tx', { ...link, ...(acc ? { accountId: acc.id, status: '확인' } : {}), recvId: rs[0].id, recvAmt: Math.min(got, link.amount), memo: link.memo || `갚을 돈 ${who}` });
+      else await Store.put('tx', { ...link, ...(acc ? { accountId: acc.id, status: '확인' } : {}), recvPay: rs.map((r) => r.id).join(','), recvPaySum: Math.min(got, sum), memo: link.memo || `받을 돈 ${who}` });
     }
   } finally { S.busy = false; }
   if (S.rv) S.rv.chk = {};
   S.f = null; render();
-  toast(`받음 처리 · ${rs.length}건 ${won(got)}원${link ? ' · 입금 연결(수입 아님)' : ''}${shorts.length && F.short === 'myExp' ? ' · 차액은 내 지출로' : ''}`, { items });
+  toast(`${FW(F).done} · ${rs.length}건 ${won(got)}원${link ? (flPayDir(F) ? ' · 출금 연결(지출 아님)' : ' · 입금 연결(수입 아님)') : ''}${shorts.length && F.short === 'myExp' ? ' · 차액은 내 지출로' : ''}`, { items });
 }
 function flRecvOpen(ids, o) {
   const f = flNewForm(); f.amount = 0;
   const rs = ids.map((id) => Store.get('recv', id)).filter(Boolean);
-  f.flow = { t: 'got', hist: [], mode: 'recv', k: 'rv', ids: rs.map((r) => r.id), who: (rs[0] || {}).who || '', how: '', ...(o || {}) };
+  f.flow = { t: 'got', hist: [], mode: 'recv', k: 'rv', ids: rs.map((r) => r.id), who: (rs[0] || {}).who || '', how: '', dir: (rs[0] || {}).dir === 'pay' ? 'pay' : 'get', ...(o || {}) };
   S.dialog = null; S.f = f; render();
 }
 // 입금 먼저: 한 사람 받을 돈 합계(또는 몇 건 합)와 같은 입금
@@ -572,6 +585,8 @@ const F10_ACT = {
   flGoSav: () => { S.f = null; go('적금·예금'); },
   flChk: (el) => { const F = flF(), id = el.dataset.v, s = new Set(F.ids || []); if (s.has(id)) s.delete(id); else s.add(id); F.ids = [...s]; render(); },
   flAll: () => { const F = flF(), rs = recvAll().filter((r) => recvOpen(r) && r.who === F.who), all = rs.every((r) => (F.ids || []).includes(r.id)); F.ids = all ? [] : rs.map((r) => r.id); render(); },
+  flRvView: (el) => { S.f = null; S.dialog = { type: 'v8RvView', id: el.dataset.id }; render(); },
+  v8RvOpen: (el) => { const r = Store.get('recv', el.dataset.id); if (f10Home() && r && !r.deleted && recvOpen(r)) { flRecvOpen([r.id]); return; } S.dialog = { type: 'v8RvView', id: el.dataset.id }; render(); },
   flManyNext: () => { const F = flF(); if (!flRv(F).length) { flErr('받을 것을 골라 주세요.'); return; } flGo('got'); },
   flDep: (el) => { const F = flF(); F.dep = F.dep === el.dataset.v ? '' : el.dataset.v; render(); },
   flDepNone: () => { const F = flF(); F.dep = ''; F.how = 'etc'; S.f.amount = flRvSum(F); flGo('amt'); },
@@ -628,7 +643,7 @@ formFinal = (function (orig) {
 // 확인 단계로 들어올 때 나누기 제안 (가끔)
 FL_STEP.conf = (function (orig) { return function (F, f) { if (!F.pop && !F.splitAsked) { const s = flSplitSuggest(F, f); if (s) F.pop = s; else F.splitAsked = true; } if (F.split && !f.pill) f.pill = 'split'; return orig(F, f); }; })(FL_STEP.conf);
 // 받을 돈 [받음 처리] → 단계별 마무리 (갚을 돈은 예전 창)
-v8GetOpen = (function (orig) { return function (ids) { if (f10On() && recvDirNow() === 'get') { flRecvOpen(ids); return; } return orig(ids); }; })(v8GetOpen);
+v8GetOpen = (function (orig) { return function (ids) { if (f10Home() && !window.__v8old) { flRecvOpen(ids); return; } return orig(ids); }; })(v8GetOpen); // v41: 받을 돈 · 갚을 돈 모두 새 마무리 화면
 // 갚을 돈: 들어온 돈 후보 대신 나간 돈, 연결한 줄은 내 지출에서 빠짐
 const recvDirNow = () => (typeof S !== 'undefined' && S && S.screen === '받을 돈' && S.rv && S.rv.dir === 'pay' && !S.f ? 'pay' : 'get');
 recvCands = (function (orig) { return function (sum) { if (recvDirNow() !== 'pay') return orig(sum); return liveTx().filter((x) => x.kind === 'out' && !x.recvId && !x.recordOnly && x.amount >= Math.min(sum, 1)).sort((a, b) => (Math.abs(a.amount - sum) - Math.abs(b.amount - sum)) || (a.date < b.date ? 1 : -1)).slice(0, 8); }; })(recvCands);
@@ -660,7 +675,7 @@ h3Todos = (function (orig) { return function (a) { const T = orig(a); try { recv
 
 /* ───────── 3. 결제 고르기: [통장 기록에 연결] 단추 없이 ───────── */
 // 통장 · 카드를 고르면 이미 올라온 같은 금액 줄을 먼저 찾아 「이 내역과 같나요?」 [예, 연결] [아니요, 새로]
-const PW_LINKY = ['pwSet', 'cfSrc', 'coSrc', 'b2How'];
+const PW_LINKY = ['pwSet', 'cfSrc', 'coSrc']; // v41: 생일 처리(b2How)는 「통장 기록에 연결」을 맨 앞에 그대로
 const PW_IN_KEYS = ['clubIn', 'repay'];
 pwList = (function (orig) {
   return function (scope, cands, sel, emptyTxt) {
@@ -709,5 +724,5 @@ function f10PatchAct(A) {
   PW_LINKY.forEach((k) => { if (A[k]) A[k] = f10LinkFirst(A[k]); });
 }
 // 6. 화면마다 [＋ 입력] (검은 ＋ 동그라미 대신). 자기 추가 단추가 있는 화면은 그 단추를 씀
-const F10_OWN_ADD = ['반복 입력', '적금·예금', '기억할 것', '여행', '할 일·기념일', '카드 대금', '카드 추가', '받을 돈', '통장 관리', '별도 통장', '계정과목 편집', '가족별', '설정', '사용할 기능', '처음 시작하기', '휴지통', '파일 올리기', '분류 대기', '금고', '엑셀 옮기기', '보안 점검', '중복 점검', '최근 한 일', '저장 공간', '보안·잠금', '파일 서식', '자동 분류 규칙', '분류 사전', '고정 계획표', '할부 모아보기'];
-const f10AddBtn = () => (F10_OWN_ADD.includes(S.screen) ? '' : `<button class="btn f10add" data-act="input">${ic('plus', 18)}입력</button>`);
+const F10_OWN_ADD = ['반복 입력', '적금·예금', '기억할 것', '여행', '일정·기념일', '카드 대금', '카드 추가', '받을 돈', '통장 관리', '별도 통장', '계정과목 편집', '가족별', '설정', '사용할 기능', '처음 시작하기', '휴지통', '파일 올리기', '분류 대기', '금고', '엑셀 옮기기', '보안 점검', '중복 점검', '최근 한 일', '저장 공간', '보안·잠금', '파일 서식', '자동 분류 규칙', '분류 사전', '고정 계획표', '할부 모아보기'];
+const f10AddBtn = () => (F10_OWN_ADD.includes(S.screen) ? '' : `<button class="btn f10add" data-act="input" aria-label="입력">${ic('plus', 18)}<span class="f10addt">입력</span></button>`);

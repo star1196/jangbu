@@ -118,7 +118,7 @@ function perfOf(card, range) {
     .reduce((s, x) => s + x.amount, 0);
 }
 const perfCycleTxt = (c) => (c.perfCycle === 'prev' ? '전월 1일~말일' : c.perfCycle === 'custom' && c.perfStart > 1 ? `매달 ${c.perfStart}일부터 한 달` : '이번 달 1일~말일');
-// 홈 할 일: 실적 기간 끝나기 7일 전부터 목표 미달
+// 홈 일정: 실적 기간 끝나기 7일 전부터 목표 미달
 function perfAlerts() {
   if (!feat('cardPerf')) return [];
   return cardsOpen().filter((c) => c.perfGoal > 0).map((c) => { const r = perfRange(c); return { card: c, left: c.perfGoal - perfOf(c, r), dd: dDays(r[1]) }; }).filter((a) => a.left > 0 && a.dd <= 7);
@@ -137,7 +137,7 @@ function homeCardDue() {
     ${sameDay.map((u) => `<div style="flex:1 1 100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 12px;padding-left:30px"><span style="font-size:${px(15)}">${esc(cardLabel(u.card))}</span><span class="amt neg" style="font-size:${px(16)}">−${won(u.bill.amount)}원</span></div>`).join('')}
   </div>`;
 }
-// 홈 할 일 줄들 (대금 나갔나요? · 실적 부족 · 결제일 미정)
+// 홈 일정 줄들 (대금 나갔나요? · 실적 부족 · 결제일 미정)
 function cardTodos() {
   const out = [];
   if (feat('cardBill')) {

@@ -102,7 +102,7 @@ function recurFirstDate(c, choice) {
   const [y, m] = ym.split('-').map(Number);
   return `${ym}-${pad2(Math.min(c.day, new Date(y, m, 0).getDate()))}`;
 }
-// 홈 할 일: 반복 발견 → "언제 것부터?" (디자인 그대로 할 일 칸 안에서)
+// 홈 일정: 반복 발견 → "언제 것부터?" (디자인 그대로 할 일 칸 안에서)
 function recurTodo() {
   const c = repeatCandidates()[0]; if (!c) return '';
   const R = S.recur && S.recur.key === c.key ? S.recur : null;
@@ -123,7 +123,7 @@ function recurTodo() {
       <span style="font-size:${px(15)};line-height:1.5;padding-top:8px"><b>${esc(c.name)}</b>${c.kind === 'in' ? '이(가) 매달 들어와요' : '이(가) 매달 나가요'}. 반복 자동입력으로 만들까요? <span class="sub small">(${c.n}달 연속 · ${amtTxt})</span></span></div>
     <div class="chips" style="padding-left:52px"><button class="btn ink" data-act="recurYes" data-k="${esc(c.key)}">예</button><button class="btn" data-act="recurNo" data-k="${esc(c.key)}">아니요</button><button class="btn ghost" data-act="recurNever" data-k="${esc(c.key)}">다시 묻지 않기</button></div></div>`;
 }
-// 홈 할 일: 확인 대기
+// 홈 일정: 확인 대기
 function pendingTodos() {
   if (!feat('repeat')) return '';
   const list = pendingTx().sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -332,7 +332,7 @@ function viewMatureDlg(D) {
 }
 function viewAlertDaysDlg() {
   const cur = alertDays();
-  return `<div class="dlg"><h2 class="dlg-title">만기 알림</h2><span class="sub small">만기 며칠 전에 홈 할 일에 보여 줄까요? 여러 개 고를 수 있어요. 만기 당일은 늘 보여요.</span>
+  return `<div class="dlg"><h2 class="dlg-title">만기 알림</h2><span class="sub small">만기 며칠 전에 홈 일정에 보여 줄까요? 여러 개 고를 수 있어요. 만기 당일은 늘 보여요.</span>
     <div class="chips">${[90, 60, 30, 14, 7, 3, 1].map((n) => `<button class="chip ${cur.includes(n) ? 'on' : ''}" data-act="alertDayToggle" data-v="${n}">${cur.includes(n) ? ic('check', 14) : ''}${n}일 전</button>`).join('')}</div>
     <div class="dlg-btns"><button class="btn ink" data-act="closeDlg">닫기</button></div></div>`;
 }

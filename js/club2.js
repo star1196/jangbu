@@ -274,7 +274,7 @@ function viewClubHome(L) {
   const yearNav = `<span class="ynav"><button class="iconbtn" data-act="clubY" data-n="-1" aria-label="지난해">${ic('chevron-left', 20)}</button><b>${y}</b><button class="iconbtn" data-act="clubY" data-n="1" aria-label="다음 해">${ic('chevron-right', 20)}</button></span>`;
   const yms = Array.from({ length: 12 }, (_, i) => `${y}-${pad2(i + 1)}`);
   const empty = !ms.length ? `<div class="empty">${ic('users', 32, 'var(--sub)')}아직 회원이 없어요.<button class="btn ink" data-act="clubMemberNew">${ic('user-plus', 18)}회원 추가</button></div>` : '';
-  const todoCard = `<section class="card card-pad"><div class="secrow" style="margin-bottom:8px"><h2 class="h2">할 일</h2><button class="btn" data-act="goDup">중복 점검</button></div>${rows.join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}</section>`;
+  const todoCard = `<section class="card card-pad"><div class="secrow" style="margin-bottom:8px"><h2 class="h2">일정</h2><button class="btn" data-act="goDup">중복 점검</button></div>${rows.join('') || `<div class="todo-done">${ic('check', 22)}정리 끝</div>`}</section>`;
   if (L === 'phone') {
     const cards = ms.map(({ m, s }) => `<div class="mcard">
       <div class="mtop"><button class="mname" data-act="clubOpenMember" data-id="${m.id}">${esc(m.name)}</button><span class="sub small">${esc(s.lastTxt)}</span><span style="flex:1"></span>${s.due ? `<span class="sub small">미수금</span>` : ''}${dueHtml(s)}</div>
@@ -419,7 +419,7 @@ function clubTags(x) {
   const t = [];
   if (x.internal) t.push('<span class="tag inner">장부에만</span>');
   if (isHold(x)) t.push('<span class="tag hold">보류</span>');
-  else if (isUnc(x)) t.push('<span class="tag unc">미확인</span>');
+  else if (isUnc(x)) t.push('<span class="tag unc">분류 대기</span>');
   if (x.club && x.club.type === 'fee') { const n = (x.club.alloc || []).length; t.push(`<span class="tag">회비 ${n}개월</span>`); }
   if (x.club && x.club.type === 'loan') t.push('<span class="tag">대출 상환</span>');
   if (x.club && x.club.type === 'gift' && typeof giftYearsOf === 'function' && giftYearsOf(x).length) t.push(`<span class="tag gifty">${giftYearsOf(x).map((g) => g.y).join('·')} 생일</span>`);
@@ -435,7 +435,7 @@ function viewClubList() {
   const cnt = (k) => list.filter(F[k]).length;
   list = applySort(list.filter(F[f]).sort(sortTx), 'clist'); // 최신순 / 오래된순 (v32)
   S.clubVisible = list.map((x) => x.id); // [이 화면 모두] 고르기용 (v33)
-  const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '미확인'], ['hold', '보류'], ['inner', '장부에만']];
+  const tabs = [['all', '전체'], ['in', '수입'], ['out', '지출'], ['unc', '분류 대기'], ['hold', '보류'], ['inner', '장부에만']];
   // 미확인 지출: 같은 가맹점끼리 묶어 한 번에 정하기
   let body = '';
   if (f === 'unc') {

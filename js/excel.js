@@ -348,7 +348,7 @@ function viewXl(L) {
   if (X.step === 'loading') return `<div class="empty" style="padding:80px 16px">${ic('file-spreadsheet', 40, 'var(--sub)')}<span>${esc(X.name)} 읽는 중…</span></div>`;
   if (X.step === 'saving') return `<div class="empty" style="padding:80px 16px">${ic('file-spreadsheet', 40, 'var(--sub)')}<span>장부에 옮기는 중… (${esc(X.progress || '')})</span></div>`;
   if (X.step === 'done') return `<div class="donebox"><span class="donecheck">${ic('check', 36)}</span><span style="font-size:${px(24)};font-weight:700">옮겨 왔어요</span><span class="sub" style="font-size:${px(15)};text-align:center;line-height:1.6">${esc(X.doneMsg || '')}</span>
-    <div class="chips" style="justify-content:center;margin-top:12px">${X.uncN ? '<button class="btn ink big" data-act="goUncFix">미확인 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button></div></div>`;
+    <div class="chips" style="justify-content:center;margin-top:12px">${X.uncN ? '<button class="btn ink big" data-act="goUncFix">분류 대기 정리하기</button>' : ''}<button class="btn big" data-act="home">홈으로</button></div></div>`;
   if (X.step !== 'sheets') {
     return `<div class="stack">
       <label class="dropbox" data-xldrop><input type="file" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-xlfile hidden>${ic('file-spreadsheet', 48, 'var(--sub)')}

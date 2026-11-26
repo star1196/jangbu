@@ -332,7 +332,7 @@ const linkLabel = (l) => !l || !l.id ? '' : l.type === 'bank' ? bankName(l.id) :
 function viewReminders() {
   const list = remindersAll();
   return `<div class="stack" style="max-width:760px;gap:14px">
-    <span class="sub" style="font-size:${px(14)};line-height:1.5">끝나는 날을 적어 두면, 알림 날짜부터 홈 [할 일]에 떠요. 계약·무료 기간·할인 조건·사은품 같은 것을 적어 두세요.</span>
+    <span class="sub" style="font-size:${px(14)};line-height:1.5">끝나는 날을 적어 두면, 알림 날짜부터 홈 [일정]에 떠요. 계약·무료 기간·할인 조건·사은품 같은 것을 적어 두세요.</span>
     <section class="card" style="padding:4px 20px">${list.length ? list.map((r) => { const dd = r.end ? dDays(r.end) : null; const warn = dd != null && dd <= 30;
       return `<button class="row" style="min-height:66px" data-act="remEdit" data-id="${r.id}"><span class="circ" style="width:40px;height:40px;${warn ? 'background:var(--warn-soft)' : ''}">${ic('bell', 20, warn ? 'var(--warn)' : 'var(--ink)')}</span>
         <span class="k" style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:700">${esc(r.title)}</span><span class="sub small">${[r.start ? (r.start.slice(0, 4) === String(new Date().getFullYear()) ? shortDate(r.start) : fullDate(r.start)) + '부터' : '', r.end ? fullDate(r.end) + '까지' : '', linkLabel(r.link), r.body ? r.body.slice(0, 30) : ''].filter(Boolean).map(esc).join(' · ')}</span></span>

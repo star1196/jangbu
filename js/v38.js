@@ -77,6 +77,7 @@ function forAmts(f) {
   const base = v8Base(f), o = {};
   if (W.pids.length === 1) { o[W.pids[0]] = base; return o; }
   if (W.mode !== 'custom') { const per = Math.floor(base / W.pids.length); W.pids.forEach((p, i) => { o[p] = i === W.pids.length - 1 ? base - per * (W.pids.length - 1) : per; }); return o; }
+  { const last = W.pids[W.pids.length - 1]; let s = 0; W.pids.slice(0, -1).forEach((p) => { o[p] = toInt(W.amts[p]); s += o[p]; }); o[last] = Math.max(0, base - s); return o; } // v41: 마지막 사람은 늘 남은 금액
   const blank = W.pids.filter((p) => W.amts[p] === '' || W.amts[p] == null), typed = W.pids.filter((p) => !blank.includes(p)).reduce((s, p) => s + toInt(W.amts[p]), 0);
   W.pids.forEach((p) => { o[p] = blank.includes(p) ? (blank.length === 1 ? Math.max(0, base - typed) : 0) : toInt(W.amts[p]); });
   return o;
@@ -92,7 +93,7 @@ function v8Errs(f) {
 }
 function pillVal(f, k) {
   if (k === 'recv' && f.recv && f.recv.who) return `${f.recv.who} ${won(toInt(f.recv.amt))}`;
-  if (k === 'for' && f.forWhom && f.forWhom.pids.length) return f.forWhom.pids.map(famName).join('·') + (f.forWhom.pids.length > 1 ? (f.forWhom.mode === 'custom' ? ' 직접' : ' 반반') : '');
+  if (k === 'for' && f.forWhom && f.forWhom.pids.length) return f.forWhom.pids.map(famName).join('·') + (f.forWhom.pids.length > 1 ? (f.forWhom.mode === 'custom' ? ' 직접' : ' 똑같이') : '');
   if (k === 'split' && f.parts && f.parts.length) return `${f.parts.length}줄`;
   return '';
 }
@@ -124,18 +125,20 @@ function v8Panel(f, k) {
     return `<b class="v8q">${f.kind === 'in' ? '누구 수입인가요? <span class="sub small" style="font-weight:400">(예: 배우자 월급 · 여러 명 가능)</span>' : '누구를 위해 썼나요? <span class="sub small" style="font-weight:400">(여러 명 가능)</span>'}</b>
       <div class="chips" style="gap:6px">${familyAll().map((p) => `<button class="chip ${W.pids.includes(p.id) ? 'on' : ''}" data-act="v8For" data-id="${p.id}">${esc(p.name)}</button>`).join('')}<button class="chip" data-act="v8FamAddOpen">+ 가족 추가</button></div>
       ${f.famAdd ? `<div style="display:flex;gap:6px"><input class="input" data-v8="famNew" maxlength="${V8_MAX}" placeholder="이름 (예: 어머니)" value="${esc(f.famNew || '')}"><button class="btn" data-act="v8FamAdd">추가</button></div>` : ''}
-      ${W.pids.length > 1 ? `<div class="seg"><button class="${W.mode !== 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="half">반반</button><button class="${W.mode === 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="custom">직접 나누기</button></div>
-        ${W.mode === 'custom' ? `${W.pids.map((p) => `<label class="v8row"><span>${esc(famName(p))}</span><input class="input r" data-v8="forAmt" data-id="${p}" inputmode="numeric" value="${esc(W.amts[p] == null ? '' : W.amts[p])}" placeholder="${comma(A[p] || 0)}"></label>`).join('')}<span class="sub small">한 명을 비워 두면 나머지가 저절로 들어가요 · 합계 ${won(base)}원</span>` : `<span class="sub small">${W.pids.map((p) => `${esc(famName(p))} ${won(A[p])}원`).join(' · ')}</span>`}` : ''}
+      ${W.pids.length > 1 ? `<div class="seg"><button class="${W.mode !== 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="half">똑같이 나누기</button><button class="${W.mode === 'custom' ? 'on' : ''}" data-act="v8ForMode" data-v="custom">직접 나누기</button></div>
+        ${W.mode === 'custom' ? `${W.pids.map((p, i) => i === W.pids.length - 1 ? `<label class="v8row"><span>${esc(famName(p))}</span><input class="input r v8auto" data-v8="forAmtLast" readonly tabindex="-1" value="${comma(A[p] || 0)}" aria-label="남은 금액 (저절로)"></label>` : `<label class="v8row"><span>${esc(famName(p))}</span><input class="input r" data-v8="forAmt" data-id="${p}" inputmode="numeric" value="${esc(W.amts[p] == null ? '' : W.amts[p])}" placeholder="0"></label>`).join('')}<span class="sub small">한 명을 비워 두면 나머지가 저절로 들어가요 · 합계 ${won(base)}원</span>` : `<span class="sub small">${W.pids.map((p) => `${esc(famName(p))} ${won(A[p])}원`).join(' · ')}</span>`}` : ''}
       ${f.kind === 'in' ? '' : V8_NOTE}${tools}`;
   }
-  const base = v8Base(f), P = f.parts && f.parts.length ? f.parts : [{ accId: f.accId || '', pid: '', amt: '' }, { accId: f.accId || '', pid: '', amt: '' }];
+  if (!f.parts || !f.parts.length) f.parts = [{ accId: f.accId || '', pid: '', amt: '' }, { accId: f.accId || '', pid: '', amt: '' }]; // v41: 기본 2칸
+  const base = v8Base(f), P = f.parts;
+  if (P.length > 1) P[P.length - 1].amt = comma(Math.max(0, base - P.slice(0, -1).reduce((a, p) => a + toInt(p.amt), 0))); // 마지막 칸은 늘 남은 금액
   const accs = (typeof visibleAccs === 'function' ? visibleAccs(f.kind) : Store.all('accounts').filter((a) => a.kind === f.kind && !a.hidden));
   const sum = P.reduce((a, p) => a + toInt(p.amt), 0);
   return `<b class="v8q">나누기 <span class="sub small" style="font-weight:400">${f.kind === 'in' ? '(예: 본급 + 수당 · 한 줄 안에서 종류 · 사람 · 금액)' : '(한 줄 안에서 계정 · 사람 · 금액 · 카드 줄은 그대로 한 줄)'}</span></b>
     ${P.map((p, i) => `<div class="v8part"><select class="input" data-v8="partAcc" data-i="${i}"><option value="">계정</option>${accs.map((a) => `<option value="${a.id}" ${a.id === p.accId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
       <select class="input" data-v8="partPid" data-i="${i}"><option value="">사람 (선택)</option>${familyAll().map((m) => `<option value="${m.id}" ${m.id === p.pid ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
-      <input class="input r" data-v8="partAmt" data-i="${i}" inputmode="numeric" value="${esc(p.amt)}" placeholder="금액">${P.length > 1 ? `<button class="iconbtn" data-act="v8PartDel" data-i="${i}" aria-label="이 줄 빼기">${ic('x', 18)}</button>` : ''}</div>`).join('')}
-    <div class="chips" style="gap:6px"><button class="chip" data-act="v8PartAdd">+ 줄 추가</button><button class="chip" data-act="v8PartRest">남은 금액을 마지막 줄에</button><span class="sub small v8left" data-part="v8left">${sum === base ? `합계 ${won(base)}원 · 맞아요` : `남은 ${won(base - sum)}원`}</span></div>${tools}`;
+      ${i === P.length - 1 && P.length > 1 ? `<input class="input r v8auto" data-v8="partLast" readonly tabindex="-1" value="${esc(p.amt)}" aria-label="남은 금액 (저절로)">` : `<input class="input r" data-v8="partAmt" data-i="${i}" inputmode="numeric" value="${esc(p.amt)}" placeholder="금액">`}${P.length > 1 ? `<button class="iconbtn" data-act="v8PartDel" data-i="${i}" aria-label="이 줄 빼기">${ic('x', 18)}</button>` : ''}</div>`).join('')}
+    <div class="chips" style="gap:6px"><button class="chip" data-act="v8PartAdd">+ 추가</button><span class="sub small">마지막 칸은 남은 금액이 저절로 들어가요</span><span class="sub small v8left" data-part="v8left">${sum === base ? `합계 ${won(base)}원 · 맞아요` : `남은 ${won(base - sum)}원`}</span></div>${tools}`;
 }
 // 확인 화면 한 줄
 function v8ConfirmRows(f) {
@@ -159,7 +162,7 @@ editForm = (function (orig) {
 formSave = (function (orig) {
   return function (again) {
     const f = S.f;
-    if (pillOk(f)) { const e = v8Errs(f); if (e.length) { f.v8tried = true; render(); formErr(e[0]); return; } }
+    if (pillOk(f)) { v8Tidy(f); const e = v8Errs(f); if (e.length) { f.v8tried = true; render(); formErr(e[0]); return; } }
     return orig(again);
   };
 })(formSave);
@@ -212,7 +215,7 @@ function viewRecv(L) {
       <button class="btn" data-act="v8RvNew">${ic('plus', 16)}새로</button>${openVis.length ? `<button class="btn" data-act="v8RvAll">${allOn ? '선택 끄기' : '전체 선택'}</button>` : ''}<button class="btn" data-act="v8RvPrint">🖨 출력</button></div>
     <label class="qbox" style="min-height:44px;border-width:1px">${ic('search', 18)}<input data-v8="rvQ" value="${esc(R.q)}" placeholder="사람 · 내용 · 메모 찾기"></label>
     <section class="card v8rlist">${wide ? '<div class="v8rrow head"><span></span><span>날짜</span><span>사람</span><span>내용</span><span>종류</span><span class="r">금액</span><span>상태</span></div>' : ''}${rows || `<div class="empty">${R.st === 'done' ? '받은 것이 없어요.' : '받을 돈이 없어요.'}</div>`}</section>
-    <div class="v8rfoot"><span class="sub small">체크한 것만 받음 처리돼요. 일부만 받았으면 줄을 눌러 받은 금액을 적어요. · ${recvAlertDays()}일 넘은 미수는 홈 할 일에 알려요 <button class="linkbtn" data-act="v8RvDays">바꾸기</button></span>
+    <div class="v8rfoot"><span class="sub small">체크한 것만 받음 처리돼요. 일부만 받았으면 줄을 눌러 받은 금액을 적어요. · ${recvAlertDays()}일 넘은 미수는 홈 일정에 알려요 <button class="linkbtn" data-act="v8RvDays">바꾸기</button></span>
       <button class="btn big ${sel.length ? 'ink' : ''}" data-act="v8RvGet" ${sel.length ? '' : 'disabled'}>${sel.length ? `선택한 것 받음 처리 · ${sel.length}건 ${won(selSum)}원` : '받을 것을 골라 주세요'}</button></div>
   </div>`;
 }
@@ -338,7 +341,7 @@ const V8_ACT = {
   v8ForMode: (el) => { S.f.forWhom.mode = el.dataset.v; render(); },
   v8FamAddOpen: () => { S.f.famAdd = !S.f.famAdd; render(); },
   v8FamAdd: async () => { const f = S.f, p = await familyAdd(f.famNew); if (p) { f.forWhom.pids = [...new Set([...f.forWhom.pids, p.id])]; f.famAdd = false; f.famNew = ''; toast(`가족 목록에 「${p.name}」을(를) 넣었어요`); } render(); },
-  v8PartAdd: () => { S.f.parts.push({ accId: '', pid: '', amt: '' }); render(); },
+  v8PartAdd: () => { const P = S.f.parts; if (P.length) P[P.length - 1].amt = ''; P.push({ accId: '', pid: '', amt: '' }); render(); },
   v8PartDel: (el) => { S.f.parts.splice(+el.dataset.i, 1); render(); },
   v8PartRest: () => { const f = S.f, base = v8Base(f), P = f.parts, s = P.slice(0, -1).reduce((a, p) => a + toInt(p.amt), 0); P[P.length - 1].amt = comma(Math.max(0, base - s)); render(); },
   // 주인 · 가족
@@ -383,7 +386,7 @@ const V8_ACT = {
   v8GSave: async () => { const m = await recvReceive(S.dialog); if (m) { const e = $app.querySelector('.dlg [data-err]'); if (e) e.textContent = m; } },
   v8RvDel: async (el) => { const r = Store.get('recv', el.dataset.id), items = [{ col: 'recv', id: r.id, before: { ...r } }]; await Store.put('recv', { ...r, deleted: true }); if (r.txId) { const x = Store.get('tx', r.txId); if (x && x.recvId === r.id) { items.push({ col: 'tx', id: x.id, before: { ...x } }); const { recvId: _a, recvAmt: _b, ...rest } = x; await Store.put('tx', rest); } } S.dialog = null; render(); toast('받을 돈을 지웠어요 · 내 지출로 다시 셈', { items }); },
   v8RvReopen: async (el) => { const r = Store.get('recv', el.dataset.id), items = [{ col: 'recv', id: r.id, before: { ...r } }]; if (r.close && r.close.txId) { const t = Store.get('tx', r.close.txId); if (t) { items.push({ col: 'tx', id: t.id, before: { ...t } }); await Store.put('tx', { ...t, deleted: true }); } } for (const v of r.receipts || []) if (v.txId) { const t = Store.get('tx', v.txId); if (t && t.recvPay) { items.push({ col: 'tx', id: t.id, before: { ...t } }); const ids = String(t.recvPay).split(',').filter((i) => i !== r.id); const { recvPay: _p, recvPaySum: _s, ...rest } = t; await Store.put('tx', ids.length ? { ...t, recvPay: ids.join(',') } : rest); } } const { close: _c, ...rest } = r; await Store.put('recv', { ...rest, receipts: [] }); S.dialog = null; render(); toast('처리를 되돌렸어요 · 다시 미수', { items }); },
-  v8RvDays: async () => { const L = [7, 14, 30, 60, 90], n = L[(L.indexOf(recvAlertDays()) + 1) % L.length]; const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, recvAlertDays: n }); render(); toast(`${n}일 넘은 미수를 홈 할 일에 알려요`); },
+  v8RvDays: async () => { const L = [7, 14, 30, 60, 90], n = L[(L.indexOf(recvAlertDays()) + 1) % L.length]; const st = Store.get('meta', 'settings') || { id: 'settings' }; await Store.put('meta', { ...st, recvAlertDays: n }); render(); toast(`${n}일 넘은 미수를 홈 일정에 알려요`); },
   v8RvPrint: () => { S.dialog = { type: 'v7Out', m: 'print', fmt: 'pdf', per: 'screen', photos: false }; render(); },
   goRecv: () => { v8See('tile_recv'); S.rv = S.rv || { who: '전체', kind: '', st: 'open', chk: {}, q: '' }; go('받을 돈'); },
   goFamily: () => { v8See('tile_fam'); go('가족별'); }
@@ -396,7 +399,7 @@ function v8GetOpen(ids) {
   render();
 }
 // 알약 값 정리: 빈 값은 없앰
-function v8Tidy(f) { if (f.recv && !String(f.recv.who || '').trim()) f.recv = null; if (f.forWhom && !f.forWhom.pids.length) f.forWhom = null; if (f.parts && !f.parts.some((p) => toInt(p.amt))) f.parts = null; }
+function v8Tidy(f) { if (f.recv && !String(f.recv.who || '').trim()) f.recv = null; if (f.forWhom && !f.forWhom.pids.length) f.forWhom = null; if (f.parts) { f.parts = f.parts.filter((p) => toInt(p.amt)); if (f.parts.length < 2) f.parts = null; } } // v41: 0원 칸은 빼고, 한 칸만 남으면 나누기 없음
 function onV8Input(el) {
   const k = el.dataset && el.dataset.v8; if (!k) return false;
   const f = S.f, D = S.dialog, v = el.value;
@@ -408,10 +411,10 @@ function onV8Input(el) {
     case 'recvMemo': f.recv.memo = v; return true;
     case 'recvClaim': f.recv.claim = v; return true;
     case 'famNew': f.famNew = v; return true;
-    case 'forAmt': f.forWhom.amts[el.dataset.id] = v === '' ? '' : num(); return true;
+    case 'forAmt': { f.forWhom.amts[el.dataset.id] = v === '' ? '' : num(); const A = forAmts(f), W = f.forWhom, lp = W.pids[W.pids.length - 1], le = $app.querySelector('[data-v8="forAmtLast"]'); if (le) le.value = comma(A[lp] || 0); return true; }
     case 'partAcc': f.parts[+el.dataset.i].accId = v; return true;
     case 'partPid': f.parts[+el.dataset.i].pid = v; return true;
-    case 'partAmt': f.parts[+el.dataset.i].amt = num(); live(); return true;
+    case 'partAmt': { f.parts[+el.dataset.i].amt = num(); const P = f.parts, le = $app.querySelector('[data-v8="partLast"]'); if (P.length > 1) { P[P.length - 1].amt = comma(Math.max(0, v8Base(f) - P.slice(0, -1).reduce((a, p) => a + toInt(p.amt), 0))); if (le) le.value = P[P.length - 1].amt; } live(); return true; }
     case 'ownerName': D.name = v.slice(0, V8_MAX); return true;
     case 'famName': D.list[+el.dataset.i].name = v.slice(0, V8_MAX); return true;
     case 'rvKind': S.rv.kind = v; render(); return true;

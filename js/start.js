@@ -118,7 +118,7 @@ function viewStart() {
     <div class="wizfoot"><button class="btn big" style="flex:1" data-act="swPrev">${W.step === 0 ? '나중에' : '이전'}</button><button class="btn ink big" style="flex:1.3" data-act="swNext" ${S.busy ? 'disabled' : ''}>${W.step === 3 ? '시작하기' : '다음'}</button></div>
   </div>`;
 }
-// 홈 할 일: 아직 처음 시작하기를 안 끝냈으면
+// 홈 일정: 아직 처음 시작하기를 안 끝냈으면
 function startTodo() {
   const st = Store.get('meta', 'settings') || {};
   if (st.startDone || Store.current().type !== 'home') return '';

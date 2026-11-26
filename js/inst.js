@@ -81,7 +81,7 @@ function cardPlanPart(c) {
     ${c.note ? `<div class="infoline" style="color:var(--ink)">${ic('info', 18)}${esc(c.note)}</div>` : ''}${cd}${planHtml}
     <button class="btn" style="align-self:flex-start" data-act="insCardEdit" data-id="${c.id}">${ic('plus', 16)}메모 · 사용 계획 · 해지일</button></div>`;
 }
-// 홈 할 일: 이번 달 계획이 아직 모자람 (말일 10일 전부터)
+// 홈 일정: 이번 달 계획이 아직 모자람 (말일 10일 전부터)
 function cardPlanTodos() {
   if (!feat('cards') || !feat('cardPlan')) return '';
   const cur = curYMx(), t = todayStr(), endD = new Date(+cur.slice(0, 4), +cur.slice(5), 0).getDate();

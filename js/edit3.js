@@ -170,7 +170,7 @@ function dupFiles() {
   return out;
 }
 let dupCache = { key: '', n: 0 };
-function dupCountQuiet() { // 홈 할 일용: 최근 3개월 · 고친 것이 없으면 다시 안 셈
+function dupCountQuiet() { // 홈 일정용: 최근 3개월 · 고친 것이 없으면 다시 안 셈
   const k = (Store.current() || {}).id + '|' + liveTx().length + '|' + Math.max(0, ...liveTx().slice(-200).map((x) => x.updatedAt || 0)) + '|' + Object.keys(dupMeta().ignore || {}).length;
   if (dupCache.key !== k) dupCache = { key: k, n: dupFind(3).length };
   return dupCache.n;
