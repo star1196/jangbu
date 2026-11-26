@@ -447,6 +447,7 @@ function viewSettings() {
       ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('할 일 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
+      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -462,8 +463,8 @@ function viewSettings() {
         ${segOf([['작게', '작게'], ['보통', '보통'], ['크게', '크게']], view.fs, 'setFs')}
         <span class="sub" style="font-size:${px(14)}">색 조합</span>
         ${segOf([['먹색', '먹색'], ['회갈색', '회갈색'], ['남회색', '남회색']], lv('theme'), 'setTheme')}
-        <span class="sub" style="font-size:${px(14)}">색 테마 <span class="small">(그래프 · 계정 아이콘 · 여행 막대에만)</span></span>
-        ${segOf([['세이지 뮤트', '세이지 뮤트(기본)'], ['로즈 웜', '로즈 웜'], ['기본', '먹색']], lv('pal'), 'setPal')}
+        ${book.type === 'club' ? `<span class="sub" style="font-size:${px(14)}">색 테마 <span class="small">(그래프 · 계정 아이콘 · 여행 막대에만)</span></span>
+        ${segOf([['세이지 뮤트', '세이지 뮤트(기본)'], ['로즈 웜', '로즈 웜'], ['기본', '먹색']], lv('pal'), 'setPal')}` : `<span class="sub" style="font-size:${px(14)}">그래프 · 계정 아이콘 색 <span class="small">(위 「색상 테마」를 따라요)</span></span>`}
         <div class="sw-row">${sw}</div>
         <span class="sub" style="font-size:${px(14)}">장부 종류 보이기 <span class="small">(이 기기에만 · 잠금 화면과 새 장부 만들기)</span></span>
         <div class="chips">${DATA.LEDGER_TYPES.map((t) => `<button class="chip ${typeVisible(t.type) ? 'on' : ''}" data-act="toggleType" data-t="${t.type}" aria-pressed="${typeVisible(t.type)}">${typeVisible(t.type) ? ic('check', 14) : ''}${esc(t.defaultName)}</button>`).join('')}</div>
@@ -556,6 +557,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 할 일·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^f10/.test(D.type)) {
+    body = viewF10Dlg(D); // 색상 테마 · 예전 입력 (flow10.js)
   } else if (D.type === 'v9Bill') {
     body = viewV9Dlg(D); // 결제일 정하기 (cards9.js)
   } else if (/^v8/.test(D.type)) {

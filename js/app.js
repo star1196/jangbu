@@ -25,6 +25,7 @@ const visibleLedgers = () => S.ledgers.filter((l) => typeVisible(l.type));
 const CLUB_V2 = { theme: '먹색', pal: '세이지 뮤트', inC: '#B5473F', outC: '#3B5F8F' };
 function lv(k) {
   const c = typeof Store !== 'undefined' && Store.isOpen && Store.isOpen() && S && S.mode === 'app' ? Store.current() : null;
+  if (k === 'pal' && c && c.type !== 'club') return '세이지 뮤트'; // v40: 그래프 · 계정 아이콘은 색상 테마 단계 (초록 없음)
   const own = c && view.colorsBy && view.colorsBy[c.id];
   if (own && own[k] != null) return own[k];
   return c && c.type === 'club' ? CLUB_V2[k] : view[k];
@@ -44,6 +45,7 @@ function applyView() {
   r.setProperty('--fs', DATA.FONT_SIZES[view.fs] || 1);
   const m = document.querySelector('meta[name="theme-color"]');
   if (m) m.setAttribute('content', T.bg);
+  if (typeof th10Apply === 'function') th10Apply(); // v40 색상 테마 (장부마다)
 }
 
 /* ───────── 상태 ───────── */
@@ -178,6 +180,7 @@ function render() {
   if (S.f) fillSheet();
   enhancePw($app); // 비밀번호 칸: 강도 · Caps Lock · 보기 (sec.js)
   enhanceDates($app); // 날짜 칸을 [연][월][일] 자동 이동 칸으로 (datebox.js)
+  if (typeof f10AfterRender === 'function') f10AfterRender(); // v40 결제 고르기 이름 · 테마
   if (sb2) sb2.scrollTop = keepSheet; // 입력 시트 내용을 다 채운 뒤 다시 맞춤 (채우기 전엔 짧아서 위로 잘렸음)
   placeSwitchPop();
   const dl2 = $app.querySelector('.dlg');
@@ -290,7 +293,8 @@ function viewApp(L) {
   const phoneHome = phone && isHome && !isClub;
   const pickedN = Object.keys(S.picked).length;
   const showSel = S.selMode && pickedN > 0;
-  const showFab = isClub ? (phone && isHome && !S.selMode) : (!phoneHome && !S.selMode && !NO_FAB.includes(S.screen));
+  const showFab = false; // v40: 검은 ＋ 동그라미 없앰 → 홈 아래 [영수증][＋ 입력] · 화면마다 [＋ 입력] · 친구회 홈 아래 [＋ 입력]
+  const clubBar = isClub && phone && isHome && !S.selMode;
   const swOpen = S.dialog && S.dialog.type === 'switch';
   // v38 새 홈 · 전체 메뉴 · 홈 꾸미기 (친구회 빼고 모든 장부): 디자인대로 머리 · 아래 메뉴 줄 · 옆 메뉴 없이, 휴대폰 홈은 아래 [＋지출][＋수입][영수증] 고정
   if (!isClub && typeof viewHome3 === 'function' && (isHome || S.screen === '전체 메뉴' || S.screen === '홈 꾸미기')) {
@@ -317,10 +321,11 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title">${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      <div class="top-right">${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
+      <div class="top-right">${!isClub && !isHome && typeof f10AddBtn === 'function' ? f10AddBtn() : ''}${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
-    ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증 찍기</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
+    ${clubBar ? `<div class="homebar"><button class="b2" data-act="clubPlus">${ic('plus', 20)}입력</button></div>` : ''}
+    ${phoneHome ? `<div class="homebar">${feat('receipt') ? `<button class="b1" data-act="receipt">${ic('camera', 20)}영수증</button>` : ''}<button class="b2" data-act="plus">${ic('plus', 20)}입력</button></div>` : ''}
     ${compact ? `<nav class="tabbar" aria-label="메뉴">${nav()}</nav>` : ''}
   </main>
   ${showFab ? `<button class="fab ${isClub ? 'club' : ''}" data-act="${isClub ? 'clubPlus' : phone ? 'plus' : 'input'}" aria-label="입력">${ic('plus', 28)}</button>` : ''}
@@ -340,6 +345,7 @@ function go(to) {
 }
 function back() {
   if (S.dialog) { S.dialog = null; render(); return true; }
+  if (S.f && S.f.flow && typeof flBack === 'function') { flBack(); return true; } // v40 단계별 입력: 한 단계 뒤로
   if (S.f) { if (S.f.step === 'confirm') { S.f.step = 'form'; render(); } else closeForm(false); return true; }
   if (S.mode !== 'app') return false;
   if (S.selMode) { S.selMode = false; S.picked = {}; render(); return true; }
@@ -410,7 +416,8 @@ function afterOpen() {
   setTimeout(() => { checkStorage().catch(() => {}); if (typeof clubAutoRecord === 'function') clubAutoRecord().then((n) => { if (n && S.mode === 'app' && !S.f && !S.dialog) render(); }).catch(() => {}); cardNotify(); }, 0); // 저장 공간 · 생일 결과 기록 · 카드 해지일 알림
   // 같은 카드(이름·앞뒤 4자리 같음)가 두 장이면 하나로 (예전 버전에서 백업을 합쳐 두 장이 된 경우)
   if (typeof v7FeatNotice === 'function') v7FeatNotice();
-  if (typeof v8OwnerAsk === 'function') v8OwnerAsk(); // v38: 주인 이름 한 번 묻기
+  if (typeof v8OwnerAsk === 'function') v8OwnerAsk();
+  setTimeout(() => { if (typeof f10AutoBackup === 'function') f10AutoBackup().catch(() => {}); }, 700); // v40: 업데이트 뒤 처음 한 번 자동 백업 // v38: 주인 이름 한 번 묻기
   S.h3hide = Store.current().type !== 'club' && (Store.get('meta', 'settings') || {}).home3HideStart !== false; // v39: 잠금 풀고 처음 홈 금액은 •••••• (누르면 보임) // v37: 꺼져 있던 기능을 켰으면 알림
   setTimeout(() => dedupeCards().then((n) => { if (n && S.mode === 'app') { render(); toast(`같은 카드 ${n}장을 하나로 합쳤어요`); } }).catch(() => {}), 0);
   // 친구회: 회칙 37개 조항(처음 한 번) · 회칙 지급 항목 계정
@@ -708,6 +715,7 @@ const ACT = {
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
+  ...F10_ACT, // v40 단계별 입력 · 색상 테마 · 받을 돈 마무리 (flow10.js)
   ...PW_ACT, // 돈 넣는 방식 · 카드값 결제 연결 (payway.js · v34 · 맨 뒤라야 카드값 결제를 덮음)
   archToggle: (el) => { S.archOpen = S.archOpen === el.dataset.id ? null : el.dataset.id; S.archShown = 200; render(); },
   archMore: () => { S.archShown = (S.archShown || 200) + 200; render(); },
@@ -715,6 +723,7 @@ const ACT = {
   swapColors: () => { lvSet({ inC: lv('outC'), outC: lv('inC') }); applyView(); render(); toast('수입 색과 지출 색을 바꿨어요'); },
   resetColors: () => { lvSet({ inC: DATA.DEFAULT_IN, outC: DATA.DEFAULT_OUT }); applyView(); render(); toast('기본 색(수입 빨강 · 지출 파랑)으로 돌렸어요'); }
 };
+if (typeof f10PatchAct === 'function') f10PatchAct(ACT); // v40: [＋ 입력] → 단계별 입력 · 결제 고르기 연결 먼저
 
 $app.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
@@ -735,6 +744,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onF10Input(el)) return; // v40 단계별 입력
   if (onV9Input(el)) return; // v39 결제일 정하기
   if (onV8Input(el)) return; // v38
   if (onH3Input(el)) return; // v38 홈 기간

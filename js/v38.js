@@ -44,7 +44,7 @@ async function v8See(k) { if (v8Seen(k)) return; const st = Store.get('meta', 's
 
 /* ───────── E. 받을 돈 자료 ───────── */
 const RCV_KINDS = ['대신 냄', '빌려줌', '보험 청구', '기타'];
-const recvAll = () => Store.all('recv').filter((r) => !r.deleted);
+const recvAll = () => Store.all('recv').filter((r) => !r.deleted && (r.dir || 'get') === (typeof recvDirNow === 'function' ? recvDirNow() : 'get')); // v40: 갚을 돈(dir pay)은 따로
 const recvGot = (r) => (r.receipts || []).reduce((s, v) => s + (v.amt || 0), 0);
 const recvLeft = (r) => Math.max(0, (r.amount || 0) - recvGot(r) - (r.close ? r.close.amt || 0 : 0));
 function recvSt(r) { const g = recvGot(r); if (r.close) return g >= r.amount ? '다 받음' : '정리함'; if (g >= (r.amount || 0)) return '다 받음'; return g > 0 ? '일부' : '미수'; }

@@ -125,7 +125,7 @@ function viewHome3(L, autoHtml) {
   const per = `<label class="h3per"><select data-h3="period" aria-label="기간">${HOME_P.filter((p) => p !== '직접').map((p) => `<option ${(S.period || '이번 달') === p ? 'selected' : ''}>${p}</option>`).join('')}</select>${ic('chevron-down', 16)}</label>`;
   const rangeTxt = `<span class="sub small h3range">${V.from.replace(/-/g, '.')} ~ ${V.to.replace(/-/g, '.')}</span>`;
   const tools = `<button class="h3tool" data-act="u2Top" ${undoOpen().length ? '' : 'disabled'}>${ic('rotate-ccw', 16)}되돌리기</button><button class="h3tool" data-act="h3Hide">${ic(S.h3hide ? 'eye' : 'eye-off', 16)}${S.h3hide ? '보이기' : '가리기'}</button>`;
-  const adds = `<button class="h3add ink" data-act="h3In" data-k="out">${ic('plus', 18)}지출</button><button class="h3add" data-act="h3In" data-k="in">${ic('plus', 18)}수입</button>${feat('receipt') ? `<button class="h3add" data-act="receipt">${ic('camera', 18)}영수증</button>` : ''}`;
+  const adds = `${feat('receipt') ? `<button class="h3add" data-act="receipt">${ic('camera', 18)}영수증</button>` : ''}<button class="h3add ink" data-act="input">${ic('plus', 18)}입력</button>`; // v40: 한 곳 입력
   const head = `<div class="h3book"><button class="h3bn" data-act="switchBook" data-swanchor><span class="sub">${esc(Store.current().name)}</span>${ic('chevron-down', 14, 'var(--sub)')}</button><h1 class="h3title">${esc(bookTitle())}</h1></div>`;
   const todoCard = `<section class="h3card h3todos"><div class="h3ch"><b>일정</b><span class="sub small">${todos.length}건</span></div>${(more ? todos : todos.slice(0, 3)).map(h3TodoRow).join('') || '<div class="h3empty">일정이 없어요</div>'}${todos.length > 3 ? `<button class="h3more" data-act="h3More">${more ? '접기' : `더 보기 ${todos.length - 3}건`}</button>` : ''}</section>`;
   const menu = (n) => `<section class="h3menu"><div class="h3ch"><b>메뉴</b><button class="linkbtn" data-act="go" data-to="홈 꾸미기">편집</button></div><div class="h3tiles">${tiles.slice(0, n).map(tileBtn).join('')}${allTile}</div></section>`;
@@ -148,7 +148,7 @@ function viewHome3(L, autoHtml) {
   </div>`;
 }
 // 휴대폰 아래 고정 넣기 줄 (비율 1.5 : 1 : 1)
-const h3Bar = () => `<div class="h3bar-fix"><button class="h3add ink" data-act="h3In" data-k="out">${ic('plus', 18)}지출</button><button class="h3add" data-act="h3In" data-k="in">${ic('plus', 18)}수입</button>${feat('receipt') ? `<button class="h3add" data-act="h3Rc">${ic('camera', 18)}영수증</button>` : ''}</div>`;
+const h3Bar = () => `<div class="h3bar-fix f10bar">${feat('receipt') ? `<button class="h3add" data-act="h3Rc">${ic('camera', 18)}영수증</button>` : ''}<button class="h3add ink" data-act="input">${ic('plus', 18)}입력</button></div>`; // v40: [영수증] [＋ 입력] (카메라 → 영수증 이름)
 
 /* ───────── 전체 메뉴 (1j) ───────── */
 // v39: 이름은 짧고 분명한 명사 + 회색 설명 한 줄 + 앞에 아이콘 · 대분류 5개
