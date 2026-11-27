@@ -20,7 +20,7 @@ const Store = (() => {
   let bundleKey = null;  // 함께 열기 묶음 열쇠 (메모리에만, 잠그면 지움)
   let chain = Promise.resolve();
   let ver = 0; // 자료가 바뀔 때마다 하나씩 (계산 결과를 잠깐 기억해 두는 데 씀: 10만 건에서도 빠르게)
-  const LOCAL_IDS = ['idmap', 'undoLog', 'flowDraft']; // flowDraft: 적던 입력 임시 저장 (v40) // undoLog: 최근 한 일(되돌리기) · 이 기기 장부에만 (v35) // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
+  const LOCAL_IDS = ['idmap', 'undoLog', 'flowDraft', 'bigUndo']; // flowDraft: 적던 입력 임시 저장 (v40) // undoLog: 최근 한 일(되돌리기) · 이 기기 장부에만 (v35) // 이 기기에만 쓰는 기록 (백업에 넣지 않음)
   // 여러 건을 한꺼번에 풀기·잠그기 (하나씩 기다리면 10만 건에서 너무 느림 → 500건씩 함께)
   async function inBatches(list, fn, n) {
     const out = new Array(list.length); n = n || 500;
@@ -604,6 +604,30 @@ const Store = (() => {
     }
     if (marks.length) await putMany(marks);
   }
+  // v45: 지금 장부 내용을 통째로 바꾸기 (불러오기 「덮어쓰기」 · 「○○ 전으로 되돌리기」)
+  // 이 기기에만 쓰는 기록(되돌리기 목록 · 적던 입력 등)은 keepLocal이면 그대로 둠. 고친 시각은 그대로(합치기 판단용).
+  async function replaceAll(cols, keepLocal) {
+    if (!key) throw new Error('잠겨 있어요');
+    const k = key, lid = ledger.id;
+    await chain;
+    const keepMeta = keepLocal && mem.meta ? [...mem.meta.values()].filter((o) => LOCAL_IDS.includes(o.id)) : [];
+    const keepPhotos = keepLocal === 'photos' && mem.photos && !(cols.photos && cols.photos.length) ? [...mem.photos.values()] : [];
+    const db = await openDB();
+    const keys = await reqP(db.transaction('recs').objectStore('recs').index('lid').getAllKeys(lid));
+    const keepK = new Set([...keepMeta.map((o) => lid + '|meta|' + o.id), ...keepPhotos.map((o) => lid + '|photos|' + o.id)]);
+    const delK = keys.filter((x) => !keepK.has(x));
+    for (let i = 0; i < delK.length; i += 2000) { const t = db.transaction('recs', 'readwrite'); delK.slice(i, i + 2000).forEach((x) => t.objectStore('recs').delete(x)); await txDone(t); }
+    const m = {}, out = [];
+    keepMeta.forEach((o) => { (m.meta = m.meta || new Map()).set(o.id, o); });
+    keepPhotos.forEach((o) => { (m.photos = m.photos || new Map()).set(o.id, o); });
+    for (const col of Object.keys(cols || {})) for (const o of cols[col] || []) { if (col === 'meta' && LOCAL_IDS.includes(o.id)) continue; (m[col] = m[col] || new Map()).set(o.id, o); out.push([col, o]); }
+    const rows = await inBatches(out, ([col, o]) => sealRec(k, lid, col, o));
+    for (let i = 0; i < rows.length; i += 2000) { const t = db.transaction('recs', 'readwrite'); rows.slice(i, i + 2000).forEach((r) => t.objectStore('recs').put(r)); await txDone(t); }
+    for (const c of Object.keys(mem)) delete mem[c];
+    Object.assign(mem, m); const o = opened.get(lid); if (o) o.mem = mem;
+    ver++;
+    return out.length;
+  }
   // 장부 통째로 지우기 (이 기기에서만. 백업 파일은 그대로)
   async function deleteLedger(id) {
     const db = await openDB();
@@ -681,5 +705,5 @@ const Store = (() => {
   return { switchTo, isOpened, openedIds, checkPassword, usage, ver: () => ver,
     bundleInfo, bundleSetOn, bundleCheck, bundleUncheck, bundleBind, bundleBindRaw, bundleOpen, bundleChangeOpener, bundleClear, bundleUseOpenerPw,
     hasBundleKey: () => !!bundleKey,
-    badRows: () => { const o = opened.get(ledger && ledger.id); return o ? o.bad || 0 : 0; }, selfTest, removeMany, ftKeys, ftVal, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
+    badRows: () => { const o = opened.get(ledger && ledger.id); return o ? o.bad || 0 : 0; }, selfTest, removeMany, ftKeys, ftVal, deleteLedger, renameLedgerById, readLedger, LATEST, snapshot, replaceAll, sealBackup, openBackup, hasLedger, listLedgers, createLedger, unlock, lock, isOpen, current, all, get, put, putMany, remove, migrate, renameLedger, changePassword, uid };
 })();

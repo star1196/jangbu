@@ -40,7 +40,7 @@ function lastRecInfo(cols) {
     : col0 === 'members' ? `회원 ${best.name || ''} (생일·회비 칸 등)` : `${COL_NAMES[col0] || col0} ${best.name || best.title || best.no || ''}`;
   return { n, at: best.updatedAt || 0, txt: txt.trim() };
 }
-const lastRecRow = (L) => `<div class="drow bklast"><span class="sub">이 백업의 마지막 기록</span><b style="text-align:right">${L.at ? `${stamp(L.at)} · ${esc(L.txt)}` : '없음'}<br><span class="sub small" style="font-weight:400">기록 ${L.n}건</span></b></div>`;
+const lastRecRow = (L) => `<div class="drow bklast"><span class="sub">이 백업의 마지막 기록</span><b style="text-align:right">${L.at ? `${stamp(L.at)} · ${esc(L.txt)}` : '없음'}</b></div>`; // v45: 「기록 ○건」(모든 묶음을 더한 수라 헷갈림) 대신 종류별 건수를 따로 보여 줌
 
 /* ───────── 백업 저장 ───────── */
 // opt.noPhotos: 사진 빼고 (파일이 훨씬 작음. 사진은 이 기기에 그대로) · opt.cols: 이 묶음만 (연도별 사진 내보내기)

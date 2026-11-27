@@ -1605,3 +1605,42 @@ body.v41printing #app > *:not(.dlgwrap):not(.dim) { }
 .lg-row > *:not(:first-child), .ledger td + td, .ledger th + th { border-left: 1px solid #EFEFEC; }
 .v44won .lg-row { min-width: 1180px; }
 .v44won .lg-row { grid-template-columns: minmax(150px, 1.6fr) repeat(12, minmax(78px, 1fr)) minmax(96px, 1.2fr); }
+
+/* ───────── v45 (자료 안전 · 계산 · 정산할 돈) ───────── */
+.v45counts { display: flex; flex-direction: column; margin-top: 4px; }
+.v45cr { display: grid; grid-template-columns: minmax(0, 1fr) auto 56px; gap: 8px; padding: 5px 0; border-bottom: 1px solid #EFEFEC; font-size: calc(14px * var(--fs)); }
+.v45cr b { text-align: right; } .v45cr > span:last-child { text-align: right; }
+.v45cr.head { border-bottom: 1px solid var(--ink); font-size: calc(12px * var(--fs)); }
+.v45counts:not(:has(.head)) .v45cr { grid-template-columns: minmax(0, 1fr) auto; }
+.v45diff { color: #C27A2C !important; font-weight: 700; }
+.v45warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: #FBF2E7; color: #8F5414; border: 1px solid #E9C9A0; line-height: 1.5; }
+.v45warn.big { border-width: 2px; }
+.btn.warnbtn { background: #C27A2C; border-color: #C27A2C; color: #fff; }
+.v45rch { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.v45rch button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 52px; padding: 8px 12px; border: 1px solid #E7E7E3; border-radius: 12px; background: #fff; text-align: left; }
+.v45rch button.on { border: 2px solid var(--accent, #D85B53); background: var(--accent-soft, #FFF7F5); }
+.v45rch button.warn.on { border-color: #C27A2C; background: #FBF2E7; }
+.v45det summary { cursor: pointer; padding: 6px 0; color: var(--sub); font-size: calc(13px * var(--fs)); }
+.v45calc { display: flex; flex-direction: column; }
+.v45crow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 0; border-bottom: 1px solid #EFEFEC; }
+.v45crow .n { flex: 1 1 100%; font-weight: 700; }
+.v45crow .e, .v45crow .c { display: flex; flex-direction: column; min-width: 84px; padding: 4px 8px; border-radius: 8px; background: #F6F6F4; }
+.v45crow .e { background: var(--accent-soft, #FFF7F5); }
+.v45crow .c.bad { background: #FBF2E7; color: #8F5414; outline: 2px solid #E9C9A0; }
+.v45rnote { margin: 0; }
+.v45foot { position: sticky; bottom: 0; }
+.v45settle { gap: 2px !important; }
+.v45sl { display: flex; justify-content: space-between; gap: 8px; width: 100%; font-size: calc(13px * var(--fs)); }
+.v45sl b { font-size: calc(15px * var(--fs)); }
+.v45range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--accent-soft, #FFF7F5); }
+.v45peerx { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.v44dsvg { width: 100%; }
+.v45ppie { max-width: 100%; height: auto; }
+.fl-fwd { margin-left: auto; }
+/* v45 휴대폰 한 손: 자주 누르는 단추는 44px 가까이 */
+.phone .f10add { min-height: 42px; }
+.phone .sortbtn, .phone .v42ctype button, .compact .sortbtn { min-height: 40px; }
+.phone .seg > button { min-height: 40px; }
+.phone .v44gacc select { min-height: 32px; }
+.phone .v8ck { width: 30px; height: 30px; margin: 8px; }
+.phone .chips > .btn, .phone .card-row .seg button { min-height: 40px; }

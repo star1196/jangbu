@@ -17,9 +17,8 @@ function viewV42More() {
   const row = (a, i, t, dis) => `<button class="v42mi" data-act="v42Go" data-a="${a}" ${dis ? 'disabled' : ''}>${typeof i === 'string' && i.length > 2 ? ic(i, 20) : `<span class="v42mic">${i}</span>`}<span>${t}</span></button>`;
   return `<div class="dlg v42menu" role="menu" aria-label="더 보기">
     ${help ? row('v41HelpHere', 'info', '이 화면 도움말') : row('v42HelpAll', 'info', '도움말')}
-    ${typeof f10Home === 'function' && f10Home() ? row('h3Hide', S.h3hide ? 'eye' : 'eye-off', S.h3hide ? '금액 보이기' : '금액 가리기') : ''}
     ${row('u2Top', '↶', '되돌리기', !undo)}
-    ${row('coverNow', 'eye-off', '화면 가리기')}
+    ${row('coverNow', 'shield-check', '화면 가리기')}
     ${row('lockAll', 'lock', '모두 잠그기')}</div>`;
 }
 

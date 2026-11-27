@@ -321,7 +321,7 @@ function viewApp(L) {
         ${compact ? (isHome ? bookBtn : `${bookBtn.replace('class="top-book"', 'class="top-book small"')}<h1 class="top-title" ${typeof v42TitleStyle === 'function' ? v42TitleStyle(S.screen, L) : ''}>${esc(S.screen)}</h1>`)
           : `<h1 class="top-title big">${esc(isHome ? book : S.screen)}</h1>`}
       </div>
-      ${phone && typeof v42PhoneRight === 'function' ? v42PhoneRight(isClub, isHome) : `<div class="top-right">${typeof helpBtn === 'function' ? helpBtn() : ''}${!isClub && !isHome && typeof f10AddBtn === 'function' ? f10AddBtn() : ''}${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('eye-off', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>`}
+      ${phone && typeof v42PhoneRight === 'function' ? v42PhoneRight(isClub, isHome) : `<div class="top-right">${typeof helpBtn === 'function' ? helpBtn() : ''}${!isClub && !isHome && typeof f10AddBtn === 'function' ? f10AddBtn() : ''}${S.mode === 'app' ? undoTopBtn() : ''}${isHome || !isClub ? `<button class="iconbtn" data-act="coverNow" aria-label="화면 가리기" title="화면 가리기">${ic('shield-check', 22)}</button>` : ''}${compact ? `<button class="iconbtn" data-act="lockAll" aria-label="모두 잠그기" title="모두 잠그기">${ic('lock', 22)}</button>` : ''}</div>`}
     </header>
     <div class="content ${showFab || showSel ? 'fab-space' : ''}" data-screen="${esc(S.screen)}">${screenBody(L)}</div>
     ${clubBar ? `<div class="homebar"><button class="b2" data-act="${typeof flClubOpen === 'function' ? 'v41ClubIn' : 'clubPlus'}">${ic('plus', 20)}입력</button></div>` : ''}
@@ -715,6 +715,7 @@ const ACT = {
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
+  ...V45_ACT, // v45 백업 · 불러오기 3가지 · 큰 일 되돌리기 · 계산 확인 · 앞으로 · 정산할 돈 · 가족이 냄 (v45.js)
   ...V44_ACT, // v44 그래프 · 가리기 · 계정 정리 · 큰 분류 · 결제 방법 (v44.js)
   ...V43_ACT, // v43 공휴일 · 가족 합치기 · 검색 합계 · 그래프 · 월말 점검 (v43.js)
   ...V42_ACT, // v42 머리줄 [⋯] · 카드 종류 · 목록 거르기 · 공휴일 · 친구회 단계별 (v42.js)
@@ -748,6 +749,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV45Input(el)) return; // v45
   if (onV44Input(el)) return; // v44
   if (onV43Input(el)) return; // v43
   if (onV42Input(el)) return; // v42

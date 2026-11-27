@@ -46,7 +46,10 @@ f10AfterRender = (function (orig) {
   return function () {
     orig();
     try {
-      if (S.mode === 'app' && S.h3hide && f10Home()) { v44Mask($app.querySelector('.content')); const t = $app.querySelector('.top-right'); if (t && !t.querySelector('[data-act="h3Hide"]')) t.insertAdjacentHTML('afterbegin', `<button class="iconbtn v44show" data-act="h3Hide" aria-label="금액 보이기" title="금액 보이기">${ic('eye', 20)}</button>`); }
+      if (S.mode === 'app' && f10Home() && !S.f) { // v45: 눈 아이콘은 모든 화면 머리줄에 늘 (휴대폰도 [⋯] 밖) · 한 번 누르면 모든 화면이 함께
+        if (S.h3hide) v44Mask($app.querySelector('.content'));
+        const t = $app.querySelector('.top-right'); if (t && !t.querySelector('[data-act="h3Hide"]')) { const b = `<button class="iconbtn v44show v45eye ${S.h3hide ? 'on' : ''}" data-act="h3Hide" aria-pressed="${!!S.h3hide}" aria-label="${S.h3hide ? '금액 보이기' : '금액 가리기'}" title="${S.h3hide ? '금액 보이기' : '금액 가리기'}">${ic(S.h3hide ? 'eye' : 'eye-off', 20)}</button>`; const m = t.querySelector('.v42morebtn, [data-act="coverNow"]'); if (m) m.insertAdjacentHTML('beforebegin', b); else t.insertAdjacentHTML('beforeend', b); }
+      }
     } catch (e) { /* 그대로 */ }
   };
 })(f10AfterRender);

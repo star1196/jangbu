@@ -321,7 +321,7 @@ function viewFlow() {
   const f = S.f, F = f.flow, st = (FL_STEP[F.t] || FL_STEP.what)(F, f) || {};
   const cta = (st.cta || []).map(([a, l, p]) => `<button type="button" class="btn big ${p ? 'ink' : ''}" data-act="${a}" ${S.busy ? 'disabled' : ''}>${esc(l)}</button>`).join('');
   return `<div class="fl-dim" data-act="flDim"></div><div class="fl ${layout()}" role="dialog" aria-modal="true" aria-label="입력" data-step="${F.t}">
-    <div class="fl-top"><button type="button" class="fl-back" data-act="flBack">${ic('arrow-left', 20)}${F.hist.length ? '이전' : '닫기'}</button>${flDots(F, f)}</div>
+    <div class="fl-top"><button type="button" class="fl-back" data-act="flBack">${ic('arrow-left', 20)}${F.hist.length ? '이전' : '닫기'}</button>${(F.fwdT || []).length ? `<button type="button" class="fl-back fl-fwd" data-act="v45FlFwd">앞으로${ic('arrow-right', 20)}</button>` : ''}${flDots(F, f)}</div>
     <div class="fl-body">${st.note ? `<span class="fl-note">${esc(st.note)}</span>` : ''}<h2 class="fl-q">${esc(st.q || '')}</h2>${st.sub ? `<p class="fl-sub">${esc(st.sub)}</p>` : ''}${st.body || ''}<div class="err fl-err" data-part="flerr">${esc(F.err || '')}</div></div>
     ${cta ? `<div class="fl-foot ${st.col ? 'col' : ''}">${cta}</div>` : ''}</div>`;
 }

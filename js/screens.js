@@ -238,7 +238,7 @@ function viewCal(L) {
     const ds = `${ym}-${pad2(d)}`, dow = (first + d - 1) % 7, xs = (byDay[d] || []).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     let body = '';
     if (xs.length && phone) {
-      const net = xs.reduce((s, x) => s + signed(x), 0);
+      const net = typeof v45Net === 'function' ? v45Net(xs) : xs.reduce((s, x) => s + signed(x), 0); // v45: 하루 합계도 수입 · 지출 규칙대로
       const hasIn = xs.some((x) => x.kind === 'in' && x.amount), hasOut = xs.some((x) => x.kind === 'out' && x.amount && leftBank(x)), hasCard = xs.some((x) => x.kind === 'out' && x.amount && !leftBank(x));
       body = hasIn || hasOut || hasCard || net ? `<span class="dots">${hasIn ? '<i style="background:var(--in)"></i>' : ''}${hasOut ? '<i style="background:var(--out)"></i>' : ''}${hasCard ? '<i style="background:var(--sub)"></i>' : ''}</span>${net ? `<span class="ctot ${clsOf(net)}">${short(net)}</span>` : ''}` : ''; // v42: 0원인 날은 아무것도 안 찍음
     } else if (xs.length) {
@@ -446,7 +446,7 @@ function viewSettings() {
       ${sec('장부', rowB('장부 이름', book.name, 'dlgRename') + rowB('장부 종류', typeLabel) + (feat('banks') ? rowB('통장', `가계부 ${banksOpen('home').length}개${feat('sepBanks') ? ` · 별도 ${banksOpen('sep').length}개` : ''}`, 'goBankAdmin') : '') + rowB('처음 시작하기', st.startDone ? `${st.startPoint} · 끝냄 (다시 보기)` : '시작점 · 통장 잔액 · 카드 이월', 'goStart') + rowB('시작점', st.startPoint ? st.startPoint + ' (이전 내역은 합계에서 빠져요)' : '정하지 않음', 'dlgStart') + (feat('savings') ? rowB('적금·예금', `${savingsActive().length}개`, 'goSavings') : '') + (twinsOf(book.id).length ? rowB('<span style="color:var(--warn)">같은 이름 장부 하나로 합치기</span>', `이 기기에 「${book.name}」 ${twinsOf(book.id).length + 1}개`, 'bkMergeHere') : '') + rowB('<span style="color:var(--out)">이 장부 완전 삭제</span>', '이 기기에서', 'bkDelHere'))}
       ${sec('분류 · 결제', rowB('계정과목 편집', nAcc + '개', 'goAcctEdit') + (feat('cards') ? rowB('결제수단 · 카드 편집', `카드 ${cardsOpen().length}장${cardsAll().some((c) => c.closed) ? ` · 해지 ${cardsAll().filter((c) => c.closed).length}장` : ''}`, 'goCards') : '') + rowB('현금영수증 모아 보기', `올해 소득공제용 ${won(cashRcList(todayStr().slice(0, 4)).filter((x) => x.cashReceipt.deduct !== false).reduce((s, x) => s + x.amount, 0))}원`, 'goCashRc') + rowB('자동 분류 규칙', `${Store.all('rules').length}개`, 'goRules') + rowB('분류 사전 · 온라인몰', `낱말 ${dictOf().length}개 · 온라인몰 ${mallsOf().length}곳`, 'goDict') + (feat('files') ? rowB('기억한 파일 모양', `${Store.all('templates').length}개`, 'goTpl') : '') + (feat('repeat') ? rowB('반복 입력', `${repeatsAll().length}개${pendingTx().length ? ` · 확인 대기 ${pendingTx().length}` : ''}`, 'goRepeats') : ''))}
       ${feat('instView') || (feat('cards') && feat('cardPlan')) ? sec('카드', (feat('instView') ? rowB('할부 모아보기', instSummaryLine(), 'goInst') : '') + (feat('cards') && feat('cardPlan') ? rowB('카드 메모 · 계획 · 해지일', cardPlanLine(), 'goCards') : '')) : ''}
-      ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
+      ${sec('자료 점검', (typeof viewCalcCheck === 'function' ? rowB('계산 확인', '이번 달 합계를 화면마다 비교', 'v45GoCalc') : '') + rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('일정 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
       ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (TH10[th10Key()].memo ? ` (${TH10[th10Key()].memo})` : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('공휴일', '설 · 추석 · 대체공휴일 · 임시공휴일 더하기', 'v42HoliOpen')) : ''}
@@ -560,6 +560,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 일정·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^v45/.test(D.type) && typeof viewV45Dlg === 'function') {
+    body = viewV45Dlg(D); // v45 (v45.js)
   } else if (/^v44/.test(D.type) && typeof viewV44Dlg === 'function') {
     body = viewV44Dlg(D); // v44 (v44.js)
   } else if (/^v42/.test(D.type)) {
