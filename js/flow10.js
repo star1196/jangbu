@@ -23,8 +23,15 @@ const TH10 = {
   magenta: { n: '마젠타 핑크', memo: '', a: '#D0377A', btn: '#D0377A', tint: '#FBE6EF', a2: '#BF3370', soft: '#FDF4F8', tint2: '#F5D3E2', line: '#EAA5C3', g1: '#E387AF', g2: '#EFB9D0', bg: '#FDF5F8', pal: ['#D0538C', '#E390B5', '#C98BC9', '#9B7BC4', '#E2A97F', '#D6BE8A', '#B79AA8', '#A39A92'] },
   purple: { n: '퍼플', memo: '', a: '#7A4FC2', btn: '#7A4FC2', tint: '#F0EAFA', a2: '#7A4FC2', soft: '#F8F6FD', tint2: '#E2D8F2', line: '#C3B0E4', g1: '#AF95DA', g2: '#D0C1EA', bg: '#F8F5FD', pal: ['#8A62CC', '#B497DE', '#D08BB8', '#E2A9A0', '#D9BB86', '#A69CC0', '#C7B6E0', '#A39A92'] }
 };
-const TH10_ORDER = ['coral', 'magenta', 'purple'];
-const th10Key = () => (TH10[f10St().theme10] ? f10St().theme10 : 'coral');
+// v44: 7가지 (장부마다 · 가계부 기본 코랄 핑크 · 친구회 기본 네이비) · 버튼색은 흰 글자 대비 4.5:1 안팎
+Object.assign(TH10, {
+  navy: { n: '네이비', memo: '친구회 기본', a: '#2F4A6B', btn: '#2F4A6B', tint: '#E6ECF3', a2: '#2F4A6B', soft: '#F4F6FA', tint2: '#D3DDE9', line: '#A9BACF', g1: '#7D93B0', g2: '#B9C7D8', bg: '#F4F6FA', pal: ['#56708F', '#93A6BF', '#C2A57A', '#9C86A8', '#7FA39A', '#C7B49A', '#B7C2D0', '#A39A92'] },
+  sage: { n: '세이지', memo: '', a: '#4F7A5E', btn: '#4F7A5E', tint: '#E6EFE9', a2: '#3F6A4D', soft: '#F3F7F4', tint2: '#D2E3D7', line: '#A9C7B2', g1: '#86AD93', g2: '#BCD4C3', bg: '#F3F7F4', pal: ['#5F8C6E', '#9FC0A8', '#C9B07A', '#9C8FB8', '#C99AAE', '#7FA3A0', '#B8A48C', '#A39A92'] },
+  mocha: { n: '모카', memo: '', a: '#8A6A55', btn: '#7E5F4B', tint: '#F1E9E3', a2: '#6E5241', soft: '#F8F4F1', tint2: '#E5D7CC', line: '#CDB6A5', g1: '#B4977F', g2: '#D9C6B6', bg: '#F8F4F1', pal: ['#8E6E58', '#C2A28A', '#D8C097', '#A88A9F', '#8FA394', '#B79F7C', '#D3BEAF', '#A39A92'] },
+  sky: { n: '스카이 블루', memo: '', a: '#3E8FC4', btn: '#2E7AAE', tint: '#E5F1F9', a2: '#256A99', soft: '#F3F8FC', tint2: '#D0E5F3', line: '#A5CBE5', g1: '#7FB4D9', g2: '#B8D7EC', bg: '#F3F8FC', pal: ['#4F9BCB', '#94C3E1', '#E0B76E', '#B59AC8', '#8DB8A6', '#D6A58A', '#C1D6E5', '#A39A92'] }
+});
+const TH10_ORDER = ['coral', 'magenta', 'purple', 'navy', 'sage', 'mocha', 'sky'];
+const th10Key = () => (TH10[f10St().theme10] ? f10St().theme10 : (Store.current() && Store.current().type === 'club' ? 'navy' : 'coral'));
 const TH10_PAL0 = (DATA.PALETTES['세이지 뮤트'] || []).slice();
 function hexMix(a, b, t) { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('').toUpperCase(); }
 // 그래프 · 계정 아이콘: 테마색 단계 + 기타 #A39A92

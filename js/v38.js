@@ -225,7 +225,7 @@ function viewV8Dlg(D) {
   const d = D.d || {};
   if (D.type === 'v8Owner') {
     return `<div class="dlg" style="max-width:460px"><h2 class="dlg-title">이 장부의 주인 이름</h2><span class="sub small">앱 곳곳에서 「나」 대신 이 이름을 써요. 출력 · PDF 머리에도 「○○○의 ${bookWord()}」로 나와요.</span>
-      <input class="input" data-v8="ownerName" maxlength="${V8_MAX}" value="${esc(D.name || '')}" placeholder="예: 홍길동 (30자까지)" data-autofocus>
+      <input class="input" data-v8="ownerName" maxlength="${V8_MAX}" value="${esc(D.name || '')}" placeholder="예: 별님 (30자까지)" data-autofocus>
       <div class="err" data-err></div><div class="dlg-btns"><button class="btn" data-act="v8OwnerLater">나중에</button><button class="btn ink" data-act="v8OwnerSave">저장</button></div></div>`;
   }
   if (D.type === 'v8Fam') {

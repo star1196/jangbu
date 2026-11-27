@@ -369,7 +369,7 @@ function viewAcct(L) {
   // 색 겹침 규칙: 상위 7개 안에서 같은 색 번호면 순위 낮은 쪽만 안 쓴 번호로
   const P = DATA.PALETTES[lv('pal')], used = new Set(), idx = {};
   sl.forEach(([id]) => { let k = id === '나머지' ? 7 : ((accOf(id) || {}).color ?? 7); if (k !== 7) { if (used.has(k)) k = [0, 1, 2, 3, 4, 5, 6].find((x) => !used.has(x)) ?? 7; used.add(k); } idx[id] = k; });
-  const colOf = (id, i) => (P ? P[idx[id]] : `color-mix(in oklab, var(--ink) ${DATA.INK_STEPS[i]}%, var(--sf))`);
+  const colOf = (id, i) => (typeof v44AccColor === 'function' && id !== '나머지' ? v44AccColor(id) : P ? P[idx[id]] : `color-mix(in oklab, var(--ink) ${DATA.INK_STEPS[i]}%, var(--sf))`); // v44: 같은 계정은 모든 그래프에서 같은 색
   let acc0 = 0;
   const stops = sl.map(([id, v], i) => { const a = acc0; acc0 += v / tot * 100; return `${colOf(id, i)} ${a}% ${acc0}%`; });
   const slices = sl.map(([id, v], i) => {
@@ -387,13 +387,13 @@ function viewAcct(L) {
     const rowsA = accs.filter((a) => !a.hidden || year.some((mo) => mo[a.id]));
     const tr = rowsA.map((a) => {
       const vals = year.map((mo) => mo[a.id] || 0), total = vals.reduce((s, v) => s + v, 0);
-      return `<div class="lg-row"><button class="lg-name" data-act="acctOpen" data-id="${a.id}" data-ym="${S.acctYM}">${catGlyph(a, 16)}<span>${esc(a.name)}</span></button>${vals.map((v, i) => `<button class="lg-c ${v ? '' : 'z'}" data-act="acctOpen" data-id="${a.id}" data-ym="${y}-${pad2(i + 1)}">${manOnly(v)}</button>`).join('')}<span class="lg-t">${manOnly(total)}</span></div>`;
+      return `<div class="lg-row"><button class="lg-name" data-act="acctOpen" data-id="${a.id}" data-ym="${S.acctYM}">${catGlyph(a, 16)}<span>${esc(a.name)}</span></button>${vals.map((v, i) => `<button class="lg-c ${v ? '' : 'z'}" data-act="acctOpen" data-id="${a.id}" data-ym="${y}-${pad2(i + 1)}">${typeof v44Cell === 'function' ? v44Cell(v, L) : manOnly(v)}</button>`).join('')}<span class="lg-t">${typeof v44Cell === "function" ? v44Cell(total, L) : manOnly(total)}</span></div>`;
     }).join('');
     const mt = year.map((mo) => Object.values(mo).reduce((s, v) => s + v, 0));
-    ledgerPart = `<section class="card" style="padding:18px 16px 10px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding:0 6px 10px"><h2 class="h2" style="font-size:${px(17)}">월별 ${kl}대장 · ${y}년</h2><span class="sub small">단위 만원(반올림) · 누르면 원 단위 내역</span></div>
+    ledgerPart = `<section class="card ${typeof v44Narrow === 'function' && !v44Narrow(L) ? 'v44won' : ''}" style="padding:18px 16px 10px;overflow-x:auto">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding:0 6px 10px"><h2 class="h2" style="font-size:${px(17)}">월별 ${kl}대장 · ${y}년</h2><span class="sub small">${typeof v44Unit === 'function' ? v44Unit(L) : '단위 만원(반올림)'} · 누르면 원 단위 내역</span></div>
       <div class="lg-row head"><span>계정</span>${Array.from({ length: 12 }, (_, i) => `<span>${i + 1}월</span>`).join('')}<span>합계</span></div>
-      ${tr}<div class="lg-row foot"><span style="text-align:left;padding-left:4px">합계</span>${mt.map((v) => `<span>${manOnly(v)}</span>`).join('')}<span>${manOnly(mt.reduce((s, v) => s + v, 0))}</span></div>
+      ${tr}<div class="lg-row foot"><span style="text-align:left;padding-left:4px">합계</span>${mt.map((v) => `<span>${typeof v44Cell === 'function' ? v44Cell(v, L) : manOnly(v)}</span>`).join('')}<span>${typeof v44Cell === 'function' ? v44Cell(mt.reduce((s, v) => s + v, 0), L) : manOnly(mt.reduce((s, v) => s + v, 0))}</span></div>
     </section>`;
   } else {
     const rowsM = accs.filter((a) => !a.hidden || agg[a.id]).map((a) => `<button class="mrow" data-act="acctOpen" data-id="${a.id}" data-ym="${S.acctYM}">${catGlyph(a, 18)}<span style="flex:1;min-width:0">${esc(a.name)}</span>${agg[a.id] ? `<span class="amt ${clsOf(sg * agg[a.id])}">${moneyTxt(sg * agg[a.id])}</span>` : '<span class="sub">—</span>'}</button>`).join('');
@@ -410,7 +410,7 @@ function viewAcct(L) {
     ${liveTx().some((x) => x.internal && !x.deleted) || mvOf('acct') !== 'all' ? `<div style="max-width:460px">${moveSeg('acct')}</div>` : ''}
     <div class="calmonth"><button class="iconbtn" data-act="acctMove" data-n="-1" aria-label="지난달">${ic('chevron-left', 22)}</button>${y}년 ${m}월<button class="iconbtn" data-act="acctMove" data-n="1" aria-label="다음 달">${ic('chevron-right', 22)}</button></div>
     <section class="card" style="padding:22px;display:flex;flex-wrap:wrap;align-items:center;gap:24px 36px">
-      <div class="pie" style="background:${tot ? `conic-gradient(${stops.join(',')})` : 'var(--soft)'}"><div class="pie-in"><span class="sub small">${m}월 ${kl}</span><span class="amt ${clsOf(sg * tot)}" style="font-size:${px(18)}">${moneyTxt(sg * tot)}</span></div></div>
+      ${typeof v44AccColor === 'function' && Store.current().type !== 'club' ? '' : `<div class="pie" style="background:${tot ? `conic-gradient(${stops.join(',')})` : 'var(--soft)'}"><div class="pie-in"><span class="sub small">${m}월 ${kl}</span><span class="amt ${clsOf(sg * tot)}" style="font-size:${px(18)}">${moneyTxt(sg * tot)}</span></div></div>`}
       <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column">${slices || `<div class="empty" style="padding:24px 8px">이 달 ${kl} 내역이 없어요.</div>`}
         ${saved ? `<div style="display:flex;justify-content:space-between;gap:8px;padding-top:12px;font-size:${px(14)}"><span class="sub">아낀 돈 (할인 · 포인트)</span><b>${won(saved)}원</b></div>` : ''}</div>
     </section>
@@ -449,8 +449,8 @@ function viewSettings() {
       ${sec('자료 점검', rowB('중복 점검', (() => { const M = dupMeta(); return M.last ? `마지막 ${new Date(M.last.at).toLocaleDateString('ko-KR')} · ${M.last.n}건` : '두 번 잡힌 것 찾기'; })(), 'goDup') + rowB('보안 점검', '암호화 · 외부 통신 차단 확인', 'goSecChk'))}
       ${sec('홈', rowB('홈 꾸미기', `칸 ${homeCfg().order.filter((k) => !homeCfg().off[k]).length}개 켜짐 · 순서`, 'goHomeCfg') + rowB('일정 · 기념일', `${notesAll().length}개 · 앞뒤 ${homeCfg().span} · ${homeCfg().n}개`, 'goNotes'))}
       ${sec('장부 주인 · 가족', rowB('주인 이름 · 가족 목록', `${esc(typeof bookTitle === 'function' ? bookTitle() : '')} · ${typeof familyAll === 'function' ? familyAll().length : 0}명`, 'v8FamEdit'))}
-      ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('공휴일', '설 · 추석 · 대체공휴일 · 임시공휴일 더하기', 'v42HoliOpen')) : ''}
-      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (th10Key() === 'coral' ? ' (기본)' : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen') + rowB('공휴일', '추가 · 고치기 · 숨기기 · 임시공휴일', 'v42HoliOpen') + rowB('같은 사람 합치기', '글자로 적힌 이름 → 가족 목록', 'v43GoMerge') + rowB('보험사 목록', `${typeof insurersAll === 'function' ? insurersAll().length : 0}곳 · 추가 · 순서 · 숨기기`, 'v41InsOpen')) : ''}
+      ${book.type === 'club' && typeof TH10 !== 'undefined' ? sec('색', rowB('색상 테마', TH10[th10Key()].n + (TH10[th10Key()].memo ? ` (${TH10[th10Key()].memo})` : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('공휴일', '설 · 추석 · 대체공휴일 · 임시공휴일 더하기', 'v42HoliOpen')) : ''}
+      ${book.type !== 'club' && typeof TH10 !== 'undefined' ? sec('색 · 입력', rowB('색상 테마', TH10[th10Key()].n + (TH10[th10Key()].memo ? ` (${TH10[th10Key()].memo})` : ''), 'f10ThemeOpen') + rowB('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint') + rowB('예전 입력 쓰기', st.oldInput ? '켜짐 · 예전 한 화면 입력' : '꺼짐 · 단계별 입력', 'f10OldOpen') + rowB('공휴일', '추가 · 고치기 · 숨기기 · 임시공휴일', 'v42HoliOpen') + rowB('같은 사람 합치기', '글자로 적힌 이름 → 가족 목록', 'v43GoMerge') + rowB('보험사 목록', `${typeof insurersAll === 'function' ? insurersAll().length : 0}곳 · 추가 · 순서 · 숨기기`, 'v41InsOpen') + (typeof viewAccClean === 'function' ? rowB('계정 정리 · 큰 분류', '비슷한 계정 합치기 · 카드값 결제 찾기 · 큰 분류 이름', 'v44GoClean') : '')) : ''}
       ${sec('기능', rowB('사용할 기능', `${DATA.FEATURES.filter((f) => feat(f.key)).length}개 켜짐 · 이 장부만`, 'goFeatures'))}
     </div>
     <div class="stack" style="flex:1 1 360px;min-width:0">
@@ -560,6 +560,8 @@ function viewDialog() {
     body = viewHome2Dlg(D); // 잔액 맞추기 · 일정·기념일 (home2.js)
   } else if (/^(myMemo|pairDel)$/.test(D.type)) {
     body = viewLedger2Dlg(D); // 내 메모 · 짝 지우기 (ledger2.js)
+  } else if (/^v44/.test(D.type) && typeof viewV44Dlg === 'function') {
+    body = viewV44Dlg(D); // v44 (v44.js)
   } else if (/^v42/.test(D.type)) {
     body = viewV42Dlg(D); // v42 (v42.js)
   } else if (/^v41/.test(D.type)) {

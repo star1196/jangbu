@@ -217,7 +217,7 @@ function viewHelp() {
   return `<div class="stack v41help"><label class="qbox">${ic('search', 20)}<input data-v41h="q" value="${esc(q)}" placeholder="도움말 찾기 (예: 받을 돈)" autocomplete="off"></label>
     ${L.map(([n, w, when, how]) => `<section class="card card-pad v41hc"><b>${esc(n)}</b><span class="sub small">${esc(w)}</span><div class="drow"><span class="sub">언제</span><span>${esc(when)}</span></div><div class="drow"><span class="sub">어떻게</span><span>${esc(how)}</span></div></section>`).join('') || '<div class="empty">맞는 도움말이 없어요.</div>'}</div>`;
 }
-const helpBtn = () => (Store.current() && HELP.some((h) => h[4].includes(S.screen)) ? `<button class="iconbtn v41q" data-act="v41HelpHere" aria-label="이 화면 도움말">?</button>` : '');
+const helpBtn = () => (Store.current() && HELP.some((h) => h[4].includes(S.screen)) ? `<button class="iconbtn v41q v44help" data-act="v41HelpHere" aria-label="이 화면 도움말" title="도움말">${ic('info', 20)}<span class="v44ht">도움말</span></button>` : '');
 
 /* ───────── C17. 홈 꾸미기: 지난달 비교 · 카드별 사용 (기본 꺼짐) ───────── */
 const h3Blocks = () => (((Store.get('meta', 'settings') || {}).home3 || {}).blocks || {});

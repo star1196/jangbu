@@ -715,6 +715,7 @@ const ACT = {
   ...V7OUT_ACT, // v37: 목록 내려받기 · 인쇄 · 칸 고르기 (print7.js)
   ...V37_ACT, // v37: 영수증 나눠 찍기 · 붙여넣기 · 돌리기 · 자르기 (v37.js)
   ...V36_ACT, // v36: 맞바꿈 · 짝으로 묶기 · 생일 여러 칸 (v36.js)
+  ...V44_ACT, // v44 그래프 · 가리기 · 계정 정리 · 큰 분류 · 결제 방법 (v44.js)
   ...V43_ACT, // v43 공휴일 · 가족 합치기 · 검색 합계 · 그래프 · 월말 점검 (v43.js)
   ...V42_ACT, // v42 머리줄 [⋯] · 카드 종류 · 목록 거르기 · 공휴일 · 친구회 단계별 (v42.js)
   ...V41_ACT, // v41 보험사 · 목록 거르기 · 나누기 · 보험 · 일정 · 도움말 (v41.js)
@@ -747,6 +748,7 @@ $app.addEventListener('keydown', (e) => {
 $app.addEventListener('input', (e) => {
   const el = e.target;
   if (onPfInput(el)) return; // 모든 목록 공통 찾기 · 기간 (util.js)
+  if (onV44Input(el)) return; // v44
   if (onV43Input(el)) return; // v43
   if (onV42Input(el)) return; // v42
   if (onV41Input(el)) return; // v41

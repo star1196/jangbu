@@ -656,6 +656,7 @@ function viewClubSettings() {
       <input type="file" data-backup="merge" hidden>
       ${sec('보안 · 잠금', settingsLockRows())}
       <section class="card" style="padding:16px 22px 20px;display:flex;flex-direction:column;gap:12px"><h2 class="h2" style="font-size:${px(17)}">화면</h2>
+        ${typeof TH10 !== 'undefined' ? `<div>${row('색상 테마', TH10[th10Key()].n + (TH10[th10Key()].memo ? ` (${TH10[th10Key()].memo})` : '') + ' · 이 장부만', 'f10ThemeOpen')}${row('바탕도 테마색으로', st.bgTint === false ? '꺼짐 · 회백' : '켜짐 · 아주 옅게', 'v41BgTint')}</div>` : ''}
         <span class="sub" style="font-size:${px(14)}">글자 크기 <span class="small">(이 기기에만)</span></span>
         <div class="seg">${['작게', '보통', '크게'].map((v) => `<button class="${view.fs === v ? 'on' : ''}" data-act="setFs" data-v="${v}">${v}</button>`).join('')}</div>
         <span class="sub" style="font-size:${px(14)}">장부 종류 보이기 <span class="small">(이 기기에만 · 숨기면 장부 바꾸기 · 함께 열기에서도 빠져요)</span></span>
